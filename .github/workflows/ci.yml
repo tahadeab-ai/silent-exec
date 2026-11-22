@@ -12,7 +12,7 @@ env:
 
 jobs:
   validate-schemas:
-    name: Validate JSON Schemas
+    name: Validate JSON Schemas & Dataset Generator
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -28,6 +28,9 @@ jobs:
 
       - name: Run Schema and Safety Policy Validation
         run: python schemas/validate_schemas.py
+
+      - name: Verify Dataset Generator & Schema Adherence
+        run: python nlp-training/generate_dataset.py --count 300 --out-dir /tmp/ci_data
 
   rust-checks:
     name: Rust Quality & Safety Gate Tests
