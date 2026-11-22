@@ -1,0 +1,60 @@
+name: Android CI
+
+on:
+  push:
+    paths:
+      - 'android-agent/**'
+      - '.github/workflows/android-ci.yml'
+  pull_request:
+    paths:
+      - 'android-agent/**'
+      - '.github/workflows/android-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build-android:
+    name: Android Unit Tests & Debug Build (arm64-v8a)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android-agent/gradlew
+
+      - name: Run Unit Tests (JVM)
+        working-directory: android-agent
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Assemble Debug APK
+        working-directory: android-agent
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify Built APK
+        working-directory: android-agent
+        run: |
+          echo "Scanning for built APKs..."
+          find app/build/outputs/apk/ -type f -name "*.apk"
+          APK_FILE=$(find app/build/outputs/apk/debug/ -type f -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No APK file generated!"
+            exit 1
+          fi
+          echo "Found APK: $APK_FILE"
+          ls -lh "$APK_FILE"
