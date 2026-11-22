@@ -2,7 +2,8 @@
 
 use silent_exec_core::ActionCommand;
 use silent_exec_pc::{
-    BridgeConfig, ExecutionResult, FileIndexer, LlamaBackend, ModelManager, PcExecutor,
+    ensure_llama_server_running, run_setup, BridgeConfig, ExecutionResult, FileIndexer,
+    LlamaBackend, ModelManager, PcExecutor, RuntimeManager,
 };
 use std::fs;
 use std::io::{self, BufRead, Read};
@@ -13,6 +14,9 @@ fn print_usage() {
     eprintln!("SilentExec PC Execution Agent, LAN Bridge & Model Manager");
     eprintln!();
     eprintln!("Usage:");
+    eprintln!(
+        "  silent-exec-pc setup [--model-tag <TAG>] [--model-cache <DIR>] [--runtime-dir <DIR>]"
+    );
     eprintln!(
         "  silent-exec-pc run \"<PROMPT>\" [--dry-run] [--confirm] [--server-url <URL>] [--llama-bin <PATH>] [--model <PATH>] [--grammar <PATH>] [--roots <R1,R2>]"
     );
@@ -41,6 +45,9 @@ fn print_usage() {
     eprintln!("  --grammar       Path to custom GBNF grammar file");
     eprintln!("  --roots         Comma-separated search roots for indexing");
     eprintln!("  --tag           GitHub Release tag to download model from (e.g. v0.2.0-model)");
+    eprintln!("  --model-tag     GitHub Release tag for setup command (default: v0.2.0-model)");
+    eprintln!("  --model-cache   Custom directory for caching downloaded models");
+    eprintln!("  --runtime-dir   Custom directory for managed llama.cpp runtime");
 }
 
 fn parse_roots(arg: Option<&str>) -> Vec<PathBuf> {
@@ -48,6 +55,60 @@ fn parse_roots(arg: Option<&str>) -> Vec<PathBuf> {
         Some(s) => s.split(',').map(|p| PathBuf::from(p.trim())).collect(),
         None => FileIndexer::default_user_roots(),
     }
+}
+
+fn resolve_llama_backend(
+    server_url: Option<String>,
+    llama_bin: Option<PathBuf>,
+    model_path: Option<PathBuf>,
+    grammar_path: Option<PathBuf>,
+) -> Result<LlamaBackend, String> {
+    if let Some(bin) = llama_bin {
+        let model = model_path.unwrap_or_else(|| {
+            ModelManager::default_cache_dir().join("Qwen2.5-1.5B-Instruct.Q4_K_M.gguf")
+        });
+        return Ok(LlamaBackend::new_cli(bin, model, grammar_path));
+    }
+
+    if let Some(url) = server_url.or_else(|| std::env::var("SILENT_EXEC_SERVER_URL").ok()) {
+        let custom_grammar = grammar_path
+            .as_ref()
+            .and_then(|p| fs::read_to_string(p).ok());
+        return Ok(LlamaBackend::new_server(Some(&url), custom_grammar));
+    }
+
+    // Auto-setup & managed llama-server path:
+    let model_mgr = ModelManager::new(None).map_err(|e| format!("ModelManager error: {}", e))?;
+    let resolved_model = match model_path {
+        Some(p) => p,
+        None => model_mgr.find_cached_model().ok_or_else(|| {
+            format!(
+                "No model found in '{}'. Please run 'silent-exec-pc setup' or provide --model / --server-url.",
+                model_mgr.cache_dir().display()
+            )
+        })?,
+    };
+
+    let runtime_dir = RuntimeManager::default_runtime_dir();
+    let port = 8080u16;
+
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+    let managed_url =
+        if silent_exec_pc::check_health_http(&health_url, std::time::Duration::from_millis(300)) {
+            format!("http://127.0.0.1:{}", port)
+        } else {
+            ensure_llama_server_running(&resolved_model, &runtime_dir, port).map_err(|e| {
+                format!(
+                "Failed to start managed llama-server: {}. Run 'silent-exec-pc setup' to install.",
+                e
+            )
+            })?
+        };
+
+    let custom_grammar = grammar_path
+        .as_ref()
+        .and_then(|p| fs::read_to_string(p).ok());
+    Ok(LlamaBackend::new_server(Some(&managed_url), custom_grammar))
 }
 
 fn main() -> ExitCode {
@@ -58,6 +119,44 @@ fn main() -> ExitCode {
     }
 
     match args[1].as_str() {
+        "setup" => {
+            let mut model_tag = None;
+            let mut custom_model_cache = None;
+            let mut custom_runtime_dir = None;
+
+            let mut idx = 2;
+            while idx < args.len() {
+                match args[idx].as_str() {
+                    "--model-tag" if idx + 1 < args.len() => {
+                        model_tag = Some(args[idx + 1].clone());
+                        idx += 1;
+                    }
+                    "--model-cache" if idx + 1 < args.len() => {
+                        custom_model_cache = Some(PathBuf::from(args[idx + 1].clone()));
+                        idx += 1;
+                    }
+                    "--runtime-dir" if idx + 1 < args.len() => {
+                        custom_runtime_dir = Some(PathBuf::from(args[idx + 1].clone()));
+                        idx += 1;
+                    }
+                    _ => {}
+                }
+                idx += 1;
+            }
+
+            println!("Running SilentExec PC Auto-Setup...");
+            match run_setup(model_tag.as_deref(), custom_model_cache, custom_runtime_dir) {
+                Ok(res) => {
+                    println!("\n=== Auto-Setup Completed Successfully ===");
+                    println!("{}", serde_json::to_string_pretty(&res).unwrap());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("\nSetup failed: {}", e);
+                    ExitCode::from(1)
+                }
+            }
+        }
         "run" => {
             if args.len() < 3 {
                 eprintln!("Usage: silent-exec-pc run \"<PROMPT>\" [--dry-run] [--confirm] [--server-url <URL>] [...]");
@@ -102,21 +201,14 @@ fn main() -> ExitCode {
                 idx += 1;
             }
 
-            let backend = if let Some(bin) = llama_bin {
-                let model = model_path.unwrap_or_else(|| {
-                    ModelManager::default_cache_dir().join("Qwen2.5-1.5B-Instruct.Q4_K_M.gguf")
-                });
-                LlamaBackend::new_cli(bin, model, grammar_path)
-            } else if let Some(model) = model_path {
-                let bin = PathBuf::from("llama-cli");
-                LlamaBackend::new_cli(bin, model, grammar_path)
-            } else {
-                let custom_grammar = grammar_path
-                    .as_ref()
-                    .and_then(|p| fs::read_to_string(p).ok());
-                let url = server_url.or_else(|| std::env::var("SILENT_EXEC_SERVER_URL").ok());
-                LlamaBackend::new_server(url.as_deref(), custom_grammar)
-            };
+            let backend =
+                match resolve_llama_backend(server_url, llama_bin, model_path, grammar_path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprintln!("Backend initialization error: {}", e);
+                        return ExitCode::from(1);
+                    }
+                };
 
             let cmd = match backend.infer(user_prompt) {
                 Ok(c) => c,
@@ -178,17 +270,12 @@ fn main() -> ExitCode {
                 idx += 1;
             }
 
-            let backend = if let Some(bin) = llama_bin {
-                let model = model_path.unwrap_or_else(|| {
-                    ModelManager::default_cache_dir().join("Qwen2.5-1.5B-Instruct.Q4_K_M.gguf")
-                });
-                LlamaBackend::new_cli(bin, model, None)
-            } else if let Some(model) = model_path {
-                let bin = PathBuf::from("llama-cli");
-                LlamaBackend::new_cli(bin, model, None)
-            } else {
-                let url = server_url.or_else(|| std::env::var("SILENT_EXEC_SERVER_URL").ok());
-                LlamaBackend::new_server(url.as_deref(), None)
+            let backend = match resolve_llama_backend(server_url, llama_bin, model_path, None) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("Backend initialization error: {}", e);
+                    return ExitCode::from(1);
+                }
             };
 
             let roots = parse_roots(roots_arg);
@@ -274,6 +361,26 @@ fn main() -> ExitCode {
                     _ => {}
                 }
                 idx += 1;
+            }
+
+            if server_url.is_none() && std::env::var("SILENT_EXEC_SERVER_URL").is_err() {
+                if let Ok(model_mgr) = ModelManager::new(None) {
+                    if let Some(model) = model_mgr.find_cached_model() {
+                        let runtime_dir = RuntimeManager::default_runtime_dir();
+                        let port = 8080u16;
+                        let health_url = format!("http://127.0.0.1:{}/health", port);
+                        if silent_exec_pc::check_health_http(
+                            &health_url,
+                            std::time::Duration::from_millis(300),
+                        ) {
+                            server_url = Some(format!("http://127.0.0.1:{}", port));
+                        } else if let Ok(managed) =
+                            ensure_llama_server_running(&model, &runtime_dir, port)
+                        {
+                            server_url = Some(managed);
+                        }
+                    }
+                }
             }
 
             let roots = parse_roots(roots_arg);

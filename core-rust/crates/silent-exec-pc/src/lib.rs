@@ -5,6 +5,7 @@ pub mod executor;
 pub mod indexer;
 pub mod inference;
 pub mod model_manager;
+pub mod runtime_manager;
 
 pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
@@ -16,6 +17,10 @@ pub use inference::{
     EMBEDDED_ACTION_GBNF,
 };
 pub use model_manager::{ModelDownloadInfo, ModelManager};
+pub use runtime_manager::{
+    check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
+    select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
+};
 
 #[cfg(test)]
 mod tests {
@@ -790,5 +795,180 @@ mod tests {
 
         shutdown.store(true, Ordering::Relaxed);
         let _ = handle.join();
+    }
+
+    #[test]
+    fn test_33_asset_selection_avx2_preferred() {
+        let assets = vec![
+            ReleaseAsset {
+                name: "llama-b4120-bin-win-vulkan-x64.zip".to_string(),
+                browser_download_url: "https://example.com/vulkan.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4120-bin-win-cuda-cu12.4-x64.zip".to_string(),
+                browser_download_url: "https://example.com/cuda.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4120-bin-win-avx2-x64.zip".to_string(),
+                browser_download_url: "https://example.com/avx2.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4120-bin-win-cpu-x64.zip".to_string(),
+                browser_download_url: "https://example.com/cpu.zip".to_string(),
+            },
+        ];
+
+        let selected = select_llama_asset_for_platform(&assets, "windows", "x86_64").unwrap();
+        assert_eq!(selected.name, "llama-b4120-bin-win-avx2-x64.zip");
+        assert_eq!(
+            selected.browser_download_url,
+            "https://example.com/avx2.zip"
+        );
+    }
+
+    #[test]
+    fn test_34_asset_selection_cpu_fallback() {
+        let assets = vec![
+            ReleaseAsset {
+                name: "llama-b4000-bin-win-vulkan-x64.zip".to_string(),
+                browser_download_url: "https://example.com/vulkan.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4000-bin-win-cpu-x64.zip".to_string(),
+                browser_download_url: "https://example.com/cpu.zip".to_string(),
+            },
+        ];
+
+        let selected = select_llama_asset_for_platform(&assets, "windows", "x86_64").unwrap();
+        assert_eq!(selected.name, "llama-b4000-bin-win-cpu-x64.zip");
+    }
+
+    #[test]
+    fn test_35_asset_selection_rejects_gpu_and_non_windows() {
+        let assets = vec![
+            ReleaseAsset {
+                name: "llama-b4120-bin-win-cuda-cu12.4-x64.zip".to_string(),
+                browser_download_url: "https://example.com/cuda.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4120-bin-win-vulkan-x64.zip".to_string(),
+                browser_download_url: "https://example.com/vulkan.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4120-bin-ubuntu-x64.zip".to_string(),
+                browser_download_url: "https://example.com/ubuntu.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-b4120-bin-macos-arm64.zip".to_string(),
+                browser_download_url: "https://example.com/macos.zip".to_string(),
+            },
+        ];
+
+        let selected = select_llama_asset_for_platform(&assets, "windows", "x86_64");
+        assert!(selected.is_none());
+    }
+
+    #[test]
+    fn test_36_asset_selection_alternative_names() {
+        let assets = vec![
+            ReleaseAsset {
+                name: "win-cpu-x64.zip".to_string(),
+                browser_download_url: "https://example.com/win-cpu.zip".to_string(),
+            },
+            ReleaseAsset {
+                name: "llama-server-win-avx2-x64.zip".to_string(),
+                browser_download_url: "https://example.com/llama-server-avx2.zip".to_string(),
+            },
+        ];
+
+        let selected = select_llama_asset_for_platform(&assets, "windows", "x86_64").unwrap();
+        assert_eq!(selected.name, "llama-server-win-avx2-x64.zip");
+    }
+
+    #[test]
+    fn test_37_runtime_cache_directory_resolution() {
+        let temp_guard = TempDirGuard::new("runtime_res");
+        let custom_dir = temp_guard.path.join("custom_runtime");
+
+        std::env::set_var("SILENT_EXEC_RUNTIME_DIR", &custom_dir);
+        let resolved = RuntimeManager::default_runtime_dir();
+        assert_eq!(resolved, custom_dir);
+        std::env::remove_var("SILENT_EXEC_RUNTIME_DIR");
+
+        let default_dir = RuntimeManager::default_runtime_dir();
+        assert!(!default_dir.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_38_runtime_git_repo_pollution_guard() {
+        let temp_guard = TempDirGuard::new("runtime_git_guard");
+        let git_dir = temp_guard.path.join(".git");
+        fs::create_dir_all(&git_dir).unwrap();
+
+        let sub_dir = temp_guard.path.join("runtime");
+        fs::create_dir_all(&sub_dir).unwrap();
+
+        let res = RuntimeManager::assert_not_in_git_repo(&sub_dir);
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("located inside a Git repository"));
+    }
+
+    #[test]
+    fn test_39_health_check_url_parsing() {
+        assert_eq!(
+            parse_health_url("http://127.0.0.1:8080", 8080),
+            "http://127.0.0.1:8080/health"
+        );
+        assert_eq!(
+            parse_health_url("http://127.0.0.1:8080/", 8080),
+            "http://127.0.0.1:8080/health"
+        );
+        assert_eq!(
+            parse_health_url("http://127.0.0.1:8080/completion", 8080),
+            "http://127.0.0.1:8080/health"
+        );
+        assert_eq!(
+            parse_health_url("127.0.0.1:8080", 8080),
+            "http://127.0.0.1:8080/health"
+        );
+        assert_eq!(
+            parse_health_url("127.0.0.1", 8080),
+            "http://127.0.0.1:8080/health"
+        );
+        assert_eq!(
+            parse_health_url("http://localhost:9000/v1/models", 8080),
+            "http://localhost:9000/health"
+        );
+        assert_eq!(
+            parse_health_url("https://example.com:8443/chat", 8080),
+            "https://example.com:8443/health"
+        );
+    }
+
+    #[test]
+    fn test_40_managed_server_reuses_healthy() {
+        use std::io::Read;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let server_thread = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let response = "HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}";
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+
+        let dummy_model = PathBuf::from("non_existent_model.gguf");
+        let dummy_runtime = PathBuf::from("non_existent_runtime");
+
+        let res = ensure_llama_server_running(&dummy_model, &dummy_runtime, port);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), format!("http://127.0.0.1:{}", port));
+
+        let _ = server_thread.join();
     }
 }

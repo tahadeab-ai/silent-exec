@@ -58,6 +58,25 @@ impl ModelManager {
         &self.cache_dir
     }
 
+    /// Finds an existing cached .gguf model file in the cache directory.
+    pub fn find_cached_model(&self) -> Option<PathBuf> {
+        let preferred = self.cache_dir.join("Qwen2.5-1.5B-Instruct.Q4_K_M.gguf");
+        if preferred.is_file() {
+            return Some(preferred);
+        }
+
+        if let Ok(entries) = fs::read_dir(&self.cache_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("gguf") {
+                    return Some(path);
+                }
+            }
+        }
+
+        None
+    }
+
     /// Determines standard OS cache path outside git.
     pub fn default_cache_dir() -> PathBuf {
         if let Ok(env_val) = std::env::var("SILENT_EXEC_CACHE_DIR") {
