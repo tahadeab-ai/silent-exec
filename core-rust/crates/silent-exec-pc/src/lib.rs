@@ -6,6 +6,7 @@ pub mod indexer;
 pub mod inference;
 pub mod model_manager;
 pub mod runtime_manager;
+pub mod ui_win32;
 
 pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
@@ -20,6 +21,9 @@ pub use model_manager::{ModelDownloadInfo, ModelManager};
 pub use runtime_manager::{
     check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
     select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
+};
+pub use ui_win32::{
+    map_result_to_ui_outcome, run_command_bar, string_to_utf16, utf16_to_string, UiActionOutcome,
 };
 
 #[cfg(test)]
@@ -970,5 +974,154 @@ mod tests {
         assert_eq!(res.unwrap(), format!("http://127.0.0.1:{}", port));
 
         let _ = server_thread.join();
+    }
+
+    #[test]
+    fn test_41_utf16_arabic_unicode_roundtrip() {
+        let arabic_samples = [
+            "افتح ملف تقرير المشروع",
+            "احذف الملف القديم",
+            "شغل المتصفح وابحث عن الذكاء الاصطناعي",
+            "مَشْرُوعُ التَّخَرُّجِ النهائي",
+            "افتح مجلد التنزيلات والوثائق",
+            "مشتريات_رمضان_2026.xlsx",
+        ];
+
+        for sample in &arabic_samples {
+            let utf16 = string_to_utf16(sample);
+            let recovered = utf16_to_string(&utf16);
+            assert_eq!(
+                &recovered, *sample,
+                "Failed roundtrip for Arabic text: {}",
+                sample
+            );
+        }
+    }
+
+    #[test]
+    fn test_42_utf16_english_mixed_roundtrip() {
+        let mixed_samples = [
+            "open C:\\Users\\Administrator\\Desktop\\report.pdf",
+            "delete_file \"sensitive.log\" --confirm",
+            "Alt+Space Floating Command Bar (Arabic: شريط الأوامر)",
+            "✓ open_file: C:/Notes/quick_note.txt",
+        ];
+
+        for sample in &mixed_samples {
+            let utf16 = string_to_utf16(sample);
+            let recovered = utf16_to_string(&utf16);
+            assert_eq!(
+                &recovered, *sample,
+                "Failed roundtrip for mixed text: {}",
+                sample
+            );
+        }
+    }
+
+    #[test]
+    fn test_43_ui_outcome_mapping_allow_silent() {
+        let res_success = ExecutionResult::Success {
+            action: "open_file".to_string(),
+            details: "opened note.txt".to_string(),
+            target_resolved: Some("note.txt".to_string()),
+        };
+        let outcome = map_result_to_ui_outcome(&res_success);
+        assert_eq!(
+            outcome,
+            UiActionOutcome::SilentSuccess {
+                action: "open_file".to_string()
+            }
+        );
+
+        let res_dry_run = ExecutionResult::DryRun {
+            action: "create_note".to_string(),
+            target_resolved: Some("note.txt".to_string()),
+            command_line: "cmd /c".to_string(),
+            message: "Would write note to Desktop".to_string(),
+        };
+        let outcome_dry = map_result_to_ui_outcome(&res_dry_run);
+        assert_eq!(
+            outcome_dry,
+            UiActionOutcome::SilentSuccess {
+                action: "create_note".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_44_ui_outcome_mapping_confirmation_required() {
+        let res_confirm = ExecutionResult::ConfirmationRequired {
+            action: "delete_file".to_string(),
+            prompt: "Confirm delete_file on report.docx".to_string(),
+            confidence: 0.95,
+            reason: "Tier-2 destructive action".to_string(),
+        };
+        let outcome = map_result_to_ui_outcome(&res_confirm);
+        assert_eq!(
+            outcome,
+            UiActionOutcome::RequireConfirmation {
+                action: "delete_file".to_string(),
+                prompt: "Confirm delete_file on report.docx".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_45_ui_outcome_mapping_blocked() {
+        let res_blocked = ExecutionResult::Blocked {
+            action: "system_reboot".to_string(),
+            reason: "Critical system power action blocked by security policy".to_string(),
+        };
+        let outcome = map_result_to_ui_outcome(&res_blocked);
+        assert_eq!(
+            outcome,
+            UiActionOutcome::Blocked {
+                reason: "Critical system power action blocked by security policy".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_46_bar_state_hotkey_toggle_transitions() {
+        use crate::ui_win32::BarState;
+
+        let mut bar = BarState::new();
+        assert!(!bar.is_visible);
+
+        // Pressing Alt+Space toggles visibility to true
+        let vis1 = bar.handle_hotkey_toggle();
+        assert!(vis1);
+        assert!(bar.is_visible);
+
+        // Pressing Alt+Space again toggles visibility to false
+        let vis2 = bar.handle_hotkey_toggle();
+        assert!(!vis2);
+        assert!(!bar.is_visible);
+    }
+
+    #[test]
+    fn test_47_bar_state_submit_and_escape() {
+        use crate::ui_win32::BarState;
+
+        let mut bar = BarState::new();
+        bar.handle_hotkey_toggle();
+        assert!(bar.is_visible);
+
+        // Escape dismisses the bar
+        bar.handle_escape();
+        assert!(!bar.is_visible);
+        assert!(bar.current_input.is_empty());
+
+        // Show again and submit empty string: should return None
+        bar.handle_hotkey_toggle();
+        let empty_sub = bar.handle_submit("    ".to_string());
+        assert!(empty_sub.is_none());
+        assert!(!bar.is_visible);
+
+        // Show and submit command: should return trimmed prompt and hide
+        bar.handle_hotkey_toggle();
+        let prompt_sub = bar.handle_submit("  افتح ملف التقرير  ".to_string());
+        assert_eq!(prompt_sub, Some("افتح ملف التقرير".to_string()));
+        assert!(!bar.is_visible);
     }
 }

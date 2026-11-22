@@ -14,6 +14,7 @@ fn print_usage() {
     eprintln!("SilentExec PC Execution Agent, LAN Bridge & Model Manager");
     eprintln!();
     eprintln!("Usage:");
+    eprintln!("  silent-exec-pc bar [--dry-run] [--port <PORT>] [--server-url <URL>] [--llama-bin <PATH>] [--model <PATH>] [--roots <R1,R2>]");
     eprintln!(
         "  silent-exec-pc setup [--model-tag <TAG>] [--model-cache <DIR>] [--runtime-dir <DIR>]"
     );
@@ -153,6 +154,64 @@ fn main() -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("\nSetup failed: {}", e);
+                    ExitCode::from(1)
+                }
+            }
+        }
+        "bar" => {
+            let mut dry_run = false;
+            let mut port = 8080u16;
+            let mut server_url = None;
+            let mut llama_bin = None;
+            let mut model_path = None;
+            let mut roots_arg = None;
+
+            let mut idx = 2;
+            while idx < args.len() {
+                match args[idx].as_str() {
+                    "--dry-run" => dry_run = true,
+                    "--port" if idx + 1 < args.len() => {
+                        if let Ok(p) = args[idx + 1].parse::<u16>() {
+                            port = p;
+                        }
+                        idx += 1;
+                    }
+                    "--server-url" if idx + 1 < args.len() => {
+                        server_url = Some(args[idx + 1].clone());
+                        idx += 1;
+                    }
+                    "--llama-bin" if idx + 1 < args.len() => {
+                        llama_bin = Some(PathBuf::from(&args[idx + 1]));
+                        idx += 1;
+                    }
+                    "--model" if idx + 1 < args.len() => {
+                        model_path = Some(PathBuf::from(&args[idx + 1]));
+                        idx += 1;
+                    }
+                    "--roots" if idx + 1 < args.len() => {
+                        roots_arg = Some(args[idx + 1].as_str());
+                        idx += 1;
+                    }
+                    _ => {}
+                }
+                idx += 1;
+            }
+
+            if server_url.is_none()
+                && std::env::var("SILENT_EXEC_SERVER_URL").is_err()
+                && llama_bin.is_none()
+            {
+                server_url = Some(format!("http://127.0.0.1:{}", port));
+            }
+
+            let roots = parse_roots(roots_arg);
+            println!("Starting SilentExec Native Win32 Alt+Space Command Bar...");
+            match silent_exec_pc::run_command_bar(
+                dry_run, false, server_url, llama_bin, model_path, roots,
+            ) {
+                Ok(_) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("Command bar error: {}", e);
                     ExitCode::from(1)
                 }
             }
