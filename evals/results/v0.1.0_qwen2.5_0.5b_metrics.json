@@ -1,0 +1,40 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "release_tag": "v0.1.0-model",
+  "release_url": "https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model",
+  "gguf_filename": "Qwen2.5-0.5B-Instruct.Q4_K_M.gguf",
+  "gguf_size_bytes": 397807648,
+  "gguf_size_mb": 379.38,
+  "sha256": "5dd97b1269d01f77067fe6766f69a6e8b731efb2b5ba7ae05fce5d3580eb260b",
+  "benchmark": "evals/golden_eval.jsonl",
+  "total_test_cases": 250,
+  "json_validity_rate": 97.20,
+  "intent_accuracy": 95.20,
+  "slot_exact_match": 44.00,
+  "language_breakdown": {
+    "en_mixed": {
+      "total": 84,
+      "valid_json": 81,
+      "intent_correct": 82,
+      "intent_accuracy": 97.6,
+      "slot_match": 55,
+      "slot_exact_match": 65.5
+    },
+    "yemeni_ar": {
+      "total": 84,
+      "valid_json": 83,
+      "intent_correct": 80,
+      "intent_accuracy": 95.2,
+      "slot_match": 27,
+      "slot_exact_match": 32.1
+    },
+    "msa_ar": {
+      "total": 82,
+      "valid_json": 79,
+      "intent_correct": 76,
+      "intent_accuracy": 92.7,
+      "slot_match": 28,
+      "slot_exact_match": 34.1
+    }
+  }
+}

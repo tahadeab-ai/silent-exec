@@ -1,6 +1,8 @@
 # SilentExec
 
 [![CI](https://github.com/tahadeab-ai/silent-exec/actions/workflows/ci.yml/badge.svg)](https://github.com/tahadeab-ai/silent-exec/actions/workflows/ci.yml)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tahadeab-ai/silent-exec/blob/main/nlp-training/train_silent_exec_qlora.ipynb)
+[![Model Release](https://img.shields.io/badge/Model_Release-v0.1.0--model-brightgreen.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **SilentExec** is a lightweight, zero-chatter, action-only OS execution agent designed for PC (Windows & Linux) and Android. Rather than generating conversational filler or multi-paragraph chit-chat, SilentExec maps multilingual user intent (Arabic and English) directly to deterministic, strictly schema-validated system actions.
@@ -14,7 +16,7 @@
 3. **Cross-Platform Modular Design**:
    - **`core-rust/`**: High-performance core library and safety gate with serde validation.
    - **`android-agent/`**: Native Kotlin execution engine for Android with accessibility/system integration.
-   - **`nlp-training/`**: QLoRA fine-tuning recipes for edge LLMs (e.g., Llama 3 / Qwen) optimized on Google Colab.
+   - **`nlp-training/`**: QLoRA fine-tuning recipes for edge LLMs optimized on Google Colab.
    - **`evals/`**: Dry-run evaluation harness for measuring action accuracy, latency, and safety gate coverage.
    - **`schemas/`**: Single Source of Truth JSON Schema (Draft 2020-12) and llama.cpp GBNF grammar.
 
@@ -26,12 +28,44 @@
 > **No binaries or model weights are stored in this Git repository.**
 > To keep the repository lightweight and developer-friendly:
 > - **Precompiled Executables (`.exe`, `.apk`, Linux binaries)** are published exclusively via [GitHub Releases](https://github.com/tahadeab-ai/silent-exec/releases).
-> - **Quantized Model Weights (`*.gguf`, `*.onnx`)** are attached as assets to GitHub Releases or hosted on Hugging Face model cards linked in release notes.
->
-> Download release artifacts via GitHub CLI:
-> ```bash
-> gh release download -R tahadeab-ai/silent-exec --pattern "*.exe"
-> ```
+> - **Quantized Model Weights (`*.gguf`)** are distributed directly via GitHub Releases (`gh release download`).
+
+Download the latest baseline quantized model (`v0.1.0-model`):
+```bash
+gh release download v0.1.0-model -R tahadeab-ai/silent-exec --pattern "*.gguf"
+```
+
+---
+
+## 📊 Benchmark Results (`v0.1.0-model`)
+
+Evaluated on the 250-test-case Golden Benchmark ([evals/golden_eval.jsonl](evals/golden_eval.jsonl)):
+
+| Model | Format | Size | JSON Validity | Intent Accuracy | Slot Exact Match | Release |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Qwen2.5-0.5B-Instruct** | GGUF (`q4_k_m`) | 379.38 MB | **97.20%** | **95.20%** | **44.00%** | [`v0.1.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model) |
+
+### Per-Language Intent Accuracy
+- **English & Code-Switching (`en_mixed`)**: **97.6%**
+- **Colloquial Yemeni Arabic (`yemeni_ar`)**: **95.2%**
+- **Modern Standard Arabic (`msa_ar`)**: **92.7%**
+
+*Full evaluation report available at [evals/results/v0.1.0_qwen2.5_0.5b_metrics.json](evals/results/v0.1.0_qwen2.5_0.5b_metrics.json).*
+
+---
+
+## 🤖 Training Your Own Edge Model on Google Colab
+
+You can fine-tune a model on a free or Pro T4 GPU using our one-click training notebook:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tahadeab-ai/silent-exec/blob/main/nlp-training/train_silent_exec_qlora.ipynb)
+
+### Automatic GitHub Release Uploads
+To allow the Colab notebook to automatically publish `.gguf` weights and evaluation reports to GitHub Releases:
+1. Open Google Colab and click on the **Secrets (Key icon)** in the left sidebar.
+2. Add a new secret named `GITHUB_TOKEN`.
+3. Paste a GitHub Personal Access Token (classic with `repo` scope, or fine-grained with `contents:write` on `tahadeab-ai/silent-exec`).
+4. Toggle "Notebook access" to ON.
 
 ---
 
