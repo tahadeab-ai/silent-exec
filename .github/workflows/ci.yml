@@ -12,7 +12,7 @@ env:
 
 jobs:
   validate-schemas:
-    name: Validate JSON Schemas & Dataset Generator
+    name: Validate JSON Schemas, Dataset Generator & Notebook
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,6 +31,9 @@ jobs:
 
       - name: Verify Dataset Generator & Schema Adherence
         run: python nlp-training/generate_dataset.py --count 300 --out-dir /tmp/ci_data
+
+      - name: Validate Colab Training Notebook Syntax & Structure
+        run: python nlp-training/validate_notebook.py
 
   rust-checks-and-eval:
     name: Rust Quality, Safety Gate Tests & Golden Benchmark Eval
