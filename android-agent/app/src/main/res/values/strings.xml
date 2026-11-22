@@ -11,4 +11,9 @@
     <string name="port_hint">Port (e.g. 8765)</string>
     <string name="token_hint">Bearer Secret Token</string>
     <string name="save">حفظ</string>
+    <string name="mode_offline">Offline (On-Device)</string>
+    <string name="mode_bridge">LAN Bridge (PC)</string>
+    <string name="download_model_btn">تحميل النموذج (379 MB)</string>
+    <string name="model_ready">✓ النموذج جاهز للعمل بدون إنترنت</string>
+    <string name="mic_btn">🎤</string>
 </resources>

@@ -5,7 +5,7 @@
     android:background="@color/bg_dark"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="20dp">
 
     <TextView
         android:id="@+id/tvTitle"
@@ -21,18 +21,107 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="Zero-Chatter OS Execution"
+        android:text="Zero-Chatter OS Execution (v0.2.0)"
         android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 
-    <LinearLayout
+    <!-- Mode Selector: Offline (On-Device) vs LAN Bridge (PC) -->
+    <RadioGroup
+        android:id="@+id/rgExecutionMode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="20dp"
+        android:background="@color/surface_dark"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <RadioButton
+            android:id="@+id/rbOffline"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:checked="true"
+            android:buttonTint="@color/accent_green"
+            android:text="@string/mode_offline"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <RadioButton
+            android:id="@+id/rbBridge"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:buttonTint="@color/accent_green"
+            android:text="@string/mode_bridge"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+    </RadioGroup>
+
+    <!-- Model Download Section (shown in Offline mode if model not yet downloaded) -->
+    <LinearLayout
+        android:id="@+id/layoutModelDownload"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@color/surface_dark"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnDownloadModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="@color/accent_green"
+            android:text="@string/download_model_btn"
+            android:textColor="@color/bg_dark"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/pbDownload"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_marginTop="8dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="@color/accent_green"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvDownloadStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Command Input Bar -->
+    <LinearLayout
+        android:id="@+id/layoutCommandBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
         android:background="@color/surface_dark"
         android:elevation="4dp"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="6dp">
+        android:padding="4dp">
+
+        <Button
+            android:id="@+id/btnMic"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text="@string/mic_btn"
+            android:textColor="@color/accent_green"
+            android:textSize="18sp" />
 
         <EditText
             android:id="@+id/etCommand"
@@ -59,10 +148,11 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- Secondary Actions Row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_vertical|end"
         android:orientation="horizontal">
 
@@ -76,11 +166,13 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- Feedback Status -->
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="20dp"
+        android:gravity="center"
         android:textColor="@color/accent_green"
         android:textSize="14sp"
         android:visibility="gone" />
