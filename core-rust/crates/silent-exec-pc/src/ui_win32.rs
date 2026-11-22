@@ -118,7 +118,15 @@ pub fn run_command_bar(
     let mut indexer = crate::indexer::FileIndexer::new(roots);
     let _ = indexer.build_index();
     let executor = crate::executor::PcExecutor::new(indexer, dry_run);
-    let backend = crate::inference::LlamaBackend::new_server(server_url.as_deref(), None);
+    let backend = if let Some(bin) = llama_bin {
+        let model = model_path.unwrap_or_else(|| {
+            crate::model_manager::ModelManager::default_cache_dir()
+                .join("Qwen2.5-1.5B-Instruct.Q4_K_M.gguf")
+        });
+        crate::inference::LlamaBackend::new_cli(bin, model, None)
+    } else {
+        crate::inference::LlamaBackend::new_server(server_url.as_deref(), None)
+    };
 
     let stdin = std::io::stdin();
     for line_res in std::io::BufRead::lines(stdin.lock()) {
