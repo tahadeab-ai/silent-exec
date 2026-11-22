@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/tahadeab-ai/silent-exec/actions/workflows/ci.yml/badge.svg)](https://github.com/tahadeab-ai/silent-exec/actions/workflows/ci.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tahadeab-ai/silent-exec/blob/main/nlp-training/train_silent_exec_qlora.ipynb)
-[![Model Release](https://img.shields.io/badge/Model_Release-v0.1.0--model-brightgreen.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model)
+[![Model Release](https://img.shields.io/badge/Model_Release-v0.2.0--model-brightgreen.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **SilentExec** is a lightweight, zero-chatter, action-only OS execution agent designed for PC (Windows & Linux) and Android. Rather than generating conversational filler or multi-paragraph chit-chat, SilentExec maps multilingual user intent (Arabic and English) directly to deterministic, strictly schema-validated system actions.
@@ -30,27 +30,32 @@
 > - **Precompiled Executables (`.exe`, `.apk`, Linux binaries)** are published exclusively via [GitHub Releases](https://github.com/tahadeab-ai/silent-exec/releases).
 > - **Quantized Model Weights (`*.gguf`)** are distributed directly via GitHub Releases (`gh release download`).
 
-Download the latest baseline quantized model (`v0.1.0-model`):
+Download the latest recommended quantized model (`v0.2.0-model`, Qwen2.5-1.5B):
+```bash
+gh release download v0.2.0-model -R tahadeab-ai/silent-exec --pattern "*.gguf"
+```
+Or download the ultra-compact baseline model (`v0.1.0-model`, Qwen2.5-0.5B):
 ```bash
 gh release download v0.1.0-model -R tahadeab-ai/silent-exec --pattern "*.gguf"
 ```
 
 ---
 
-## 📊 Benchmark Results (`v0.1.0-model`)
+## 📊 Benchmark Results (`v0.1.0-model` vs `v0.2.0-model`)
 
 Evaluated on the 250-test-case Golden Benchmark ([evals/golden_eval.jsonl](evals/golden_eval.jsonl)):
 
-| Model | Format | Size | JSON Validity | Intent Accuracy | Slot Exact Match | Release |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwen2.5-0.5B-Instruct** | GGUF (`q4_k_m`) | 379.38 MB | **97.20%** | **95.20%** | **44.00%** | [`v0.1.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model) |
+| Model | Format | Size | JSON Validity | Intent Accuracy | Slot Exact Match | Slot F1 | Release |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Qwen2.5-0.5B-Instruct** | GGUF (`q4_k_m`) | 379.38 MB | **97.20%** | **95.20%** | **44.00%** | — | [`v0.1.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model) |
+| **Qwen2.5-1.5B-Instruct** | GGUF (`q4_k_m`) | 940.37 MB | **98.80%** | **98.00%** | **60.80%** | **78.90%** | [`v0.2.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model) |
 
-### Per-Language Intent Accuracy
-- **English & Code-Switching (`en_mixed`)**: **97.6%**
-- **Colloquial Yemeni Arabic (`yemeni_ar`)**: **95.2%**
-- **Modern Standard Arabic (`msa_ar`)**: **92.7%**
+### Per-Language Breakdown (`v0.2.0-model`)
+- **English & Code-Switching (`en_mixed`)**: Intent **100.0%** (84/84), Slot Exact **72.62%** (61/84), Slot F1 **87.92%**
+- **Colloquial Yemeni Arabic (`yemeni_ar`)**: Intent **95.24%** (80/84), Slot Exact **53.57%** (45/84), Slot F1 **74.36%**
+- **Modern Standard Arabic (`msa_ar`)**: Intent **98.78%** (81/82), Slot Exact **56.10%** (46/82), Slot F1 **74.35%**
 
-*Full evaluation report available at [evals/results/v0.1.0_qwen2.5_0.5b_metrics.json](evals/results/v0.1.0_qwen2.5_0.5b_metrics.json).*
+*Full evaluation reports available at [evals/results/v0.1.0_qwen2.5_0.5b_metrics.json](evals/results/v0.1.0_qwen2.5_0.5b_metrics.json) and [evals/results/v0.2.0_qwen2.5_1.5b_metrics.json](evals/results/v0.2.0_qwen2.5_1.5b_metrics.json).*
 
 ---
 

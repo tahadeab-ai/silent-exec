@@ -1,7 +1,8 @@
-//! SilentExec PC CLI: Safe execution, fuzzy search, and model download.
+//! SilentExec PC CLI: Safe execution, fuzzy search, model download, and end-to-end LLM inference.
 
 use silent_exec_core::ActionCommand;
-use silent_exec_pc::{FileIndexer, ModelManager, PcExecutor};
+use silent_exec_pc::{FileIndexer, LlamaBackend, ModelManager, PcExecutor};
+use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -11,6 +12,9 @@ fn print_usage() {
     eprintln!();
     eprintln!("Usage:");
     eprintln!(
+        "  silent-exec-pc run \"<PROMPT>\" [--dry-run] [--confirm] [--server-url <URL>] [--llama-bin <PATH>] [--model <PATH>] [--grammar <PATH>] [--roots <R1,R2>]"
+    );
+    eprintln!(
         "  silent-exec-pc exec [--json <JSON> | --stdin] [--dry-run] [--confirm] [--roots <R1,R2>]"
     );
     eprintln!("  silent-exec-pc search <QUERY> [--dirs-only] [--roots <R1,R2>]");
@@ -18,11 +22,14 @@ fn print_usage() {
     eprintln!("  silent-exec-pc status");
     eprintln!();
     eprintln!("Options:");
-    eprintln!(
-        "  --dry-run   Simulate execution and print resolved paths without spawning OS windows"
-    );
-    eprintln!("  --confirm   Explicitly authorize Tier-2 destructive or system commands");
-    eprintln!("  --tag       GitHub Release tag to download model from (e.g. v0.2.0-model)");
+    eprintln!("  --dry-run       Simulate execution without spawning OS windows");
+    eprintln!("  --confirm       Authorize Tier-2 destructive or system commands");
+    eprintln!("  --server-url    llama-server endpoint URL (default: http://127.0.0.1:8080)");
+    eprintln!("  --llama-bin     Path to llama-cli executable");
+    eprintln!("  --model         Path to .gguf model file");
+    eprintln!("  --grammar       Path to custom GBNF grammar file");
+    eprintln!("  --roots         Comma-separated search roots for indexing");
+    eprintln!("  --tag           GitHub Release tag to download model from (e.g. v0.2.0-model)");
 }
 
 fn parse_roots(arg: Option<&str>) -> Vec<PathBuf> {
@@ -40,6 +47,96 @@ fn main() -> ExitCode {
     }
 
     match args[1].as_str() {
+        "run" => {
+            if args.len() < 3 {
+                eprintln!("Usage: silent-exec-pc run \"<PROMPT>\" [--dry-run] [--confirm] [--server-url <URL>] [...]");
+                return ExitCode::from(1);
+            }
+            let user_prompt = &args[2];
+            let mut dry_run = false;
+            let mut confirm = false;
+            let mut server_url = None;
+            let mut llama_bin = None;
+            let mut model_path = None;
+            let mut grammar_path = None;
+            let mut roots_arg = None;
+
+            let mut idx = 3;
+            while idx < args.len() {
+                match args[idx].as_str() {
+                    "--dry-run" => dry_run = true,
+                    "--confirm" => confirm = true,
+                    "--server-url" if idx + 1 < args.len() => {
+                        server_url = Some(args[idx + 1].clone());
+                        idx += 1;
+                    }
+                    "--llama-bin" if idx + 1 < args.len() => {
+                        llama_bin = Some(PathBuf::from(&args[idx + 1]));
+                        idx += 1;
+                    }
+                    "--model" if idx + 1 < args.len() => {
+                        model_path = Some(PathBuf::from(&args[idx + 1]));
+                        idx += 1;
+                    }
+                    "--grammar" if idx + 1 < args.len() => {
+                        grammar_path = Some(PathBuf::from(&args[idx + 1]));
+                        idx += 1;
+                    }
+                    "--roots" if idx + 1 < args.len() => {
+                        roots_arg = Some(args[idx + 1].as_str());
+                        idx += 1;
+                    }
+                    _ => {}
+                }
+                idx += 1;
+            }
+
+            // Construct backend
+            let backend = if let Some(bin) = llama_bin {
+                let model = model_path.unwrap_or_else(|| {
+                    ModelManager::default_cache_dir().join("Qwen2.5-1.5B-Instruct.Q4_K_M.gguf")
+                });
+                LlamaBackend::new_cli(bin, model, grammar_path)
+            } else if let Some(model) = model_path {
+                let bin = PathBuf::from("llama-cli");
+                LlamaBackend::new_cli(bin, model, grammar_path)
+            } else {
+                let custom_grammar = grammar_path
+                    .as_ref()
+                    .and_then(|p| fs::read_to_string(p).ok());
+                let url = server_url.or_else(|| std::env::var("SILENT_EXEC_SERVER_URL").ok());
+                LlamaBackend::new_server(url.as_deref(), custom_grammar)
+            };
+
+            // Run inference
+            let cmd = match backend.infer(user_prompt) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Inference error: {}", e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            // Output inferred ActionCommand JSON
+            println!(
+                "Inferred ActionCommand:\n{}",
+                serde_json::to_string_pretty(&cmd).unwrap()
+            );
+
+            // Execute action through Safe PC Executor & Indexer
+            let roots = parse_roots(roots_arg);
+            let mut indexer = FileIndexer::new(roots);
+            let _ = indexer.build_index();
+
+            let executor = PcExecutor::new(indexer, dry_run);
+            let result = executor.execute(&cmd, confirm);
+
+            println!(
+                "\nExecution Result:\n{}",
+                serde_json::to_string_pretty(&result).unwrap()
+            );
+            ExitCode::SUCCESS
+        }
         "exec" => {
             let mut json_str = None;
             let mut use_stdin = false;
@@ -130,7 +227,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         "download-model" => {
-            let mut tag = "v0.1.0-model".to_string();
+            let mut tag = "v0.2.0-model".to_string();
             let mut custom_cache = None;
 
             let mut idx = 2;

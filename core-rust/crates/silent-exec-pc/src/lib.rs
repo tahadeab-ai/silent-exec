@@ -1,19 +1,24 @@
-//! SilentExec PC Executor & Arabic/English Fuzzy Indexer Library
+//! SilentExec PC Executor, Arabic/English Fuzzy Indexer, and Inference Client Library
 
 pub mod executor;
 pub mod indexer;
+pub mod inference;
 pub mod model_manager;
 
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
 pub use indexer::{
     compute_fuzzy_score, normalize_arabic_english, FileIndexer, IndexedItem, ScoredMatch,
 };
+pub use inference::{
+    build_chatml_prompt, extract_action_json, format_prompt, LlamaBackend, DEFAULT_SYSTEM_PROMPT,
+    EMBEDDED_ACTION_GBNF,
+};
 pub use model_manager::{ModelDownloadInfo, ModelManager};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use silent_exec_core::{ActionCommand, ActionType, Platform};
+    use silent_exec_core::{ActionCommand, ActionType, Platform, SafetyGate};
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::PathBuf;
@@ -351,5 +356,146 @@ mod tests {
 
         let check = ModelManager::assert_not_in_git_repo(&inside_models);
         assert!(check.is_err(), "Must reject directories inside a Git repo");
+    }
+
+    #[test]
+    fn test_17_chatml_prompt_english() {
+        let prompt = format_prompt("open folder Downloads");
+        assert!(prompt.contains("<|im_start|>system"));
+        assert!(prompt.contains(DEFAULT_SYSTEM_PROMPT));
+        assert!(prompt.contains("<|im_start|>user\nopen folder Downloads<|im_end|>"));
+        assert!(prompt.ends_with("<|im_start|>assistant\n"));
+    }
+
+    #[test]
+    fn test_18_chatml_prompt_msa_arabic() {
+        let prompt = format_prompt("افتح مستند المبيعات");
+        assert!(prompt.contains("<|im_start|>user\nافتح مستند المبيعات<|im_end|>"));
+        assert!(prompt.ends_with("<|im_start|>assistant\n"));
+    }
+
+    #[test]
+    fn test_19_chatml_prompt_yemeni_arabic() {
+        let prompt = format_prompt("ادخل مجلد المشاريع وريني الملفات");
+        assert!(prompt.contains("<|im_start|>user\nادخل مجلد المشاريع وريني الملفات<|im_end|>"));
+        assert!(prompt.ends_with("<|im_start|>assistant\n"));
+    }
+
+    #[test]
+    fn test_20_extract_clean_json() {
+        let raw =
+            r#"{"action":"open_folder","target":"Downloads","platform":"pc","confidence":0.95}"#;
+        let extracted = extract_action_json(raw).unwrap();
+        assert_eq!(extracted, raw);
+    }
+
+    #[test]
+    fn test_21_extract_json_with_code_fences() {
+        let raw = "```json\n{\n  \"action\": \"open_file\",\n  \"target\": \"report.pdf\",\n  \"platform\": \"pc\",\n  \"confidence\": 0.90\n}\n```";
+        let extracted = extract_action_json(raw).unwrap();
+        let cmd = ActionCommand::from_json(&extracted).unwrap();
+        assert_eq!(cmd.action, ActionType::OpenFile);
+        assert_eq!(cmd.target.as_deref(), Some("report.pdf"));
+    }
+
+    #[test]
+    fn test_22_extract_json_with_chatml_eos() {
+        let raw = "{\"action\":\"search_files\",\"target\":\"grades\",\"platform\":\"pc\",\"confidence\":0.88}<|im_end|>";
+        let extracted = extract_action_json(raw).unwrap();
+        let cmd = ActionCommand::from_json(&extracted).unwrap();
+        assert_eq!(cmd.action, ActionType::SearchFiles);
+    }
+
+    #[test]
+    fn test_23_extract_json_rejects_conversational_chatter() {
+        // English conversational chatter
+        let english_chatter = "Sure! Here is your command:\n{\"action\":\"open_folder\",\"target\":\"Downloads\",\"platform\":\"pc\",\"confidence\":0.95}";
+        assert!(extract_action_json(english_chatter).is_err());
+
+        // Arabic conversational chatter
+        let arabic_chatter = "حاضر، سأقوم بفتح المجلد:\n{\"action\":\"open_folder\",\"target\":\"Downloads\",\"platform\":\"pc\",\"confidence\":0.95}";
+        assert!(extract_action_json(arabic_chatter).is_err());
+
+        // Trailing chatter
+        let trailing_chatter = "{\"action\":\"open_folder\",\"target\":\"Downloads\",\"platform\":\"pc\",\"confidence\":0.95}\nHope this helps!";
+        assert!(extract_action_json(trailing_chatter).is_err());
+    }
+
+    #[test]
+    fn test_24_extract_json_rejects_empty_or_non_object() {
+        assert!(extract_action_json("").is_err());
+        assert!(extract_action_json("   ").is_err());
+        assert!(extract_action_json("[]").is_err());
+        assert!(extract_action_json("Just chit chat with no json").is_err());
+    }
+
+    #[test]
+    fn test_25_end_to_end_inference_to_execution_dry_run() {
+        let guard = TempDirGuard::new("e2e_dry_run");
+        let target_dir = guard.path.join("Projects");
+        fs::create_dir_all(&target_dir).unwrap();
+
+        // 1. Simulate raw model completion output with GBNF formatting
+        let raw_model_output =
+            r#"{"action":"open_folder","target":"Projects","platform":"pc","confidence":0.95}"#;
+
+        // 2. Strict JSON extraction
+        let clean_json = extract_action_json(raw_model_output).unwrap();
+
+        // 3. Schema parsing
+        let cmd = ActionCommand::from_json(&clean_json).unwrap();
+
+        // 4. SafetyGate validation
+        let safety_decision = SafetyGate::evaluate(&cmd);
+        assert_eq!(
+            safety_decision,
+            silent_exec_core::SafetyDecision::AllowSilent
+        );
+
+        // 5. Indexing & Execution
+        let mut indexer = FileIndexer::new(vec![guard.path.clone()]);
+        indexer.build_index().unwrap();
+
+        let executor = PcExecutor::new(indexer, true);
+        let result = executor.execute(&cmd, false);
+
+        match result {
+            ExecutionResult::DryRun {
+                action,
+                target_resolved,
+                ..
+            } => {
+                assert_eq!(action, "open_folder");
+                assert_eq!(target_resolved.unwrap(), target_dir.to_string_lossy());
+            }
+            other => panic!("Expected DryRun result, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_26_end_to_end_inference_blocks_injection() {
+        let guard = TempDirGuard::new("e2e_block");
+
+        // 1. Injected prompt generated malicious command
+        let raw_injected_output = r#"{"action":"open_file","target":"report.pdf | rm -rf /","platform":"pc","confidence":0.90}"#;
+
+        let clean_json = extract_action_json(raw_injected_output).unwrap();
+        let cmd = ActionCommand::from_json(&clean_json).unwrap();
+
+        let indexer = FileIndexer::new(vec![guard.path.clone()]);
+        let executor = PcExecutor::new(indexer, true);
+
+        // SafetyGate inside executor blocks execution
+        let result = executor.execute(&cmd, false);
+        match result {
+            ExecutionResult::Blocked { reason, action } => {
+                assert_eq!(action, "open_file");
+                assert!(
+                    reason.to_lowercase().contains("pipe")
+                        || reason.to_lowercase().contains("injection")
+                );
+            }
+            other => panic!("Expected Blocked result, got: {:?}", other),
+        }
     }
 }
