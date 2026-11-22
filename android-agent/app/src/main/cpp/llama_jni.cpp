@@ -100,10 +100,8 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
 
     const char* grammar_str = grammar_text ? env->GetStringUTFChars(grammar_text, nullptr) : nullptr;
 
-    const struct llama_vocab* vocab = llama_model_get_vocab(g_model);
-
     std::string prompt_text(prompt_str);
-    int n_tokens = -llama_tokenize(vocab, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), NULL, 0, true, true);
+    int n_tokens = -llama_tokenize(g_model, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), NULL, 0, true, true);
     if (n_tokens <= 0) {
         env->ReleaseStringUTFChars(prompt, prompt_str);
         if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
@@ -111,7 +109,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
 
     std::vector<llama_token> prompt_tokens(n_tokens);
-    if (llama_tokenize(vocab, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()), true, true) < 0) {
+    if (llama_tokenize(g_model, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()), true, true) < 0) {
         env->ReleaseStringUTFChars(prompt, prompt_str);
         if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
         return env->NewStringUTF("{\"error\":\"Prompt tokenization failed\"}");
@@ -121,7 +119,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
 
     if (grammar_str && strlen(grammar_str) > 0) {
-        llama_sampler* g_smpl = llama_sampler_init_grammar(vocab, grammar_str, "root");
+        llama_sampler* g_smpl = llama_sampler_init_grammar(g_model, grammar_str, "root");
         if (g_smpl) {
             llama_sampler_chain_add(smpl, g_smpl);
         } else {
@@ -145,12 +143,12 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         llama_token new_token = llama_sampler_sample(smpl, g_ctx, -1);
         llama_sampler_accept(smpl, new_token);
 
-        if (llama_vocab_is_eog(vocab, new_token)) {
+        if (llama_token_is_eog(g_model, new_token)) {
             break;
         }
 
         char piece_buf[128];
-        int n_piece = llama_token_to_piece(vocab, new_token, piece_buf, sizeof(piece_buf), 0, true);
+        int n_piece = llama_token_to_piece(g_model, new_token, piece_buf, sizeof(piece_buf), 0, true);
         if (n_piece > 0) {
             output_str.append(piece_buf, n_piece);
         }
