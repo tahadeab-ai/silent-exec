@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">SilentExec</string>
+    <string name="accessibility_service_description">Zero-chatter automated action execution engine for SilentExec</string>
+    <string name="command_hint">اكتب الأمر هنا... / Enter command...</string>
+    <string name="execute_btn">تنفيذ</string>
+    <string name="bridge_settings">LAN Bridge</string>
+    <string name="confirm">تنفيذ</string>
+    <string name="cancel">إلغاء</string>
+    <string name="confirm_title">تأكيد الإجراء (Tier 2)</string>
+    <string name="host_hint">PC IP (e.g. 192.168.1.100)</string>
+    <string name="port_hint">Port (e.g. 8765)</string>
+    <string name="token_hint">Bearer Secret Token</string>
+    <string name="save">حفظ</string>
+</resources>
