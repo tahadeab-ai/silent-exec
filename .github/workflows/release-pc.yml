@@ -1,0 +1,67 @@
+name: Release PC Windows Binary
+
+on:
+  push:
+    tags:
+      - 'v*-pc'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.1.0-pc)'
+        required: true
+        default: 'v0.1.0-pc'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  build-and-release-pc:
+    name: Build & Publish Windows x86_64 Binary
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Release Binary (silent-exec-pc)
+        run: cargo build --release --bin silent-exec-pc --manifest-path core-rust/Cargo.toml
+
+      - name: Package Assets & Generate Checksum
+        shell: bash
+        run: |
+          mkdir -p release_assets
+          cp core-rust/target/release/silent-exec-pc.exe release_assets/
+          cd release_assets
+          sha256sum silent-exec-pc.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Determine Release Tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "SilentExec PC Agent ${{ env.RELEASE_TAG }}"
+          body: |
+            Automated production build for SilentExec PC Agent (`silent-exec-pc.exe`).
+            
+            - **Platform**: Windows x86_64
+            - **Safety Gate**: Deterministic 3-Tier validation with `--dry-run` and confirmation gates
+            - **NLP / Indexer**: Sub-15ms Arabic & English Unicode fuzzy file indexer
+          files: |
+            release_assets/silent-exec-pc.exe
+            release_assets/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
