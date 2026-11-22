@@ -1,8 +1,11 @@
 # SilentExec
 
 [![CI](https://github.com/tahadeab-ai/silent-exec/actions/workflows/ci.yml/badge.svg)](https://github.com/tahadeab-ai/silent-exec/actions/workflows/ci.yml)
+[![Android CI](https://github.com/tahadeab-ai/silent-exec/actions/workflows/android-ci.yml/badge.svg)](https://github.com/tahadeab-ai/silent-exec/actions/workflows/android-ci.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tahadeab-ai/silent-exec/blob/main/nlp-training/train_silent_exec_qlora.ipynb)
 [![Model Release](https://img.shields.io/badge/Model_Release-v0.2.0--model-brightgreen.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model)
+[![PC Release](https://img.shields.io/badge/PC_Release-v0.1.0--pc-blue.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-pc)
+[![Android Release](https://img.shields.io/badge/Android_Release-v0.1.0--android-green.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-android)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **SilentExec** is a lightweight, zero-chatter, action-only OS execution agent designed for PC (Windows & Linux) and Android. Rather than generating conversational filler or multi-paragraph chit-chat, SilentExec maps multilingual user intent (Arabic and English) directly to deterministic, strictly schema-validated system actions.
@@ -12,32 +15,28 @@
 ## ⚡ Core Philosophy & Architecture
 
 1. **Zero-Chatter Execution**: LLMs run constrained with GBNF grammars, producing only valid `ActionCommand` JSON payloads.
-2. **Deterministic Safety Gating**: A high-performance Rust safety engine verifies all actions, blocking path traversal, shell injection, and sensitive directory access before execution.
+2. **Deterministic Safety Gating**: A high-performance Rust & Kotlin safety engine verifies all actions, blocking path traversal, shell injection, and sensitive directory access before execution.
 3. **Cross-Platform Modular Design**:
-   - **`core-rust/`**: High-performance core library and safety gate with serde validation.
-   - **`android-agent/`**: Native Kotlin execution engine for Android with accessibility/system integration.
-   - **`nlp-training/`**: QLoRA fine-tuning recipes for edge LLMs optimized on Google Colab.
+   - **`core-rust/`**: High-performance core library, safe PC executor, sub-15ms Arabic/English fuzzy indexer, and authenticated LAN bridge server.
+   - **`android-agent/`**: Native Kotlin execution engine for Android with accessibility/system integration and LAN client.
+   - **`nlp-training/`**: QLoRA fine-tuning recipes for edge LLMs optimized on Google Colab with Unsloth.
    - **`evals/`**: Dry-run evaluation harness for measuring action accuracy, latency, and safety gate coverage.
    - **`schemas/`**: Single Source of Truth JSON Schema (Draft 2020-12) and llama.cpp GBNF grammar.
 
 ---
 
-## 📦 Binaries & Model Weights Distribution Policy
+## 📦 Downloads & Official Releases
 
 > [!IMPORTANT]
-> **No binaries or model weights are stored in this Git repository.**
-> To keep the repository lightweight and developer-friendly:
-> - **Precompiled Executables (`.exe`, `.apk`, Linux binaries)** are published exclusively via [GitHub Releases](https://github.com/tahadeab-ai/silent-exec/releases).
-> - **Quantized Model Weights (`*.gguf`)** are distributed directly via GitHub Releases (`gh release download`).
+> **No precompiled binaries or model weights are stored in this Git repository.**
+> All deliverables are built in automated GitHub Actions cloud pipelines and distributed exclusively via [GitHub Releases](https://github.com/tahadeab-ai/silent-exec/releases).
 
-Download the latest recommended quantized model (`v0.2.0-model`, Qwen2.5-1.5B):
-```bash
-gh release download v0.2.0-model -R tahadeab-ai/silent-exec --pattern "*.gguf"
-```
-Or download the ultra-compact baseline model (`v0.1.0-model`, Qwen2.5-0.5B):
-```bash
-gh release download v0.1.0-model -R tahadeab-ai/silent-exec --pattern "*.gguf"
-```
+| Component | Target Platform | Release Tag | Asset Name | Size | SHA-256 Checksum | Quick Download Command |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **PC Execution Agent** | Windows x86_64 | [`v0.1.0-pc`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-pc) | `silent-exec-pc.exe` | **747 KB** | `bb00b123...` | `gh release download v0.1.0-pc -R tahadeab-ai/silent-exec -p "silent-exec-pc.exe"` |
+| **Android Execution Agent** | Android (`arm64-v8a`) | [`v0.1.0-android`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-android) | `silent-exec-android-arm64.apk` | **6.15 MB** | `4634cc38...` | `gh release download v0.1.0-android -R tahadeab-ai/silent-exec -p "*.apk"` |
+| **Edge NLP Model (Recommended)** | GGUF (`q4_k_m`) | [`v0.2.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model) | `Qwen2.5-1.5B-Instruct.Q4_K_M.gguf` | **940.37 MB** | `e6368226...` | `gh release download v0.2.0-model -R tahadeab-ai/silent-exec -p "*.gguf"` |
+| **Edge NLP Model (Baseline)** | GGUF (`q4_k_m`) | [`v0.1.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model) | `Qwen2.5-0.5B-Instruct.Q4_K_M.gguf` | **379.38 MB** | `5dd97b12...` | `gh release download v0.1.0-model -R tahadeab-ai/silent-exec -p "*.gguf"` |
 
 ---
 
@@ -76,7 +75,7 @@ To allow the Colab notebook to automatically publish `.gguf` weights and evaluat
 
 ## 🛡️ Action Safety Tiers
 
-SilentExec enforces a 3-tier safety policy:
+SilentExec enforces a deterministic 3-tier safety policy:
 
 | Tier | Name | Behavior | Actions |
 | :--- | :--- | :--- | :--- |
@@ -88,25 +87,23 @@ SilentExec enforces a 3-tier safety policy:
 
 ---
 
-## 🚀 Building & Testing Core Rust
+## 🚀 Building & Testing
 
+### Core Rust (`core-rust/`)
 ```bash
-# Clone the repository
-git clone https://github.com/tahadeab-ai/silent-exec.git
-cd silent-exec/core-rust
+cd core-rust
 
-# Run tests with resource caps
-CARGO_BUILD_JOBS=2 cargo test
+# Run 50 unit and integration tests
+CARGO_BUILD_JOBS=2 cargo test --workspace
 
-# Run linter and format checks
-CARGO_BUILD_JOBS=2 cargo clippy -- -D warnings
-cargo fmt --check
+# Run linter and formatting checks
+CARGO_BUILD_JOBS=2 cargo clippy --workspace -- -D warnings
+cargo fmt --all --check
 ```
 
-### 💻 SilentExec PC Agent CLI (`silent-exec-pc`)
-
+### PC Agent CLI Usage (`silent-exec-pc`)
 ```bash
-# 1. End-to-end natural language run
+# 1. End-to-end natural language run (Arabic or English)
 silent-exec-pc run "افتح مجلد التنزيلات" --dry-run
 
 # 2. Zero-chatter stdin quick loop (outputs: ✓ <action> / ? confirm / ✗ blocked)
@@ -117,6 +114,20 @@ silent-exec-pc serve --host 0.0.0.0 --port 8765 --token my-secret-token --dry-ru
 
 # 4. Download latest fine-tuned Qwen GGUF model from GitHub Releases
 silent-exec-pc download-model --tag v0.2.0-model
+```
+
+### Android Agent (`android-agent/`)
+```bash
+cd android-agent
+
+# Run JVM Unit Tests
+./gradlew testDebugUnitTest
+
+# Build arm64-v8a debug APK
+./gradlew assembleDebug
+
+# Install via ADB
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ---
