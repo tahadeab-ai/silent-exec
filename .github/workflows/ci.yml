@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  validate-schemas:
+    name: Validate JSON Schemas
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install jsonschema
+
+      - name: Run Schema and Safety Policy Validation
+        run: python schemas/validate_schemas.py
+
+  rust-checks:
+    name: Rust Quality & Safety Gate Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core-rust
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "core-rust -> target"
+
+      - name: Format Check (cargo fmt)
+        run: cargo fmt --check
+
+      - name: Linter Check (cargo clippy)
+        run: cargo clippy -- -D warnings
+
+      - name: Unit Tests (cargo test)
+        run: cargo test --verbose

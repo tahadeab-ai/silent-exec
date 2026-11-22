@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "SilentExecSafetyPolicy",
+  "version": "1.0.0",
+  "confidence_threshold": 0.65,
+  "tier_1_silent": [
+    "open_folder",
+    "open_file",
+    "launch_app",
+    "search_files",
+    "set_volume",
+    "set_brightness",
+    "create_note",
+    "copy_to_clipboard",
+    "open_android_app",
+    "open_url"
+  ],
+  "tier_2_confirm": [
+    "delete_file",
+    "move_file",
+    "system_power",
+    "toggle_setting",
+    "send_message"
+  ],
+  "tier_3_blocked_patterns": {
+    "path_traversal": [
+      "..",
+      "..\\",
+      "../"
+    ],
+    "protected_system_paths": [
+      "C:\\Windows",
+      "C:/Windows",
+      "C:\\Program Files",
+      "C:/Program Files",
+      "C:\\Program Files (x86)",
+      "C:/Program Files (x86)",
+      "/etc",
+      "/system",
+      "/root",
+      "/bin",
+      "/sbin",
+      "/usr/bin"
+    ],
+    "shell_metacharacters": [
+      "&&",
+      "||",
+      ";",
+      "|",
+      "$(",
+      "`"
+    ]
+  }
+}

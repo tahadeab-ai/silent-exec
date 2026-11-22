@@ -1,0 +1,41 @@
+# Build outputs
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+*.apk
+*.aab
+
+# Model weights & quantized formats
+*.gguf
+*.onnx
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDEs & Editor temp files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
