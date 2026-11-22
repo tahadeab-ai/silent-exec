@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <string>
 #include <vector>
+#include <cstring>
 #include <android/log.h>
 #include "llama.h"
 
@@ -102,9 +103,15 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     const struct llama_vocab* vocab = llama_model_get_vocab(g_model);
 
     std::string prompt_text(prompt_str);
-    int n_tokens = -llama_tokenize(vocab, prompt_text.c_str(), prompt_text.length(), NULL, 0, true, true);
+    int n_tokens = -llama_tokenize(vocab, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), NULL, 0, true, true);
+    if (n_tokens <= 0) {
+        env->ReleaseStringUTFChars(prompt, prompt_str);
+        if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
+        return env->NewStringUTF("{\"error\":\"Failed to calculate prompt token count\"}");
+    }
+
     std::vector<llama_token> prompt_tokens(n_tokens);
-    if (llama_tokenize(vocab, prompt_text.c_str(), prompt_text.length(), prompt_tokens.data(), prompt_tokens.size(), true, true) < 0) {
+    if (llama_tokenize(vocab, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()), true, true) < 0) {
         env->ReleaseStringUTFChars(prompt, prompt_str);
         if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
         return env->NewStringUTF("{\"error\":\"Prompt tokenization failed\"}");
@@ -114,11 +121,16 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
 
     if (grammar_str && strlen(grammar_str) > 0) {
-        llama_sampler_chain_add(smpl, llama_sampler_init_grammar(vocab, grammar_str, "root"));
+        llama_sampler* g_smpl = llama_sampler_init_grammar(vocab, grammar_str, "root");
+        if (g_smpl) {
+            llama_sampler_chain_add(smpl, g_smpl);
+        } else {
+            LOGE("Failed to parse grammar string, continuing with greedy sampling");
+        }
     }
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
-    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), prompt_tokens.size());
+    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     if (llama_decode(g_ctx, batch) != 0) {
         llama_sampler_free(smpl);
         env->ReleaseStringUTFChars(prompt, prompt_str);

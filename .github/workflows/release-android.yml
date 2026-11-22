@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.1.0-android)'
+        description: 'Release Tag (e.g. v0.2.0-android)'
         required: true
-        default: 'v0.1.0-android'
+        default: 'v0.2.0-android'
 
 jobs:
   build-and-release-android:
@@ -33,6 +33,13 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Verify Android Environment & NDK
+        run: |
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "Installed NDKs:"
+          ls -la "$ANDROID_HOME/ndk/" || true
+          cmake --version || true
+
       - name: Grant execute permission for gradlew
         run: chmod +x android-agent/gradlew
 
@@ -41,7 +48,7 @@ jobs:
         run: |
           ./gradlew testDebugUnitTest assembleDebug --no-daemon --stacktrace
 
-      - name: Package Assets & Generate Checksum
+      - name: Package Assets & Verify Native Shared Library
         shell: bash
         run: |
           mkdir -p release_assets
@@ -52,6 +59,15 @@ jobs:
           fi
           cp "$APK_SOURCE" release_assets/silent-exec-android-arm64.apk
           cd release_assets
+
+          echo "Inspecting native shared libraries inside release APK..."
+          unzip -l silent-exec-android-arm64.apk | grep "lib/arm64-v8a"
+          if ! unzip -l silent-exec-android-arm64.apk | grep -q "lib/arm64-v8a/libllama_jni.so"; then
+            echo "Error: libllama_jni.so missing from release APK!"
+            exit 1
+          fi
+          echo "SUCCESS: Verified real offline llama.cpp native library in release APK!"
+
           sha256sum silent-exec-android-arm64.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
@@ -70,13 +86,16 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "SilentExec Android Agent ${{ env.RELEASE_TAG }}"
           body: |
-            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`).
+            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) v0.2.0.
 
             - **Platform**: Android (`arm64-v8a`)
-            - **Target SDK**: 35 (Android 15), Min SDK 26 (Android 8.0)
+            - **Offline NLP**: Real on-device `llama.cpp` inference engine (`libllama_jni.so`) with GBNF grammar constraints
+            - **Model Downloader**: Built-in streaming downloader for `Qwen2.5-0.5B-Instruct.Q4_K_M.gguf` (379 MB) with SHA-256 integrity verification
+            - **Voice Input**: Native zero-overhead Arabic (`ar-SA`) & English speech recognition
+            - **Dual Mode**: Seamless toggling between **Offline (On-Device)** and **LAN Bridge (PC)**
             - **Safety Gate**: Deterministic 3-Tier safety policy with interactive confirmation dialogs
-            - **Integration**: Native Intents, System Managers, Accessibility Service, and LAN Bridge Client
-            
+            - **Target SDK**: 35 (Android 15), Min SDK 26 (Android 8.0)
+
             ### Installation
             ```bash
             adb install -r silent-exec-android-arm64.apk

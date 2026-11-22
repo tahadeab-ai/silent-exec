@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.silentexec.android"
     compileSdk = 35
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         applicationId = "com.silentexec.android"
@@ -56,7 +57,6 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
         }
     }
 }

@@ -35,6 +35,13 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Verify Android Environment & NDK
+        run: |
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "Installed NDKs:"
+          ls -la "$ANDROID_HOME/ndk/" || true
+          cmake --version || true
+
       - name: Grant execute permission for gradlew
         run: chmod +x android-agent/gradlew
 
@@ -46,7 +53,7 @@ jobs:
         working-directory: android-agent
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Verify Built APK
+      - name: Verify Built APK and Native Shared Library
         working-directory: android-agent
         run: |
           echo "Scanning for built APKs..."
@@ -58,3 +65,11 @@ jobs:
           fi
           echo "Found APK: $APK_FILE"
           ls -lh "$APK_FILE"
+
+          echo "Inspecting native shared libraries inside APK..."
+          unzip -l "$APK_FILE" | grep "lib/arm64-v8a"
+          if ! unzip -l "$APK_FILE" | grep -q "lib/arm64-v8a/libllama_jni.so"; then
+            echo "Error: libllama_jni.so missing from arm64-v8a APK!"
+            exit 1
+          fi
+          echo "SUCCESS: Verified real offline llama.cpp native library (libllama_jni.so) in arm64-v8a APK!"
