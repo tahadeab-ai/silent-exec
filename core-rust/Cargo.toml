@@ -2,4 +2,5 @@
 resolver = "2"
 members = [
     "crates/silent-exec-core",
+    "crates/silent-exec-cli",
 ]

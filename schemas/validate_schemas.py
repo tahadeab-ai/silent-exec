@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SilentExec Schema and Safety Policy Validator
-Validates JSON schemas and cross-checks action integrity.
+SilentExec Schema, Safety Policy, and GBNF Grammar Validator
+Validates JSON schemas, GBNF grammar for UTF-8 Arabic support, and cross-checks action integrity.
 """
 
 import json
@@ -15,6 +15,7 @@ def main() -> int:
 
     action_schema_path = schemas_dir / "action_schema.json"
     safety_policy_path = schemas_dir / "safety_policy.json"
+    action_gbnf_path = schemas_dir / "action.gbnf"
 
     print(f"Loading {action_schema_path}...")
     with open(action_schema_path, "r", encoding="utf-8") as f:
@@ -43,9 +44,28 @@ def main() -> int:
     )
     assert len(schema_actions) == 15, f"Expected 15 actions, found {len(schema_actions)}"
     assert tier1_actions.isdisjoint(tier2_actions), "Overlap found between Tier 1 and Tier 2"
-    print(f"✓ All 15 actions verified and aligned across schema and policy.")
+    print("✓ All 15 actions verified and aligned across schema and policy.")
 
-    # 3. Test valid payloads
+    # 3. Verify action.gbnf existence, completeness, and UTF-8 Arabic compatibility
+    print(f"Verifying {action_gbnf_path}...")
+    assert action_gbnf_path.is_file(), f"Missing GBNF grammar file: {action_gbnf_path}"
+    with open(action_gbnf_path, "r", encoding="utf-8") as f:
+        gbnf_content = f.read()
+
+    assert len(gbnf_content.strip()) > 0, "action.gbnf is empty"
+    for action_name in schema_actions:
+        assert f'\\"{action_name}\\"' in gbnf_content or f'"{action_name}"' in gbnf_content, (
+            f"Action {action_name} missing from action.gbnf"
+        )
+
+    # Confirm json-string in GBNF permits multi-byte UTF-8 (Arabic) without ASCII-only restriction
+    assert '[^"\\\\' in gbnf_content, "GBNF json-string must permit non-escaped UTF-8 characters"
+    assert "[a-zA-Z0-9]" not in gbnf_content.split("json-string")[1].split("\n")[0], (
+        "GBNF json-string should not be restricted to ASCII alphanumerics"
+    )
+    print("✓ action.gbnf verified: defines all 15 actions and permits full UTF-8 Arabic generation.")
+
+    # 4. Test valid payloads
     valid_payloads = [
         {
             "action": "open_folder",
@@ -78,7 +98,7 @@ def main() -> int:
         schema_validator.validate(payload)
         print(f"✓ Valid sample {i} passed schema validation.")
 
-    # 4. Test invalid payloads (must fail)
+    # 5. Test invalid payloads (must fail)
     invalid_payloads = [
         # Unknown action
         {
@@ -113,7 +133,7 @@ def main() -> int:
         assert len(errors) > 0, f"Expected error for invalid payload #{i}, but none raised"
         print(f"✓ Invalid sample {i} correctly rejected.")
 
-    print("\nAll schema and safety policy checks passed successfully!")
+    print("\nAll schema, safety policy, and GBNF checks passed successfully!")
     return 0
 
 

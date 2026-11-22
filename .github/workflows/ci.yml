@@ -26,14 +26,14 @@ jobs:
       - name: Install Python dependencies
         run: pip install jsonschema
 
-      - name: Run Schema and Safety Policy Validation
+      - name: Run Schema, Safety Policy and GBNF Validation
         run: python schemas/validate_schemas.py
 
       - name: Verify Dataset Generator & Schema Adherence
         run: python nlp-training/generate_dataset.py --count 300 --out-dir /tmp/ci_data
 
-  rust-checks:
-    name: Rust Quality & Safety Gate Tests
+  rust-checks-and-eval:
+    name: Rust Quality, Safety Gate Tests & Golden Benchmark Eval
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,6 +46,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install jsonschema
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -60,3 +68,9 @@ jobs:
 
       - name: Unit Tests (cargo test)
         run: cargo test --verbose
+
+      - name: Build CLI Evaluator
+        run: cargo build --bin silent-exec-cli
+
+      - name: Run Golden Benchmark Evaluation (Rust SafetyGate Oracle Check)
+        run: python ../evals/run_eval.py --oracle-check --rust-bin target/debug/silent-exec-cli

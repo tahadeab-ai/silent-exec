@@ -76,6 +76,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "silent-exec-cli"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "silent-exec-core",
+]
+
+[[package]]
 name = "silent-exec-core"
 version = "0.1.0"
 dependencies = [

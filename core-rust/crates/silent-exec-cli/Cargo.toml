@@ -1,0 +1,12 @@
+[package]
+name = "silent-exec-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["tahadeab-ai"]
+description = "Lightweight evaluation CLI for SilentExec"
+license = "MIT"
+
+[dependencies]
+silent-exec-core = { path = "../silent-exec-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

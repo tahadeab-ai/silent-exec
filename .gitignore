@@ -39,3 +39,6 @@ build/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Evaluation reports
+evals/last_eval_report.json
