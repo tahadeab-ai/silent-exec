@@ -103,6 +103,22 @@ CARGO_BUILD_JOBS=2 cargo clippy -- -D warnings
 cargo fmt --check
 ```
 
+### 💻 SilentExec PC Agent CLI (`silent-exec-pc`)
+
+```bash
+# 1. End-to-end natural language run
+silent-exec-pc run "افتح مجلد التنزيلات" --dry-run
+
+# 2. Zero-chatter stdin quick loop (outputs: ✓ <action> / ? confirm / ✗ blocked)
+silent-exec-pc quick --dry-run
+
+# 3. Authenticated LAN Bridge for mobile and network execution
+silent-exec-pc serve --host 0.0.0.0 --port 8765 --token my-secret-token --dry-run
+
+# 4. Download latest fine-tuned Qwen GGUF model from GitHub Releases
+silent-exec-pc download-model --tag v0.2.0-model
+```
+
 ---
 
 ## 📄 License

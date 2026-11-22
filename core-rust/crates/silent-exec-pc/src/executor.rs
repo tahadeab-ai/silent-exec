@@ -84,6 +84,14 @@ impl PcExecutor {
         self
     }
 
+    pub fn is_dry_run(&self) -> bool {
+        self.dry_run
+    }
+
+    pub fn indexer(&self) -> &FileIndexer {
+        &self.indexer
+    }
+
     /// Evaluates safety and executes or simulates an ActionCommand.
     pub fn execute(&self, cmd: &ActionCommand, confirm_flag: bool) -> ExecutionResult {
         let action_name = action_type_to_str(cmd.action).to_string();

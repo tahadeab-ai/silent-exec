@@ -1,10 +1,12 @@
-//! SilentExec PC Executor, Arabic/English Fuzzy Indexer, and Inference Client Library
+//! SilentExec PC Executor, Arabic/English Fuzzy Indexer, Inference & LAN Bridge Library
 
+pub mod bridge;
 pub mod executor;
 pub mod indexer;
 pub mod inference;
 pub mod model_manager;
 
+pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
 pub use indexer::{
     compute_fuzzy_score, normalize_arabic_english, FileIndexer, IndexedItem, ScoredMatch,
@@ -497,5 +499,296 @@ mod tests {
             }
             other => panic!("Expected Blocked result, got: {:?}", other),
         }
+    }
+
+    fn send_http_request(
+        addr: std::net::SocketAddr,
+        method: &str,
+        path: &str,
+        auth_header: Option<&str>,
+        body: Option<&str>,
+    ) -> (u16, String) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        use std::net::TcpStream;
+
+        let mut stream = TcpStream::connect(addr).expect("Failed to connect to bridge");
+        let body_str = body.unwrap_or("");
+        let content_len = body_str.len();
+
+        let mut req = format!(
+            "{} {} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {}\r\nConnection: close\r\n",
+            method, path, content_len
+        );
+        if let Some(auth) = auth_header {
+            req.push_str(&format!("Authorization: {}\r\n", auth));
+        }
+        if !body_str.is_empty() {
+            req.push_str("Content-Type: application/json\r\n");
+        }
+        req.push_str("\r\n");
+        req.push_str(body_str);
+
+        stream.write_all(req.as_bytes()).unwrap();
+        stream.flush().unwrap();
+
+        let mut reader = BufReader::new(stream);
+        let mut status_line = String::new();
+        reader.read_line(&mut status_line).unwrap();
+
+        let status_code: u16 = status_line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+                break;
+            }
+        }
+
+        let mut resp_body = String::new();
+        let _ = reader.read_to_string(&mut resp_body);
+
+        (status_code, resp_body)
+    }
+
+    #[test]
+    fn test_27_bridge_health_endpoint() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let config = BridgeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: "test-secret-123".to_string(),
+            dry_run: true,
+            server_url: None,
+            roots: vec![],
+        };
+
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
+
+        let (code, body) = send_http_request(addr, "GET", "/health", None, None);
+        assert_eq!(code, 200);
+        assert!(body.contains(r#""status":"ok""#));
+        assert!(body.contains(r#""version":"0.1.0""#));
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn test_28_bridge_unauthorized_missing_token() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let config = BridgeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: "test-secret-123".to_string(),
+            dry_run: true,
+            server_url: None,
+            roots: vec![],
+        };
+
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
+
+        let (code, body) = send_http_request(addr, "POST", "/v1/execute", None, Some("{}"));
+        assert_eq!(code, 401);
+        assert!(body.contains("unauthorized"));
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn test_29_bridge_unauthorized_wrong_token() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let config = BridgeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: "test-secret-123".to_string(),
+            dry_run: true,
+            server_url: None,
+            roots: vec![],
+        };
+
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
+
+        let (code, body) = send_http_request(
+            addr,
+            "POST",
+            "/v1/execute",
+            Some("Bearer wrong-token-xyz"),
+            Some("{}"),
+        );
+        assert_eq!(code, 401);
+        assert!(body.contains("unauthorized"));
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn test_30_bridge_execute_dry_run_allow_silent() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let guard = TempDirGuard::new("bridge_dry_run");
+        let target_dir = guard.path.join("Downloads");
+        fs::create_dir_all(&target_dir).unwrap();
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let config = BridgeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: "secret-token".to_string(),
+            dry_run: true,
+            server_url: None,
+            roots: vec![guard.path.clone()],
+        };
+
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
+
+        let req_json = r#"{
+            "json_command": {
+                "action": "open_folder",
+                "target": "Downloads",
+                "platform": "pc",
+                "confidence": 0.95
+            },
+            "dry_run": true
+        }"#;
+
+        let (code, body) = send_http_request(
+            addr,
+            "POST",
+            "/v1/execute",
+            Some("Bearer secret-token"),
+            Some(req_json),
+        );
+
+        assert_eq!(code, 200);
+        let res: ExecutionResult = serde_json::from_str(&body).unwrap();
+        match res {
+            ExecutionResult::DryRun {
+                action,
+                target_resolved,
+                ..
+            } => {
+                assert_eq!(action, "open_folder");
+                assert!(target_resolved.is_some());
+            }
+            other => panic!("Expected DryRun result, got: {:?}", other),
+        }
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn test_31_bridge_execute_safety_gate_blocking() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let config = BridgeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: "secret-token".to_string(),
+            dry_run: true,
+            server_url: None,
+            roots: vec![],
+        };
+
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
+
+        let req_json = r#"{
+            "json_command": {
+                "action": "open_file",
+                "target": "calc.exe && malicious_script",
+                "platform": "pc",
+                "confidence": 0.95
+            },
+            "dry_run": true
+        }"#;
+
+        let (code, body) = send_http_request(
+            addr,
+            "POST",
+            "/v1/execute",
+            Some("Bearer secret-token"),
+            Some(req_json),
+        );
+
+        assert_eq!(code, 200);
+        let res: ExecutionResult = serde_json::from_str(&body).unwrap();
+        match res {
+            ExecutionResult::Blocked { action, reason } => {
+                assert_eq!(action, "open_file");
+                assert!(reason.to_lowercase().contains("injection"));
+            }
+            other => panic!("Expected Blocked result, got: {:?}", other),
+        }
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn test_32_bridge_execute_tier_2_confirmation_gating() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let config = BridgeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: "secret-token".to_string(),
+            dry_run: true,
+            server_url: None,
+            roots: vec![],
+        };
+
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
+
+        let req_json = r#"{
+            "json_command": {
+                "action": "delete_file",
+                "target": "sensitive.log",
+                "platform": "pc",
+                "confidence": 0.95
+            },
+            "confirm": false,
+            "dry_run": true
+        }"#;
+
+        let (code, body) = send_http_request(
+            addr,
+            "POST",
+            "/v1/execute",
+            Some("Bearer secret-token"),
+            Some(req_json),
+        );
+
+        assert_eq!(code, 200);
+        let res: ExecutionResult = serde_json::from_str(&body).unwrap();
+        match res {
+            ExecutionResult::ConfirmationRequired { action, prompt, .. } => {
+                assert_eq!(action, "delete_file");
+                assert!(prompt.contains("Confirm"));
+            }
+            other => panic!("Expected ConfirmationRequired, got: {:?}", other),
+        }
+
+        shutdown.store(true, Ordering::Relaxed);
+        let _ = handle.join();
     }
 }
