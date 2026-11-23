@@ -81,8 +81,9 @@ object FastRuleRouter {
             }
         }
 
+        val padded = " $trimmed "
         val arPhrases = listOf(" و ", " ثم ", " بعدين ", " بعدها ")
-        if (arPhrases.any { trimmed.contains(it) || norm.contains(normalize(it)) }) return true
+        if (arPhrases.any { padded.contains(it) }) return true
 
         return false
     }
