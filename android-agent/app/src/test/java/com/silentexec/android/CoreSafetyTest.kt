@@ -22,10 +22,10 @@ class CoreSafetyTest {
             "set_volume", "set_brightness", "create_note", "copy_to_clipboard",
             "delete_file", "move_file", "system_power", "open_android_app",
             "toggle_setting", "send_message", "open_url",
-            "ui_click", "ui_type", "ui_scroll", "ui_back", "ui_home"
+            "ui_click", "ui_type", "ui_scroll", "ui_back", "ui_home", "done"
         )
 
-        assertEquals(20, ActionType.values().size)
+        assertEquals(21, ActionType.values().size)
 
         for (action in actions) {
             val json = """

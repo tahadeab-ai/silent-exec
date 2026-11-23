@@ -111,6 +111,13 @@ class AndroidActionExecutor(private val context: Context) {
                 ActionType.UI_TYPE -> {
                     handleUiType(cmd.target ?: "")
                 }
+                ActionType.DONE -> {
+                    AndroidExecutionResult.Success(
+                        action = "done",
+                        details = "ReAct loop completed; task done",
+                        targetResolved = null
+                    )
+                }
                 else -> {
                     AndroidExecutionResult.Success(
                         action = actionName,
