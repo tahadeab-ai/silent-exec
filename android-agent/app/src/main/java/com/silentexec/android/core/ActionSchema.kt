@@ -137,6 +137,11 @@ data class ActionCommand(
     }
 }
 
+@Serializable
+data class MultiStepPlan(
+    val steps: List<ActionCommand>
+)
+
 object ActionJson {
     val strict = Json {
         ignoreUnknownKeys = false

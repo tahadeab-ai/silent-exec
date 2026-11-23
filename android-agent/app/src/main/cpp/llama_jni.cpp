@@ -11,6 +11,7 @@
 
 static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
+static std::vector<llama_token> g_cached_tokens;
 
 extern "C" {
 
@@ -23,8 +24,16 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
 ) {
     if (g_model != nullptr) {
         LOGI("Model already loaded, releasing previous context");
-        if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
-        if (g_model) { llama_free_model(g_model); g_model = nullptr; }
+        if (g_ctx) {
+            llama_kv_cache_clear(g_ctx);
+            llama_free(g_ctx);
+            g_ctx = nullptr;
+        }
+        if (g_model) {
+            llama_free_model(g_model);
+            g_model = nullptr;
+        }
+        g_cached_tokens.clear();
     }
 
     const char* path_chars = env->GetStringUTFChars(model_path, nullptr);
@@ -54,6 +63,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
         return JNI_FALSE;
     }
 
+    g_cached_tokens.clear();
     LOGI("Model loaded successfully with %d threads", ctx_params.n_threads);
     return JNI_TRUE;
 }
@@ -72,6 +82,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeUnload(
     jobject /* this */
 ) {
     if (g_ctx) {
+        llama_kv_cache_clear(g_ctx);
         llama_free(g_ctx);
         g_ctx = nullptr;
     }
@@ -79,6 +90,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeUnload(
         llama_free_model(g_model);
         g_model = nullptr;
     }
+    g_cached_tokens.clear();
     llama_backend_free();
     LOGI("Model unloaded successfully");
 }
@@ -115,6 +127,41 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Prompt tokenization failed\"}");
     }
 
+    // KV Cache Prefix Reuse Optimization:
+    // Determine how many tokens match the already evaluated prefix in KV cache
+    size_t n_match = 0;
+    while (n_match < g_cached_tokens.size() && n_match < prompt_tokens.size() &&
+           g_cached_tokens[n_match] == prompt_tokens[n_match]) {
+        n_match++;
+    }
+
+    // If cached sequence diverged, remove cached KV tokens beyond the match point
+    if (n_match < g_cached_tokens.size()) {
+        llama_kv_cache_seq_rm(g_ctx, 0, static_cast<llama_pos>(n_match), -1);
+        g_cached_tokens.resize(n_match);
+    }
+
+    size_t n_new = prompt_tokens.size() - n_match;
+    if (n_new > 0) {
+        llama_batch batch = llama_batch_init(static_cast<int32_t>(n_new), 0, 1);
+        for (size_t i = 0; i < n_new; ++i) {
+            batch.token[i] = prompt_tokens[n_match + i];
+            batch.pos[i] = static_cast<llama_pos>(n_match + i);
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i][0] = 0;
+            batch.logits[i] = (i == n_new - 1) ? 1 : 0;
+        }
+        batch.n_tokens = static_cast<int32_t>(n_new);
+
+        if (llama_decode(g_ctx, batch) != 0) {
+            llama_batch_free(batch);
+            env->ReleaseStringUTFChars(prompt, prompt_str);
+            if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
+            return env->NewStringUTF("{\"error\":\"Prompt decode failed\"}");
+        }
+        llama_batch_free(batch);
+    }
+
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
 
@@ -127,14 +174,6 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         }
     }
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
-
-    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
-    if (llama_decode(g_ctx, batch) != 0) {
-        llama_sampler_free(smpl);
-        env->ReleaseStringUTFChars(prompt, prompt_str);
-        if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
-        return env->NewStringUTF("{\"error\":\"Initial prompt decode failed\"}");
-    }
 
     std::string output_str;
     int limit = max_tokens > 0 ? max_tokens : 160;
@@ -153,8 +192,17 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
             output_str.append(piece_buf, n_piece);
         }
 
-        batch = llama_batch_get_one(&new_token, 1);
-        if (llama_decode(g_ctx, batch) != 0) {
+        llama_batch gen_batch = llama_batch_init(1, 0, 1);
+        gen_batch.token[0] = new_token;
+        gen_batch.pos[0] = static_cast<llama_pos>(prompt_tokens.size() + i);
+        gen_batch.n_seq_id[0] = 1;
+        gen_batch.seq_id[0][0] = 0;
+        gen_batch.logits[0] = 1;
+        gen_batch.n_tokens = 1;
+
+        int decode_res = llama_decode(g_ctx, gen_batch);
+        llama_batch_free(gen_batch);
+        if (decode_res != 0) {
             break;
         }
     }
@@ -162,6 +210,10 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     llama_sampler_free(smpl);
     env->ReleaseStringUTFChars(prompt, prompt_str);
     if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
+
+    // Retain only prompt tokens in KV cache, discarding generated output tokens
+    llama_kv_cache_seq_rm(g_ctx, 0, static_cast<llama_pos>(prompt_tokens.size()), -1);
+    g_cached_tokens = prompt_tokens;
 
     return env->NewStringUTF(output_str.c_str());
 }

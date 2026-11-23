@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private val llamaEngine = OnDeviceLlamaEngine()
     private val releaseClient = GitHubReleaseClient()
     private lateinit var appUpdater: AppUpdater
+    private lateinit var overlayController: LiveOverlayController
 
     private var voiceInputHelper: VoiceInputHelper? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -141,6 +142,7 @@ class MainActivity : AppCompatActivity() {
         executor = AndroidActionExecutor(this)
         modelDownloader = ModelDownloader(this)
         appUpdater = AppUpdater(this, releaseClient)
+        overlayController = LiveOverlayController(this)
 
         bindViews()
         loadGrammarAsset()
@@ -151,6 +153,20 @@ class MainActivity : AppCompatActivity() {
 
         updateHeaderStatus()
         loadActiveModelIfAvailable()
+        handleIncomingIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(SilentExecTileService.EXTRA_TRIGGER_VOICE, false) == true) {
+            bottomNav.selectedItemId = R.id.nav_execute
+            startVoiceInput()
+        }
     }
 
     override fun onResume() {
@@ -344,6 +360,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleCommand(rawInput: String) {
         recordHistory(rawInput)
+        overlayController.show(
+            initialText = rawInput,
+            onCancel = { addFeedItem("⏹ Cancelled", R.color.warning_yellow) }
+        )
 
         // 1. Raw JSON directly?
         val jsonCmd = runCatching { ActionJson.fromJson(rawInput) }.getOrNull()
@@ -481,6 +501,8 @@ class MainActivity : AppCompatActivity() {
     private fun addFeedItem(message: String, colorRes: Int) {
         tvLiveFeedEmpty.visibility = View.GONE
         val timeStr = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+
+        overlayController.update(message)
 
         val tv = TextView(this).apply {
             text = "[$timeStr] $message"
@@ -802,6 +824,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        overlayController.hide()
         voiceInputHelper?.destroy()
         llamaEngine.unload()
     }

@@ -77,6 +77,31 @@ object SafetyGate {
         }
     }
 
+    fun evaluatePlan(plan: MultiStepPlan): SafetyDecision {
+        var requireConfirmReason: String? = null
+        for ((index, step) in plan.steps.withIndex()) {
+            when (val decision = evaluate(step)) {
+                is SafetyDecision.Block -> {
+                    return SafetyDecision.Block(
+                        "Step ${index + 1} (${step.action.wireName}) blocked: ${decision.reason}"
+                    )
+                }
+                is SafetyDecision.RequireConfirm -> {
+                    if (requireConfirmReason == null) {
+                        requireConfirmReason =
+                            "Step ${index + 1} (${step.action.wireName}) requires confirmation: ${decision.reason}"
+                    }
+                }
+                is SafetyDecision.AllowSilent -> {}
+            }
+        }
+        return if (requireConfirmReason != null) {
+            SafetyDecision.RequireConfirm(requireConfirmReason)
+        } else {
+            SafetyDecision.AllowSilent
+        }
+    }
+
     private fun detectBlockedPattern(value: String, fieldName: String): String? {
         // Path traversal check
         if (value.contains("..")) {
