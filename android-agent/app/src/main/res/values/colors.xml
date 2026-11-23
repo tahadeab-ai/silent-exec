@@ -2,8 +2,11 @@
 <resources>
     <color name="bg_dark">#121212</color>
     <color name="surface_dark">#1E1E1E</color>
+    <color name="surface_variant">#2A2A2A</color>
     <color name="accent_green">#00E676</color>
+    <color name="accent_blue">#00B0FF</color>
     <color name="danger_red">#FF5252</color>
+    <color name="warning_yellow">#FFD600</color>
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#AAAAAA</color>
 </resources>

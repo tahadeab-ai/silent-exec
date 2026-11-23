@@ -1,19 +1,82 @@
 <resources>
     <string name="app_name">SilentExec</string>
     <string name="accessibility_service_description">Zero-chatter automated action execution engine for SilentExec</string>
-    <string name="command_hint">اكتب الأمر هنا... / Enter command...</string>
-    <string name="execute_btn">تنفيذ</string>
-    <string name="bridge_settings">LAN Bridge</string>
-    <string name="confirm">تنفيذ</string>
-    <string name="cancel">إلغاء</string>
-    <string name="confirm_title">تأكيد الإجراء (Tier 2)</string>
+
+    <!-- Navigation -->
+    <string name="nav_execute">Execute</string>
+    <string name="nav_models">Models</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Tab 1: Execute -->
+    <string name="header_mode_label">Mode: %s</string>
+    <string name="header_model_label">Model: %s</string>
+    <string name="status_accessibility_on">Accessibility: Active</string>
+    <string name="status_accessibility_off">Accessibility: Inactive</string>
+    <string name="command_hint">Enter action or natural command...</string>
+    <string name="execute_btn">Execute</string>
+    <string name="mic_listening">Listening...</string>
+    <string name="mic_permission_denied">Microphone permission denied</string>
+    <string name="mic_error">Voice error: %s</string>
+    <string name="live_feed_title">Live Execution Feed</string>
+    <string name="live_feed_empty">No actions executed yet</string>
+    <string name="history_title">Recent Commands</string>
+    <string name="stage_understanding">Understanding command...</string>
+    <string name="stage_routing_fast">Fast rule matched: %s</string>
+    <string name="stage_sending_bridge">Dispatching to PC LAN bridge...</string>
+    <string name="stage_completed">Completed: %s</string>
+    <string name="stage_blocked">Blocked: %s</string>
+    <string name="stage_error">Error: %s</string>
+    <string name="stage_dry_run">[Dry Run] Validated: %s</string>
+    <string name="confirm_title">Confirm Action (Tier 2)</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Tab 2: Models -->
+    <string name="models_title">Model Hub</string>
+    <string name="models_refresh">Refresh</string>
+    <string name="models_loading">Fetching models from GitHub Releases...</string>
+    <string name="models_empty">No models found in releases</string>
+    <string name="model_download">Download</string>
+    <string name="model_activate">Activate</string>
+    <string name="model_active_badge">Active</string>
+    <string name="model_delete">Delete</string>
+    <string name="model_downloading">Downloading: %d%%</string>
+    <string name="model_download_success">Model downloaded and verified successfully</string>
+    <string name="model_download_failed">Download failed: %s</string>
+    <string name="model_activated">Model activated: %s</string>
+    <string name="model_deleted">Model deleted</string>
+
+    <!-- Tab 3: Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_language_title">Language</string>
+    <string name="lang_arabic">العربية (Arabic)</string>
+    <string name="lang_english">English</string>
+    <string name="settings_mode_title">Execution Mode</string>
+    <string name="mode_silent">Silent (Zero-chatter)</string>
+    <string name="mode_interactive">Interactive (Confirm Tier 2)</string>
+    <string name="mode_dry_run">Dry Run (Verify only)</string>
+    <string name="settings_engine_title">Inference Engine</string>
+    <string name="engine_offline">Offline (On-Device Llama)</string>
+    <string name="engine_bridge">LAN Bridge (Remote PC)</string>
+    <string name="settings_fast_router">Fast Rule Router (&lt;15ms)</string>
+    <string name="settings_bridge_config_title">LAN Bridge Configuration</string>
     <string name="host_hint">PC IP (e.g. 192.168.1.100)</string>
     <string name="port_hint">Port (e.g. 8765)</string>
-    <string name="token_hint">Bearer Secret Token</string>
-    <string name="save">حفظ</string>
-    <string name="mode_offline">Offline (On-Device)</string>
-    <string name="mode_bridge">LAN Bridge (PC)</string>
-    <string name="download_model_btn">تحميل النموذج (379 MB)</string>
-    <string name="model_ready">✓ النموذج جاهز للعمل بدون إنترنت</string>
-    <string name="mic_btn">🎤</string>
+    <string name="token_hint">Secret Token</string>
+    <string name="save_bridge">Save Bridge Config</string>
+    <string name="bridge_saved">LAN Bridge configuration saved</string>
+    <string name="settings_permissions_title">System Permissions</string>
+    <string name="perm_accessibility">Accessibility Service</string>
+    <string name="perm_granted">Granted</string>
+    <string name="perm_missing">Configure</string>
+    <string name="settings_update_title">App Update</string>
+    <string name="current_version_label">Current Version: v%s</string>
+    <string name="check_update_btn">Check for App Updates</string>
+    <string name="checking_update">Checking for updates...</string>
+    <string name="update_available">New version available: v%s</string>
+    <string name="update_now_btn">Update Now</string>
+    <string name="app_up_to_date">App is up to date (v%s)</string>
+    <string name="update_error">Update check failed: %s</string>
+    <string name="update_downloading">Downloading update: %d%%</string>
+    <string name="update_ready_to_install">Update downloaded, launching installer...</string>
 </resources>

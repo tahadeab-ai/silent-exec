@@ -47,6 +47,17 @@ class ModelDownloader(val modelsDir: File) {
         return file.exists() && file.length() > 0
     }
 
+    fun listDownloadedModels(): List<File> {
+        return modelsDir.listFiles { file ->
+            file.isFile && file.extension.equals("gguf", ignoreCase = true) && file.length() > 0
+        }?.toList() ?: emptyList()
+    }
+
+    fun deleteModel(filename: String): Boolean {
+        val file = getModelFile(filename)
+        return if (file.exists()) file.delete() else false
+    }
+
     /**
      * Computes the SHA-256 hex digest of a given file.
      */
@@ -161,6 +172,78 @@ class ModelDownloader(val modelsDir: File) {
             }
 
             // 5. Atomically rename .part to target filename
+            if (targetFile.exists()) {
+                targetFile.delete()
+            }
+            if (!partFile.renameTo(targetFile)) {
+                throw IllegalStateException("Failed to rename ${partFile.name} to ${targetFile.name}")
+            }
+
+            onProgress(100)
+            targetFile
+        }
+    }
+
+    fun downloadModelItem(
+        item: ModelReleaseItem,
+        onProgress: (Int) -> Unit = {}
+    ): Result<File> {
+        val targetFile = getModelFile(item.filename)
+        val partFile = File(modelsDir, "${item.filename}.part")
+
+        return runCatching {
+            val expectedHash: String? = item.checksumsUrl?.let { cUrl ->
+                runCatching {
+                    val content = fetchString(cUrl)
+                    parseExpectedSha256(content, item.filename)
+                }.getOrNull()
+            }
+
+            if (expectedHash != null && targetFile.exists() && verifySha256(targetFile, expectedHash)) {
+                onProgress(100)
+                return@runCatching targetFile
+            }
+
+            val conn = URL(item.downloadUrl).openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 15000
+            conn.readTimeout = 30000
+            conn.instanceFollowRedirects = true
+
+            if (conn.responseCode !in 200..299) {
+                throw IllegalStateException("Failed to download model: HTTP ${conn.responseCode} from ${item.downloadUrl}")
+            }
+
+            val totalBytes = conn.contentLengthLong.takeIf { it > 0 } ?: item.sizeBytes
+            var downloadedBytes = 0L
+
+            conn.inputStream.use { input ->
+                FileOutputStream(partFile).use { output ->
+                    val buffer = ByteArray(32768)
+                    var read: Int
+                    var lastReportedPercent = -1
+
+                    while (input.read(buffer).also { read = it } != -1) {
+                        output.write(buffer, 0, read)
+                        downloadedBytes += read
+
+                        if (totalBytes > 0) {
+                            val percent = ((downloadedBytes * 100) / totalBytes).toInt()
+                            if (percent != lastReportedPercent) {
+                                lastReportedPercent = percent
+                                onProgress(percent)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (expectedHash != null && !verifySha256(partFile, expectedHash)) {
+                val computed = computeSha256(partFile)
+                partFile.delete()
+                throw IllegalStateException("SHA256 mismatch for ${item.filename}: expected $expectedHash, got $computed")
+            }
+
             if (targetFile.exists()) {
                 targetFile.delete()
             }

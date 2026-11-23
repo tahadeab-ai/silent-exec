@@ -1,0 +1,82 @@
+<resources>
+    <string name="app_name">SilentExec</string>
+    <string name="accessibility_service_description">محرك تنفيذ الإجراءات التلقائية المباشرة لتطبيق SilentExec</string>
+
+    <!-- Navigation -->
+    <string name="nav_execute">التنفيذ</string>
+    <string name="nav_models">النماذج</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- Tab 1: Execute -->
+    <string name="header_mode_label">الوضع: %s</string>
+    <string name="header_model_label">النموذج: %s</string>
+    <string name="status_accessibility_on">إمكانية الوصول: مفعلة</string>
+    <string name="status_accessibility_off">إمكانية الوصول: معطلة</string>
+    <string name="command_hint">اكتب الأمر أو الإجراء هنا...</string>
+    <string name="execute_btn">تنفيذ</string>
+    <string name="mic_listening">جارٍ الاستماع...</string>
+    <string name="mic_permission_denied">تم رفض إذن الميكروفون</string>
+    <string name="mic_error">خطأ صوتي: %s</string>
+    <string name="live_feed_title">سجل التنفيذ المباشر</string>
+    <string name="live_feed_empty">لم يتم تنفيذ أي إجراءات بعد</string>
+    <string name="history_title">الأوامر السابقة</string>
+    <string name="stage_understanding">جارٍ فهم الأمر...</string>
+    <string name="stage_routing_fast">تم التوجيه السريع: %s</string>
+    <string name="stage_sending_bridge">جارٍ الإرسال إلى الكمبيوتر عبر الشبكة...</string>
+    <string name="stage_completed">تم التنفيذ: %s</string>
+    <string name="stage_blocked">محظور: %s</string>
+    <string name="stage_error">خطأ: %s</string>
+    <string name="stage_dry_run">[تجريبي] تم التحقق: %s</string>
+    <string name="confirm_title">تأكيد الإجراء (المستوى الثاني)</string>
+    <string name="confirm">تأكيد</string>
+    <string name="cancel">إلغاء</string>
+
+    <!-- Tab 2: Models -->
+    <string name="models_title">مستودع النماذج</string>
+    <string name="models_refresh">تحديث</string>
+    <string name="models_loading">جارٍ جلب النماذج من إصدارات جيت هاب...</string>
+    <string name="models_empty">لم يتم العثور على أي نماذج</string>
+    <string name="model_download">تحميل</string>
+    <string name="model_activate">تفعيل</string>
+    <string name="model_active_badge">مفعل</string>
+    <string name="model_delete">حذف</string>
+    <string name="model_downloading">جارٍ التحميل: %d%%</string>
+    <string name="model_download_success">تم تحميل النموذج والتحقق منه بنجاح</string>
+    <string name="model_download_failed">فشل التحميل: %s</string>
+    <string name="model_activated">تم تفعيل النموذج: %s</string>
+    <string name="model_deleted">تم حذف النموذج</string>
+
+    <!-- Tab 3: Settings -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_language_title">اللغة</string>
+    <string name="lang_arabic">العربية</string>
+    <string name="lang_english">الإنجليزية (English)</string>
+    <string name="settings_mode_title">وضع التنفيذ</string>
+    <string name="mode_silent">صامت (بدون مقاطعة)</string>
+    <string name="mode_interactive">تفاعلي (تأكيد المستوى الثاني)</string>
+    <string name="mode_dry_run">تجريبي (تحقق بدون تعديل)</string>
+    <string name="settings_engine_title">محرك الاستنتاج</string>
+    <string name="engine_offline">محلي (على الجهاز دون إنترنت)</string>
+    <string name="engine_bridge">جسر الشبكة المحلية (الكمبيوتر)</string>
+    <string name="settings_fast_router">الموجّه السريع (&lt;15 ملي ثانية)</string>
+    <string name="settings_bridge_config_title">إعدادات جسر الشبكة المحلية</string>
+    <string name="host_hint">عنوان IP للكمبيوتر (مثال: 192.168.1.100)</string>
+    <string name="port_hint">المنفذ (مثال: 8765)</string>
+    <string name="token_hint">الرمز السري</string>
+    <string name="save_bridge">حفظ إعدادات الجسر</string>
+    <string name="bridge_saved">تم حفظ إعدادات جسر الشبكة بنجاح</string>
+    <string name="settings_permissions_title">أذونات النظام</string>
+    <string name="perm_accessibility">خدمة إمكانية الوصول</string>
+    <string name="perm_granted">ممنوح</string>
+    <string name="perm_missing">تهيئة</string>
+    <string name="settings_update_title">تحديث التطبيق</string>
+    <string name="current_version_label">الإصدار الحالي: v%s</string>
+    <string name="check_update_btn">التحقق من تحديث التطبيق</string>
+    <string name="checking_update">جارٍ التحقق من التحديثات...</string>
+    <string name="update_available">يتوفر إصدار جديد: v%s</string>
+    <string name="update_now_btn">تحديث الآن</string>
+    <string name="app_up_to_date">التطبيق محدث إلى آخر إصدار (v%s)</string>
+    <string name="update_error">فشل التحقق من التحديث: %s</string>
+    <string name="update_downloading">جارٍ تحميل التحديث: %d%%</string>
+    <string name="update_ready_to_install">تم تحميل التحديث، جارٍ تشغيل المثبت...</string>
+</resources>

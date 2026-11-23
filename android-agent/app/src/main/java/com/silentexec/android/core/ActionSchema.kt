@@ -52,7 +52,22 @@ enum class ActionType {
     SEND_MESSAGE,
 
     @SerialName("open_url")
-    OPEN_URL;
+    OPEN_URL,
+
+    @SerialName("ui_click")
+    UI_CLICK,
+
+    @SerialName("ui_type")
+    UI_TYPE,
+
+    @SerialName("ui_scroll")
+    UI_SCROLL,
+
+    @SerialName("ui_back")
+    UI_BACK,
+
+    @SerialName("ui_home")
+    UI_HOME;
 
     val tier: SafetyTier
         get() = when (this) {
@@ -81,6 +96,11 @@ enum class ActionType {
             TOGGLE_SETTING -> "toggle_setting"
             SEND_MESSAGE -> "send_message"
             OPEN_URL -> "open_url"
+            UI_CLICK -> "ui_click"
+            UI_TYPE -> "ui_type"
+            UI_SCROLL -> "ui_scroll"
+            UI_BACK -> "ui_back"
+            UI_HOME -> "ui_home"
         }
 }
 

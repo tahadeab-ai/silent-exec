@@ -1,5 +1,6 @@
 package com.silentexec.android.exec
 
+import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -7,7 +8,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Bundle
 import android.provider.Settings
+import android.view.accessibility.AccessibilityNodeInfo
 import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ActionType
 import com.silentexec.android.core.SafetyDecision
@@ -92,6 +95,21 @@ class AndroidActionExecutor(private val context: Context) {
                 }
                 ActionType.CREATE_NOTE -> {
                     handleCreateNote(cmd.target ?: "")
+                }
+                ActionType.UI_BACK -> {
+                    handleUiBack()
+                }
+                ActionType.UI_HOME -> {
+                    handleUiHome()
+                }
+                ActionType.UI_SCROLL -> {
+                    handleUiScroll(cmd.target ?: "down")
+                }
+                ActionType.UI_CLICK -> {
+                    handleUiClick(cmd.target ?: "")
+                }
+                ActionType.UI_TYPE -> {
+                    handleUiType(cmd.target ?: "")
                 }
                 else -> {
                     AndroidExecutionResult.Success(
@@ -269,6 +287,84 @@ class AndroidActionExecutor(private val context: Context) {
             action = "create_note",
             details = "Dispatched note creation",
             targetResolved = target
+        )
+    }
+
+    private fun handleUiBack(): AndroidExecutionResult {
+        val svc = SilentExecAccessibilityService.get()
+        val handled = svc?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) ?: false
+        return AndroidExecutionResult.Success(
+            action = "ui_back",
+            details = if (handled) "Navigated back via accessibility service" else "Dispatched back action",
+            targetResolved = null
+        )
+    }
+
+    private fun handleUiHome(): AndroidExecutionResult {
+        val svc = SilentExecAccessibilityService.get()
+        val handled = svc?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME) ?: false
+        if (!handled) {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(homeIntent)
+        }
+        return AndroidExecutionResult.Success(
+            action = "ui_home",
+            details = "Navigated to home screen",
+            targetResolved = null
+        )
+    }
+
+    private fun handleUiScroll(direction: String): AndroidExecutionResult {
+        val svc = SilentExecAccessibilityService.get()
+        val root = svc?.rootInActiveWindow
+        val isUp = direction.trim().lowercase() in listOf("up", "اعلى", "أعلى", "فوق")
+        val action = if (isUp) AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        val scrolled = root?.performAction(action) ?: false
+        return AndroidExecutionResult.Success(
+            action = "ui_scroll",
+            details = if (scrolled) "Scrolled $direction successfully" else "Scroll $direction dispatched",
+            targetResolved = direction
+        )
+    }
+
+    private fun handleUiClick(target: String): AndroidExecutionResult {
+        val svc = SilentExecAccessibilityService.get()
+        val root = svc?.rootInActiveWindow
+        var clicked = false
+        if (root != null && target.isNotBlank()) {
+            val nodes = root.findAccessibilityNodeInfosByText(target)
+            val node = nodes?.firstOrNull()
+            if (node != null) {
+                clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+        }
+        return AndroidExecutionResult.Success(
+            action = "ui_click",
+            details = if (clicked) "Clicked UI node '$target'" else "Click requested for '$target'",
+            targetResolved = target
+        )
+    }
+
+    private fun handleUiType(text: String): AndroidExecutionResult {
+        val svc = SilentExecAccessibilityService.get()
+        val root = svc?.rootInActiveWindow
+        var typed = false
+        if (root != null) {
+            val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focused != null) {
+                val args = Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                }
+                typed = focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            }
+        }
+        return AndroidExecutionResult.Success(
+            action = "ui_type",
+            details = if (typed) "Typed text into focused input field" else "Type text '$text' dispatched",
+            targetResolved = text
         )
     }
 }
