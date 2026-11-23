@@ -485,7 +485,7 @@ class MainActivity : AppCompatActivity() {
         val tv = TextView(this).apply {
             text = "[$timeStr] $message"
             setTextColor(ContextCompat.getColor(context, colorRes))
-            textSize = 13sp
+            textSize = 13f
             setPadding(0, 4, 0, 4)
         }
         layoutExecutionFeed.addView(tv, 0)
@@ -514,7 +514,7 @@ class MainActivity : AppCompatActivity() {
         for (text in defaultChips) {
             val btn = Button(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
                 this.text = text
-                textSize = 11sp
+                textSize = 11f
                 isAllCaps = false
                 val params = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
