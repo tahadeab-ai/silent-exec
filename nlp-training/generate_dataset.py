@@ -36,6 +36,11 @@ ACTIONS = [
     "toggle_setting",
     "send_message",
     "open_url",
+    "ui_click",
+    "ui_type",
+    "ui_scroll",
+    "ui_back",
+    "ui_home",
 ]
 
 # Canonical entity and alias dictionaries for natural language extraction
@@ -271,6 +276,65 @@ SETTINGS_PAIRS: List[Tuple[str, str, str]] = [
     ("hotspot", "hotspot", "on"),
     ("location", "location", "off"),
     ("do not disturb", "dnd", "on"),
+]
+
+UI_CLICK_PAIRS: List[Tuple[str, str]] = [
+    ("زر ارسال", "زر ارسال"),
+    ("زر إرسال", "زر إرسال"),
+    ("زر الحفظ", "زر الحفظ"),
+    ("زر تسجيل الدخول", "زر تسجيل الدخول"),
+    ("زر الإلغاء", "زر الإلغاء"),
+    ("زر المتابعة", "زر المتابعة"),
+    ("أيقونة البحث", "أيقونة البحث"),
+    ("زر تأكيد الطلب", "زر تأكيد الطلب"),
+    ("زر التعديل", "زر التعديل"),
+    ("زر الإضافة", "زر الإضافة"),
+    ("زر المشاركة", "زر المشاركة"),
+    ("send button", "send button"),
+    ("submit button", "submit button"),
+    ("login button", "login button"),
+    ("cancel button", "cancel button"),
+    ("continue button", "continue button"),
+    ("search icon", "search icon"),
+    ("save button", "save button"),
+    ("confirm button", "confirm button"),
+    ("next button", "next button"),
+]
+
+UI_TYPE_PAIRS: List[Tuple[str, str, str]] = [
+    ("البحث", "البحث", "مرحبا"),
+    ("شريط البحث", "شريط البحث", "مرحبا"),
+    ("حقل البحث", "حقل البحث", "تقرير المبيعات"),
+    ("خانة اسم المستخدم", "اسم المستخدم", "admin"),
+    ("مربع البحث", "شريط البحث", "كتاب برمجة"),
+    ("خانة البريد الإلكتروني", "البريد الإلكتروني", "test@example.com"),
+    ("حقل الرسالة", "حقل الرسالة", "السلام عليكم ورحمة الله"),
+    ("search", "search", "hello"),
+    ("search bar", "search bar", "hello"),
+    ("search box", "search box", "machine learning"),
+    ("username field", "username", "admin_user"),
+    ("email input", "email", "user@company.com"),
+    ("comment field", "comment", "great job"),
+    ("notes input", "notes", "urgent tasks"),
+]
+
+SCROLL_DIRECTIONS: List[Tuple[str, str, str]] = [
+    ("لتحت", "down", "colloquial"),
+    ("تحت", "down", "colloquial"),
+    ("لفوق", "up", "colloquial"),
+    ("فوق", "up", "colloquial"),
+    ("لليمين", "right", "colloquial"),
+    ("لليسار", "left", "colloquial"),
+    ("للأسفل", "down", "msa"),
+    ("إلى أسفل الصفحة", "down", "msa"),
+    ("للأعلى", "up", "msa"),
+    ("إلى أعلى الصفحة", "up", "msa"),
+    ("إلى اليمين", "right", "msa"),
+    ("إلى اليسار", "left", "msa"),
+    ("down", "down", "english"),
+    ("up", "up", "english"),
+    ("left", "left", "english"),
+    ("right", "right", "english"),
 ]
 
 
@@ -667,7 +731,142 @@ TEMPLATES = {
             ("وريني المستودع حق الكود بالجيت هاب", {"action": "open_url", "target": "https://github.com", "platform": "pc"}),
             ("go to that tech news homepage", {"action": "open_url", "target": "https://news.ycombinator.com", "platform": "pc"}),
         ],
-    }
+    },
+    "ui_click": {
+        "colloquial": [
+            ("اضغط على {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("اضغط على زر {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("انقر على {mention} دحين", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("اضغط لي على {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("انقر فوق {mention} بالله", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("دوس على {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+        ],
+        "msa": [
+            ("اضغط على {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("اضغط على زر {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("انقر فوق {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("قم بالنقر على {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("اضغط زر {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+        ],
+        "english": [
+            ("click {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("click {mention} button", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("tap on {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("press {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+            ("click on the {mention}", {"action": "ui_click", "target": "{target}", "platform": "android"}),
+        ],
+        "adversarial": [
+            ("اضغط على الزر داك اللي قدامي", {"action": "ui_click", "target": "زر ارسال", "platform": "android"}),
+            ("انقر عليه بسرعة", {"action": "ui_click", "target": "تأكيد", "platform": "android"}),
+            ("click that green button right there", {"action": "ui_click", "target": "submit", "platform": "android"}),
+        ],
+    },
+    "ui_type": {
+        "colloquial": [
+            ("اكتب {text} في {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("اكتب لي {text} بخانة {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("حط {text} في {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("سجل {text} بالبحث", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+        ],
+        "msa": [
+            ("اكتب {text} في {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("قم بكتابة {text} في حقل {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("أدخل النص {text} في خانة {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("اكتب في {mention}: {text}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+        ],
+        "english": [
+            ("type {text} in {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("enter {text} in {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("input {text} into {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+            ("type text {text} in {mention}", {"action": "ui_type", "target": "{target}", "args": {"text": "{text}"}, "platform": "android"}),
+        ],
+        "adversarial": [
+            ("اكتب مرحبا في البحث دحين", {"action": "ui_type", "target": "البحث", "args": {"text": "مرحبا"}, "platform": "android"}),
+            ("حط الاسم هذا admin في الحقل", {"action": "ui_type", "target": "اسم المستخدم", "args": {"text": "admin"}, "platform": "android"}),
+            ("type hello in search right now", {"action": "ui_type", "target": "search", "args": {"text": "hello"}, "platform": "android"}),
+        ],
+    },
+    "ui_scroll": {
+        "colloquial": [
+            ("انزل {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("اطلع {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("مرر الشاشة {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("اسحب الشاشة {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("حرك لي الصفحة {mention} شوي", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+        ],
+        "msa": [
+            ("قم بالتمرير {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("مرر الصفحة {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("انتقل بالتمرير {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("قم بالنزول {mention}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+        ],
+        "english": [
+            ("scroll {direction}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("swipe {direction}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("scroll page {direction}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+            ("move screen {direction}", {"action": "ui_scroll", "args": {"direction": "{direction}"}, "platform": "android"}),
+        ],
+        "adversarial": [
+            ("انزل لتحت وريني الباقي", {"action": "ui_scroll", "args": {"direction": "down"}, "platform": "android"}),
+            ("شوف ايش في تحت بالقائمة", {"action": "ui_scroll", "args": {"direction": "down"}, "platform": "android"}),
+            ("scroll down to check the rest", {"action": "ui_scroll", "args": {"direction": "down"}, "platform": "android"}),
+        ],
+    },
+    "ui_back": {
+        "colloquial": [
+            ("ارجع للخلف", {"action": "ui_back", "platform": "android"}),
+            ("ارجع ورا دحين", {"action": "ui_back", "platform": "android"}),
+            ("سوي باك بالله", {"action": "ui_back", "platform": "android"}),
+            ("ارجع خطوة لورا", {"action": "ui_back", "platform": "android"}),
+            ("ارجع للشاشة اللي قبل", {"action": "ui_back", "platform": "android"}),
+        ],
+        "msa": [
+            ("ارجع للخلف", {"action": "ui_back", "platform": "android"}),
+            ("الرجوع إلى الخلف", {"action": "ui_back", "platform": "android"}),
+            ("انتقل إلى الصفحة السابقة", {"action": "ui_back", "platform": "android"}),
+            ("قم بالرجوع للخلف", {"action": "ui_back", "platform": "android"}),
+            ("العودة إلى الوراء", {"action": "ui_back", "platform": "android"}),
+        ],
+        "english": [
+            ("go back", {"action": "ui_back", "platform": "android"}),
+            ("navigate back", {"action": "ui_back", "platform": "android"}),
+            ("back", {"action": "ui_back", "platform": "android"}),
+            ("return to previous screen", {"action": "ui_back", "platform": "android"}),
+            ("press back button", {"action": "ui_back", "platform": "android"}),
+        ],
+        "adversarial": [
+            ("طلعني من هنا وارجع", {"action": "ui_back", "platform": "android"}),
+            ("ارجع للصفحة اللي كنا فيها", {"action": "ui_back", "platform": "android"}),
+            ("take me back to previous page", {"action": "ui_back", "platform": "android"}),
+        ],
+    },
+    "ui_home": {
+        "colloquial": [
+            ("روح للشاشة الرئيسية", {"action": "ui_home", "platform": "android"}),
+            ("ارجع للهوم دحين", {"action": "ui_home", "platform": "android"}),
+            ("افتح الشاشة الرئيسية", {"action": "ui_home", "platform": "android"}),
+            ("طلعني على الشاشة الرئيسية", {"action": "ui_home", "platform": "android"}),
+            ("وديني على الهوم سكرين", {"action": "ui_home", "platform": "android"}),
+        ],
+        "msa": [
+            ("انتقل إلى الشاشة الرئيسية", {"action": "ui_home", "platform": "android"}),
+            ("العودة إلى الصفحة الرئيسية", {"action": "ui_home", "platform": "android"}),
+            ("اذهب إلى الشاشة الرئيسية", {"action": "ui_home", "platform": "android"}),
+            ("الرجوع إلى سطح المكتب", {"action": "ui_home", "platform": "pc"}),
+        ],
+        "english": [
+            ("go to home screen", {"action": "ui_home", "platform": "android"}),
+            ("return to home screen", {"action": "ui_home", "platform": "android"}),
+            ("go home", {"action": "ui_home", "platform": "android"}),
+            ("navigate to home", {"action": "ui_home", "platform": "android"}),
+            ("show desktop", {"action": "ui_home", "platform": "pc"}),
+        ],
+        "adversarial": [
+            ("سكر كل شي وطلعني برة", {"action": "ui_home", "platform": "android"}),
+            ("وديني على سطح المكتب الحين", {"action": "ui_home", "platform": "pc"}),
+            ("take me to home screen right now", {"action": "ui_home", "platform": "android"}),
+        ],
+    },
 }
 
 
@@ -691,6 +890,7 @@ def build_example(action: str, category: str, rng: random.Random) -> Tuple[str, 
     target_str = ""
     folder_str = ""
     text_str = ""
+    direction_str = ""
     level_int = 50
 
     if action == "open_folder":
@@ -739,6 +939,24 @@ def build_example(action: str, category: str, rng: random.Random) -> Tuple[str, 
     elif action in ("delete_file", "move_file", "create_note", "copy_to_clipboard"):
         target_str = rng.choice(config.get("targets", ["document.pdf"]))
         folder_str = rng.choice(config.get("folders", ["Archive"])) if "folders" in config else ""
+    elif action == "ui_click":
+        candidates = filter_pairs_by_lang(UI_CLICK_PAIRS, is_english)
+        mention, target_str = rng.choice(candidates)
+    elif action == "ui_type":
+        candidates = [p for p in UI_TYPE_PAIRS if (p[0].isascii() if is_english else not p[0].isascii())]
+        if not candidates:
+            candidates = UI_TYPE_PAIRS
+        mention, target_str, text_str = rng.choice(candidates)
+    elif action == "ui_scroll":
+        if is_english:
+            candidates = [p for p in SCROLL_DIRECTIONS if p[2] == "english"]
+        elif category == "msa":
+            candidates = [p for p in SCROLL_DIRECTIONS if p[2] == "msa"]
+        else:
+            candidates = [p for p in SCROLL_DIRECTIONS if p[2] == "colloquial"]
+        mention, direction_str, _ = rng.choice(candidates)
+    elif action in ("ui_back", "ui_home"):
+        pass
 
     # Format user prompt
     format_kwargs = {
@@ -747,6 +965,7 @@ def build_example(action: str, category: str, rng: random.Random) -> Tuple[str, 
         "target_str": target_str,
         "folder": folder_str,
         "text": text_str,
+        "direction": direction_str,
         "level_int": level_int
     }
     user_prompt = template_str.format(**format_kwargs)
@@ -781,7 +1000,7 @@ def build_example(action: str, category: str, rng: random.Random) -> Tuple[str, 
 def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
     rng = random.Random(seed)
 
-    # Realistic linguistic distribution across 15 actions:
+    # Realistic linguistic distribution across 20 actions:
     # 38% Colloquial Yemeni/Gulf
     # 32% Modern Standard Arabic (MSA)
     # 20% English & Code-switching
@@ -790,7 +1009,7 @@ def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
 
     examples: List[Dict[str, Any]] = []
 
-    # Ensure balanced representation across all 15 actions
+    # Ensure balanced representation across all 20 actions
     base_per_action = total_count // len(ACTIONS)
     remainder = total_count % len(ACTIONS)
 

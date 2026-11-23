@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// The 15 cross-platform tool actions supported by SilentExec.
+/// The 20 cross-platform tool actions supported by SilentExec.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActionType {
@@ -21,6 +21,12 @@ pub enum ActionType {
     ToggleSetting,
     SendMessage,
     OpenUrl,
+    // GUI Agent Actions
+    UiClick,
+    UiType,
+    UiScroll,
+    UiBack,
+    UiHome,
 }
 
 impl ActionType {
@@ -37,7 +43,12 @@ impl ActionType {
             | Self::CreateNote
             | Self::CopyToClipboard
             | Self::OpenAndroidApp
-            | Self::OpenUrl => SafetyTier::Tier1Silent,
+            | Self::OpenUrl
+            | Self::UiClick
+            | Self::UiType
+            | Self::UiScroll
+            | Self::UiBack
+            | Self::UiHome => SafetyTier::Tier1Silent,
 
             Self::DeleteFile
             | Self::MoveFile
@@ -86,6 +97,41 @@ impl ActionCommand {
     }
 
     /// Serializes the `ActionCommand` to a canonical JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+}
+
+/// Multi-step execution plan containing ordered `ActionCommand` steps.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MultiStepPlan {
+    pub steps: Vec<ActionCommand>,
+}
+
+impl MultiStepPlan {
+    /// Creates a new `MultiStepPlan`.
+    #[must_use]
+    pub fn new(steps: Vec<ActionCommand>) -> Self {
+        Self { steps }
+    }
+
+    /// Parses and strictly validates a `MultiStepPlan` from a JSON string.
+    pub fn from_json(json_str: &str) -> Result<Self, String> {
+        let plan: Self = serde_json::from_str(json_str).map_err(|e| e.to_string())?;
+        for (i, step) in plan.steps.iter().enumerate() {
+            if !(0.0..=1.0).contains(&step.confidence) {
+                return Err(format!(
+                    "Step {} confidence score {} is out of valid range [0.0, 1.0]",
+                    i + 1,
+                    step.confidence
+                ));
+            }
+        }
+        Ok(plan)
+    }
+
+    /// Serializes the `MultiStepPlan` to a canonical JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
@@ -184,6 +230,43 @@ impl SafetyGate {
                     SafetyDecision::AllowSilent
                 }
             }
+        }
+    }
+
+    /// Evaluates a `MultiStepPlan` sequentially.
+    ///
+    /// Validates every step in order:
+    /// - If any step evaluates to `Block`, the entire plan is blocked.
+    /// - If any step evaluates to `RequireConfirm` (and none are `Block`), the plan requires confirmation.
+    /// - Otherwise, returns `AllowSilent`.
+    #[must_use]
+    pub fn evaluate_plan(plan: &MultiStepPlan) -> SafetyDecision {
+        let mut first_confirm: Option<String> = None;
+
+        for (idx, step) in plan.steps.iter().enumerate() {
+            match Self::evaluate(step) {
+                SafetyDecision::Block { reason } => {
+                    return SafetyDecision::Block {
+                        reason: format!("Plan step {} blocked: {}", idx + 1, reason),
+                    };
+                }
+                SafetyDecision::RequireConfirm { reason } => {
+                    if first_confirm.is_none() {
+                        first_confirm = Some(format!(
+                            "Plan step {} requires confirmation: {}",
+                            idx + 1,
+                            reason
+                        ));
+                    }
+                }
+                SafetyDecision::AllowSilent => {}
+            }
+        }
+
+        if let Some(reason) = first_confirm {
+            SafetyDecision::RequireConfirm { reason }
+        } else {
+            SafetyDecision::AllowSilent
         }
     }
 
@@ -615,6 +698,294 @@ mod tests {
             }
             other => panic!(
                 "Expected Block for out-of-bounds confidence, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn test_19_gui_actions_wire_format_and_tier1_silent() {
+        let test_cases = [
+            (
+                r#"{"action":"ui_click","target":"Submit","platform":"pc","confidence":0.95}"#,
+                ActionType::UiClick,
+            ),
+            (
+                r#"{"action":"ui_type","target":"username","args":{"text":"admin"},"platform":"pc","confidence":0.90}"#,
+                ActionType::UiType,
+            ),
+            (
+                r#"{"action":"ui_scroll","args":{"direction":"down"},"platform":"android","confidence":0.85}"#,
+                ActionType::UiScroll,
+            ),
+            (
+                r#"{"action":"ui_back","platform":"android","confidence":0.99}"#,
+                ActionType::UiBack,
+            ),
+            (
+                r#"{"action":"ui_home","platform":"pc","confidence":0.92}"#,
+                ActionType::UiHome,
+            ),
+        ];
+
+        for (json_str, expected_type) in test_cases {
+            let cmd = ActionCommand::from_json(json_str)
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {}", json_str, e));
+            assert_eq!(cmd.action, expected_type);
+            assert_eq!(cmd.action.tier(), SafetyTier::Tier1Silent);
+            assert_eq!(
+                SafetyGate::evaluate(&cmd),
+                SafetyDecision::AllowSilent,
+                "Action {:?} should evaluate to AllowSilent",
+                expected_type
+            );
+        }
+    }
+
+    #[test]
+    fn test_20_gui_actions_arabic_ui_click_and_ui_type() {
+        // ui_click with Arabic target
+        let click_json = r#"{
+            "action": "ui_click",
+            "target": "زر ارسال",
+            "platform": "android",
+            "confidence": 0.95
+        }"#;
+        let click_cmd =
+            ActionCommand::from_json(click_json).expect("Failed to parse Arabic ui_click");
+        assert_eq!(click_cmd.action, ActionType::UiClick);
+        assert_eq!(click_cmd.target.as_deref(), Some("زر ارسال"));
+        assert_eq!(
+            SafetyGate::evaluate(&click_cmd),
+            SafetyDecision::AllowSilent
+        );
+
+        // ui_type with Arabic target and Arabic text argument
+        let type_json = r#"{
+            "action": "ui_type",
+            "target": "شريط البحث",
+            "args": {"text": "مرحبا بكم في التطبيق"},
+            "platform": "pc",
+            "confidence": 0.92
+        }"#;
+        let type_cmd = ActionCommand::from_json(type_json).expect("Failed to parse Arabic ui_type");
+        assert_eq!(type_cmd.action, ActionType::UiType);
+        assert_eq!(type_cmd.target.as_deref(), Some("شريط البحث"));
+        assert_eq!(
+            type_cmd
+                .args
+                .as_ref()
+                .and_then(|a| a.get("text"))
+                .and_then(|t| t.as_str()),
+            Some("مرحبا بكم في التطبيق")
+        );
+        assert_eq!(SafetyGate::evaluate(&type_cmd), SafetyDecision::AllowSilent);
+    }
+
+    #[test]
+    fn test_21_injection_blocking_inside_ui_type_target() {
+        let dangerous_targets = [
+            "search_box; rm -rf /",
+            "input && whoami",
+            "field | cat /etc/passwd",
+            "$(reboot)",
+            "`id`",
+            "../../secret_input",
+            "C:\\Windows\\System32\\calc.exe",
+        ];
+
+        for target in dangerous_targets {
+            let cmd = ActionCommand {
+                action: ActionType::UiType,
+                target: Some(target.to_string()),
+                folder: None,
+                args: Some(serde_json::json!({"text": "sample"})),
+                platform: Platform::Pc,
+                confidence: 0.95,
+            };
+            match SafetyGate::evaluate(&cmd) {
+                SafetyDecision::Block { reason } => {
+                    assert!(
+                        reason.contains("injection")
+                            || reason.contains("traversal")
+                            || reason.contains("protected"),
+                        "Expected security block reason for target '{}', got '{}'",
+                        target,
+                        reason
+                    );
+                }
+                other => panic!(
+                    "Expected Block for dangerous target '{}', got {:?}",
+                    target, other
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn test_22_injection_blocking_inside_ui_type_args() {
+        let dangerous_args = [
+            serde_json::json!({"text": "echo hello; rm -rf /"}),
+            serde_json::json!({"text": "cmd | evil"}),
+            serde_json::json!({"text": "$(cat /etc/shadow)"}),
+            serde_json::json!({"text": "`whoami`"}),
+            serde_json::json!({"text": "../../traversal"}),
+            serde_json::json!({"nested": {"field": "test && reboot"}}),
+            serde_json::json!({"dir; ls": "value"}),
+        ];
+
+        for args in dangerous_args {
+            let cmd = ActionCommand {
+                action: ActionType::UiType,
+                target: Some("search_input".to_string()),
+                folder: None,
+                args: Some(args.clone()),
+                platform: Platform::Android,
+                confidence: 0.95,
+            };
+            match SafetyGate::evaluate(&cmd) {
+                SafetyDecision::Block { reason } => {
+                    assert!(
+                        reason.contains("injection")
+                            || reason.contains("traversal")
+                            || reason.contains("metacharacter"),
+                        "Expected injection block reason for args '{:?}', got '{}'",
+                        args,
+                        reason
+                    );
+                }
+                other => panic!(
+                    "Expected Block for dangerous args '{:?}', got {:?}",
+                    args, other
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn test_23_multi_step_plan_all_silent() {
+        let plan = MultiStepPlan::new(vec![
+            ActionCommand {
+                action: ActionType::UiClick,
+                target: Some("search_bar".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiType,
+                target: Some("search_bar".to_string()),
+                folder: None,
+                args: Some(serde_json::json!({"text": "hello world"})),
+                platform: Platform::Pc,
+                confidence: 0.92,
+            },
+            ActionCommand {
+                action: ActionType::UiScroll,
+                target: None,
+                folder: None,
+                args: Some(serde_json::json!({"direction": "down"})),
+                platform: Platform::Pc,
+                confidence: 0.88,
+            },
+        ]);
+
+        let decision = SafetyGate::evaluate_plan(&plan);
+        assert_eq!(decision, SafetyDecision::AllowSilent);
+
+        // Test serialization and deserialization
+        let plan_json = plan.to_json().expect("Failed to serialize MultiStepPlan");
+        let parsed_plan =
+            MultiStepPlan::from_json(&plan_json).expect("Failed to deserialize MultiStepPlan");
+        assert_eq!(plan, parsed_plan);
+    }
+
+    #[test]
+    fn test_24_multi_step_plan_blocked_step() {
+        let plan = MultiStepPlan::new(vec![
+            ActionCommand {
+                action: ActionType::UiClick,
+                target: Some("button_login".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiType,
+                target: Some("password_field".to_string()),
+                folder: None,
+                args: Some(serde_json::json!({"text": "pass && rm -rf /"})),
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiClick,
+                target: Some("button_submit".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+        ]);
+
+        match SafetyGate::evaluate_plan(&plan) {
+            SafetyDecision::Block { reason } => {
+                assert!(
+                    reason.contains("step 2 blocked"),
+                    "Expected step 2 block notice, got '{}'",
+                    reason
+                );
+                assert!(reason.contains("Shell injection"));
+            }
+            other => panic!(
+                "Expected Block for plan with dangerous step, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn test_25_multi_step_plan_require_confirm() {
+        let plan = MultiStepPlan::new(vec![
+            ActionCommand {
+                action: ActionType::UiClick,
+                target: Some("open_dialog".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::DeleteFile,
+                target: Some("obsolete_cache.tmp".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.99,
+            },
+            ActionCommand {
+                action: ActionType::UiBack,
+                target: None,
+                folder: None,
+                args: None,
+                platform: Platform::Android,
+                confidence: 0.90,
+            },
+        ]);
+
+        match SafetyGate::evaluate_plan(&plan) {
+            SafetyDecision::RequireConfirm { reason } => {
+                assert!(
+                    reason.contains("step 2 requires confirmation"),
+                    "Expected step 2 require confirm notice, got '{}'",
+                    reason
+                );
+                assert!(reason.contains("Tier 2"));
+            }
+            other => panic!(
+                "Expected RequireConfirm for plan with Tier-2 step, got {:?}",
                 other
             ),
         }

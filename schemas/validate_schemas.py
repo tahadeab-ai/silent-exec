@@ -32,7 +32,7 @@ def main() -> int:
 
     schema_validator = jsonschema.Draft202012Validator(action_schema)
 
-    # 2. Check 15 actions alignment
+    # 2. Check 20 actions alignment
     schema_actions = set(action_schema["properties"]["action"]["enum"])
     tier1_actions = set(safety_policy["tier_1_silent"])
     tier2_actions = set(safety_policy["tier_2_confirm"])
@@ -42,9 +42,9 @@ def main() -> int:
         f"Mismatch between schema actions ({schema_actions}) "
         f"and safety policy actions ({policy_actions})"
     )
-    assert len(schema_actions) == 15, f"Expected 15 actions, found {len(schema_actions)}"
+    assert len(schema_actions) == 20, f"Expected 20 actions, found {len(schema_actions)}"
     assert tier1_actions.isdisjoint(tier2_actions), "Overlap found between Tier 1 and Tier 2"
-    print("✓ All 15 actions verified and aligned across schema and policy.")
+    print("✓ All 20 actions verified and aligned across schema and policy.")
 
     # 3. Verify action.gbnf existence, completeness, and UTF-8 Arabic compatibility
     print(f"Verifying {action_gbnf_path}...")
@@ -63,7 +63,7 @@ def main() -> int:
     assert "[a-zA-Z0-9]" not in gbnf_content.split("json-string")[1].split("\n")[0], (
         "GBNF json-string should not be restricted to ASCII alphanumerics"
     )
-    print("✓ action.gbnf verified: defines all 15 actions and permits full UTF-8 Arabic generation.")
+    print("✓ action.gbnf verified: defines all 20 actions and permits full UTF-8 Arabic generation.")
 
     # 4. Test valid payloads
     valid_payloads = [
@@ -91,6 +91,35 @@ def main() -> int:
             "target": "temp.txt",
             "platform": "pc",
             "confidence": 0.75
+        },
+        {
+            "action": "ui_click",
+            "target": "زر ارسال",
+            "platform": "android",
+            "confidence": 0.92
+        },
+        {
+            "action": "ui_type",
+            "target": "شريط البحث",
+            "args": {"text": "مرحبا بك"},
+            "platform": "android",
+            "confidence": 0.95
+        },
+        {
+            "action": "ui_scroll",
+            "args": {"direction": "down"},
+            "platform": "android",
+            "confidence": 0.90
+        },
+        {
+            "action": "ui_back",
+            "platform": "android",
+            "confidence": 0.98
+        },
+        {
+            "action": "ui_home",
+            "platform": "pc",
+            "confidence": 0.97
         }
     ]
 

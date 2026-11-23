@@ -54,6 +54,11 @@ pub fn action_type_to_str(action: ActionType) -> &'static str {
         ActionType::ToggleSetting => "toggle_setting",
         ActionType::SendMessage => "send_message",
         ActionType::OpenUrl => "open_url",
+        ActionType::UiClick => "ui_click",
+        ActionType::UiType => "ui_type",
+        ActionType::UiScroll => "ui_scroll",
+        ActionType::UiBack => "ui_back",
+        ActionType::UiHome => "ui_home",
     }
 }
 
