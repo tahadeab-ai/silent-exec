@@ -1,7 +1,11 @@
-# SilentExec ActionCommand GBNF Grammar for llama.cpp
-# Constrains LLM token generation strictly to valid ActionCommand JSON
+# SilentExec ActionCommand & MultiStepPlan GBNF Grammar for llama.cpp
+# Constrains LLM token generation strictly to valid ActionCommand or MultiStepPlan JSON
 
-root ::= "{" ws "\"action\"" ws ":" ws action-val ws "," ws (target-field ws ",")? (folder-field ws ",")? (args-field ws ",")? "\"platform\"" ws ":" ws platform-val ws "," ws "\"confidence\"" ws ":" ws confidence-val ws "}"
+root ::= action-command | multi-step-plan
+
+action-command ::= "{" ws "\"action\"" ws ":" ws action-val ws "," ws (target-field ws ",")? (folder-field ws ",")? (args-field ws ",")? "\"platform\"" ws ":" ws platform-val ws "," ws "\"confidence\"" ws ":" ws confidence-val ws "}"
+
+multi-step-plan ::= "{" ws "\"steps\"" ws ":" ws "[" ws action-command (ws "," ws action-command)* ws "]" ws "}"
 
 action-val ::= "\"open_folder\""
              | "\"open_file\""
@@ -23,6 +27,7 @@ action-val ::= "\"open_folder\""
              | "\"ui_scroll\""
              | "\"ui_back\""
              | "\"ui_home\""
+             | "\"done\""
 
 platform-val ::= "\"pc\"" | "\"android\"" | "\"any\""
 

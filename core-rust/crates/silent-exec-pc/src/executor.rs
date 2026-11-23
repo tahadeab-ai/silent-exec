@@ -59,6 +59,7 @@ pub fn action_type_to_str(action: ActionType) -> &'static str {
         ActionType::UiScroll => "ui_scroll",
         ActionType::UiBack => "ui_back",
         ActionType::UiHome => "ui_home",
+        ActionType::Done => "done",
     }
 }
 
@@ -327,6 +328,12 @@ impl PcExecutor {
                 target_resolved: None,
                 command_line: "send_key: Win+D".to_string(),
                 message: "Would navigate to desktop/home".to_string(),
+            },
+            ActionType::Done => ExecutionResult::DryRun {
+                action: action_name,
+                target_resolved: None,
+                command_line: "noop".to_string(),
+                message: "ReAct loop complete; task done".to_string(),
             },
             _ => ExecutionResult::DryRun {
                 action: action_name,
@@ -627,6 +634,11 @@ impl PcExecutor {
                     }
                 }
             }
+            ActionType::Done => ExecutionResult::Success {
+                action: action_name,
+                details: "ReAct loop terminated successfully; task complete".to_string(),
+                target_resolved: None,
+            },
             other => ExecutionResult::Error {
                 message: format!("Live execution for action '{:?}' not implemented", other),
                 action: action_name,

@@ -9,12 +9,103 @@ use silent_exec_core::{ActionCommand, ActionType, Platform};
 pub struct FastRuleRouter;
 
 impl FastRuleRouter {
+    /// Detects compound, multi-step queries that must bypass deterministic fast routing
+    /// and instead be processed by the Multi-Step Planner / LLM.
+    #[must_use]
+    pub fn is_compound_command(query: &str) -> bool {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return false;
+        }
+
+        // Exceeds 6 words
+        let word_count = trimmed.split_whitespace().count();
+        if word_count > 6 {
+            return true;
+        }
+
+        // Punctuation / clause separators
+        if trimmed.contains(',') || trimmed.contains('،') {
+            return true;
+        }
+
+        // English multi-step connectors
+        let lower = trimmed.to_lowercase();
+        let en_connectors = [" and ", " then ", " after "];
+        for conn in &en_connectors {
+            if lower.contains(conn) {
+                return true;
+            }
+        }
+
+        // Arabic multi-step connectors (phrases)
+        let ar_phrases = [" و ", " ثم ", " بعدين ", " بعدها "];
+        for phrase in &ar_phrases {
+            if trimmed.contains(phrase) {
+                return true;
+            }
+        }
+
+        // Arabic connector tokens
+        let ar_connector_tokens = ["ثم", "بعدين", "بعدها", "و"];
+        for tok in trimmed.split_whitespace() {
+            if ar_connector_tokens.contains(&tok) {
+                return true;
+            }
+            let norm_tok = normalize_arabic_english(tok);
+            if ar_connector_tokens.contains(&norm_tok.as_str()) {
+                return true;
+            }
+        }
+
+        // Arabic multi-step verb clauses / prefixes (و + verb)
+        let ar_verb_clauses = [
+            "وافتح",
+            "وابحث",
+            "واكتب",
+            "وارسل",
+            "وأرسل",
+            "واحذف",
+            "وأحذف",
+            "وانسخ",
+            "واضغط",
+            "وشغل",
+            "ونزل",
+        ];
+        for tok in trimmed.split_whitespace() {
+            let norm_tok = normalize_arabic_english(tok);
+            for &verb in &ar_verb_clauses {
+                let norm_verb = normalize_arabic_english(verb);
+                if tok == verb
+                    || norm_tok == norm_verb
+                    || tok.starts_with(verb)
+                    || norm_tok.starts_with(&norm_verb)
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// CamelCase alias for Kotlin/cross-language API parity.
+    #[must_use]
+    #[allow(non_snake_case)]
+    pub fn isCompoundCommand(query: &str) -> bool {
+        Self::is_compound_command(query)
+    }
+
     /// Attempts to route the user query deterministically.
     /// Returns `Some(ActionCommand)` if matched, or `None` to fall back to LLM inference.
     #[must_use]
     pub fn route(query: &str) -> Option<ActionCommand> {
         let trimmed = query.trim();
         if trimmed.is_empty() {
+            return None;
+        }
+
+        if Self::is_compound_command(trimmed) {
             return None;
         }
 

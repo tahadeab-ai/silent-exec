@@ -67,7 +67,10 @@ enum class ActionType {
     UI_BACK,
 
     @SerialName("ui_home")
-    UI_HOME;
+    UI_HOME,
+
+    @SerialName("done")
+    DONE;
 
     val tier: SafetyTier
         get() = when (this) {
@@ -101,6 +104,7 @@ enum class ActionType {
             UI_SCROLL -> "ui_scroll"
             UI_BACK -> "ui_back"
             UI_HOME -> "ui_home"
+            DONE -> "done"
         }
 }
 
@@ -140,7 +144,12 @@ data class ActionCommand(
 @Serializable
 data class MultiStepPlan(
     val steps: List<ActionCommand>
-)
+) {
+    init {
+        require(steps.isNotEmpty()) { "Steps cannot be empty" }
+        require(steps.size <= 6) { "MultiStepPlan exceeds maximum step limit of 6 (found ${steps.size})" }
+    }
+}
 
 object ActionJson {
     val strict = Json {
@@ -151,6 +160,10 @@ object ActionJson {
 
     fun fromJson(jsonStr: String): ActionCommand {
         return strict.decodeFromString<ActionCommand>(jsonStr)
+    }
+
+    fun planFromJson(jsonStr: String): MultiStepPlan {
+        return strict.decodeFromString<MultiStepPlan>(jsonStr)
     }
 
     fun toJson(cmd: ActionCommand): String {

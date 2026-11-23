@@ -38,11 +38,64 @@ object FastRuleRouter {
     }
 
     /**
+     * Detects compound, multi-step queries that must bypass deterministic fast routing
+     * and instead be processed by the Multi-Step Planner / LLM.
+     */
+    fun isCompoundCommand(input: String): Boolean {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return false
+
+        // Check word count (> 6 words)
+        val tokens = trimmed.split("\\s+".toRegex()).filter { it.isNotBlank() }
+        if (tokens.size > 6) return true
+
+        // Commas / clause separators
+        if (trimmed.contains(',') || trimmed.contains('،')) return true
+
+        // English multi-step connectors
+        val lower = trimmed.lowercase()
+        val enConnectors = listOf(" and ", " then ", " after ")
+        if (enConnectors.any { lower.contains(it) }) return true
+
+        // Arabic connectors and verb clauses
+        val arConnectorTokens = setOf("ثم", "بعدين", "بعدها", "و")
+        val arVerbClauses = listOf(
+            "وافتح", "وابحث", "واكتب", "وارسل", "وأرسل", "واحذف", "وأحذف", "وانسخ", "واضغط", "وشغل", "ونزل"
+        )
+
+        val norm = normalize(trimmed)
+        val normTokens = norm.split("\\s+".toRegex()).filter { it.isNotBlank() }
+
+        // Token matches
+        if (tokens.any { it in arConnectorTokens } || normTokens.any { it in arConnectorTokens }) {
+            return true
+        }
+
+        for (token in tokens) {
+            val normTok = normalize(token)
+            for (verb in arVerbClauses) {
+                val normVerb = normalize(verb)
+                if (token == verb || normTok == normVerb || token.startsWith(verb) || normTok.startsWith(normVerb)) {
+                    return true
+                }
+            }
+        }
+
+        val arPhrases = listOf(" و ", " ثم ", " بعدين ", " بعدها ")
+        if (arPhrases.any { trimmed.contains(it) || norm.contains(normalize(it)) }) return true
+
+        return false
+    }
+
+    /**
      * Deterministic, sub-15ms fast rule router.
      * Returns an ActionCommand if a known direct pattern is matched, or null to fall back to LLM inference.
      */
     fun route(input: String): ActionCommand? {
         val trimmed = input.trim()
+        if (trimmed.isEmpty() || isCompoundCommand(trimmed)) {
+            return null
+        }
         val norm = normalize(trimmed)
 
         // 1. ui_back

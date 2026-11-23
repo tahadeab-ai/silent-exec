@@ -20,14 +20,14 @@ class GuiAgentAndRouterTest {
 
     @Test
     fun test01_allTwentyActionsExactDeserialization() {
-        assertEquals(20, ActionType.values().size)
+        assertEquals(21, ActionType.values().size)
 
         val wireNames = listOf(
             "open_folder", "open_file", "launch_app", "search_files",
             "set_volume", "set_brightness", "create_note", "copy_to_clipboard",
             "delete_file", "move_file", "system_power", "open_android_app",
             "toggle_setting", "send_message", "open_url",
-            "ui_click", "ui_type", "ui_scroll", "ui_back", "ui_home"
+            "ui_click", "ui_type", "ui_scroll", "ui_back", "ui_home", "done"
         )
 
         for (wire in wireNames) {
@@ -264,5 +264,33 @@ class GuiAgentAndRouterTest {
         // Complex natural input must yield null
         val complex = FastRuleRouter.route("قم بتحليل المستندات وارسال تقرير الى احمد")
         assertNull(complex)
+    }
+
+    @Test
+    fun test12_compoundCommandInterceptionAndFastRuleTiming() {
+        // Compound commands must be intercepted and return null
+        val compoundAr = "افتح واتساب وابحث عن أحمد وارسل له مرحبا"
+        assertTrue(FastRuleRouter.isCompoundCommand(compoundAr))
+        assertNull(FastRuleRouter.route(compoundAr))
+
+        val compoundEn = "open chrome and search for rust"
+        assertTrue(FastRuleRouter.isCompoundCommand(compoundEn))
+        assertNull(FastRuleRouter.route(compoundEn))
+
+        // Simple commands must match in < 15ms
+        val startBack = System.nanoTime()
+        val cmdBack = FastRuleRouter.route("ارجع")
+        val elapsedBackMs = (System.nanoTime() - startBack) / 1_000_000.0
+        assertNotNull(cmdBack)
+        assertEquals(ActionType.UI_BACK, cmdBack!!.action)
+        assertTrue("Expected < 15ms, took ${elapsedBackMs}ms", elapsedBackMs < 15.0)
+
+        // Simple navigation and app commands match in < 15ms
+        val startHome = System.nanoTime()
+        val cmdHome = FastRuleRouter.route("الرئيسية")
+        val elapsedHomeMs = (System.nanoTime() - startHome) / 1_000_000.0
+        assertNotNull(cmdHome)
+        assertEquals(ActionType.UI_HOME, cmdHome!!.action)
+        assertTrue("Expected < 15ms, took ${elapsedHomeMs}ms", elapsedHomeMs < 15.0)
     }
 }

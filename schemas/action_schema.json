@@ -1,62 +1,92 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/tahadeab-ai/silent-exec/schemas/action_schema.json",
-  "title": "ActionCommand",
-  "description": "Strict ActionCommand contract for SilentExec OS execution agent",
-  "type": "object",
-  "properties": {
-    "action": {
-      "type": "string",
-      "enum": [
-        "open_folder",
-        "open_file",
-        "launch_app",
-        "search_files",
-        "set_volume",
-        "set_brightness",
-        "create_note",
-        "copy_to_clipboard",
-        "delete_file",
-        "move_file",
-        "system_power",
-        "open_android_app",
-        "toggle_setting",
-        "send_message",
-        "open_url",
-        "ui_click",
-        "ui_type",
-        "ui_scroll",
-        "ui_back",
-        "ui_home"
-      ]
+  "title": "ActionPayload",
+  "description": "Strict ActionCommand or MultiStepPlan contract for SilentExec OS execution agent",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ActionCommand"
     },
-    "target": {
-      "type": "string",
-      "description": "Primary action target path, application name, URI, or command target"
-    },
-    "folder": {
-      "type": "string",
-      "description": "Optional parent or destination folder path"
-    },
-    "args": {
-      "type": "object",
-      "description": "Optional action arguments or parameters"
-    },
-    "platform": {
-      "type": "string",
-      "enum": ["pc", "android", "any"]
-    },
-    "confidence": {
-      "type": "number",
-      "minimum": 0.0,
-      "maximum": 1.0,
-      "description": "Confidence score from NLP extractor"
+    {
+      "$ref": "#/$defs/MultiStepPlan"
     }
-  },
-  "required": [
-    "action",
-    "platform",
-    "confidence"
   ],
-  "additionalProperties": false
+  "$defs": {
+    "ActionCommand": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "open_folder",
+            "open_file",
+            "launch_app",
+            "search_files",
+            "set_volume",
+            "set_brightness",
+            "create_note",
+            "copy_to_clipboard",
+            "delete_file",
+            "move_file",
+            "system_power",
+            "open_android_app",
+            "toggle_setting",
+            "send_message",
+            "open_url",
+            "ui_click",
+            "ui_type",
+            "ui_scroll",
+            "ui_back",
+            "ui_home",
+            "done"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "description": "Primary action target path, application name, URI, or command target"
+        },
+        "folder": {
+          "type": "string",
+          "description": "Optional parent or destination folder path"
+        },
+        "args": {
+          "type": "object",
+          "description": "Optional action arguments or parameters"
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["pc", "android", "any"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Confidence score from NLP extractor"
+        }
+      },
+      "required": [
+        "action",
+        "platform",
+        "confidence"
+      ],
+      "additionalProperties": false
+    },
+    "MultiStepPlan": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionCommand"
+          },
+          "minItems": 1,
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "additionalProperties": false
+    }
+  }
 }

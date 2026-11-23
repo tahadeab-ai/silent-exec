@@ -18,7 +18,8 @@
     "ui_type",
     "ui_scroll",
     "ui_back",
-    "ui_home"
+    "ui_home",
+    "done"
   ],
   "tier_2_confirm": [
     "delete_file",

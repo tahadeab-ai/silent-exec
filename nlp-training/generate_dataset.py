@@ -997,10 +997,227 @@ def build_example(action: str, category: str, rng: random.Random) -> Tuple[str, 
     return user_prompt, payload
 
 
+def build_multistep_example(category: str, rng: random.Random) -> Tuple[str, Dict[str, Any]]:
+    """Generates realistic 2-to-4 step chained compound commands returning a MultiStepPlan JSON payload."""
+    is_english = (category == "english")
+    is_msa = (category == "msa")
+
+    conf = round(rng.uniform(0.88, 0.99), 2)
+    archetype = rng.choice([1, 2, 3, 4, 5, 6, 7])
+
+    if archetype == 1:
+        # Pattern 1: Open app -> Click search -> Type query -> Click send
+        apps = ["WhatsApp", "Telegram", "Slack"]
+        app = rng.choice(apps)
+        if is_english:
+            person = rng.choice(["John", "Sarah", "Alex", "David"])
+            msg = rng.choice(["I am on my way", "Meeting confirmed", "Check the latest document"])
+            prompt = rng.choice([
+                f"open {app} and search for {person} then type {msg} and click send",
+                f"launch {app} and click search then type {person} and send message",
+                f"open {app} and type {msg} to {person} and tap send button",
+            ])
+            steps = [
+                {"action": "open_android_app", "target": app, "platform": "android", "confidence": conf},
+                {"action": "ui_click", "target": "search", "platform": "android", "confidence": conf},
+                {"action": "ui_type", "target": "search bar", "args": {"text": person}, "platform": "android", "confidence": conf},
+                {"action": "ui_click", "target": "send button", "platform": "android", "confidence": conf},
+            ]
+        elif is_msa:
+            person = rng.choice(["أحمد", "محمد", "سارة", "خالد"])
+            msg = rng.choice(["أنا في الطريق الآن", "تم تأكيد الموعد", "يرجى مراجعة التقرير المرفق"])
+            app_ar = "الواتساب" if app == "WhatsApp" else ("التلغرام" if app == "Telegram" else "سلاك")
+            prompt = rng.choice([
+                f"افتح تطبيق {app_ar} ثم انقر على البحث واكتب {person} ثم اضغط على زر الإرسال",
+                f"قم بتشغيل {app_ar} وابحث عن {person} واكتب {msg} ثم اضغط إرسال",
+            ])
+            steps = [
+                {"action": "open_android_app", "target": app, "platform": "android", "confidence": conf},
+                {"action": "ui_click", "target": "زر البحث", "platform": "android", "confidence": conf},
+                {"action": "ui_type", "target": "حقل البحث", "args": {"text": person}, "platform": "android", "confidence": conf},
+                {"action": "ui_click", "target": "زر الإرسال", "platform": "android", "confidence": conf},
+            ]
+        else: # colloquial Yemeni
+            person = rng.choice(["احمد", "محمد", "الوالد", "ابو علي"])
+            msg = rng.choice(["انا في الطريق يا غالي", "وصلت البيت الحمد لله", "شوف الملف اللي رسلته"])
+            app_ar = "الواتس" if app == "WhatsApp" else ("التلغرام" if app == "Telegram" else "سلاك")
+            prompt = rng.choice([
+                f"افتح {app_ar} وابحث عن {person} واكتب له {msg} واضغط ارسال",
+                f"شغل {app_ar} ودوس على البحث واكتب {person} وسوي ارسال",
+                f"افتح تطبيق {app_ar} ودور على {person} وارسل له {msg}",
+            ])
+            steps = [
+                {"action": "open_android_app", "target": app, "platform": "android", "confidence": conf},
+                {"action": "ui_click", "target": "زر البحث", "platform": "android", "confidence": conf},
+                {"action": "ui_type", "target": "شريط البحث", "args": {"text": person}, "platform": "android", "confidence": conf},
+                {"action": "ui_click", "target": "زر الارسال", "platform": "android", "confidence": conf},
+            ]
+
+    elif archetype == 2:
+        # Pattern 2: Open folder -> Search file -> Copy/Delete
+        folders = ["Downloads", "Documents", "Projects", "Pictures"]
+        folder = rng.choice(folders)
+        files = ["sales_report.xlsx", "invoice.pdf", "project_spec.docx", "backup.sql", "temp.txt"]
+        target_file = rng.choice(files)
+        del_or_copy = rng.choice(["delete", "copy"])
+
+        if is_english:
+            prompt = rng.choice([
+                f"open {folder} folder and search for {target_file} and {del_or_copy} it",
+                f"open folder {folder} then search for {target_file} and {'delete file' if del_or_copy == 'delete' else 'copy to clipboard'}",
+            ])
+            action_3 = "delete_file" if del_or_copy == "delete" else "copy_to_clipboard"
+            steps = [
+                {"action": "open_folder", "target": folder, "platform": "pc", "confidence": conf},
+                {"action": "search_files", "target": target_file, "folder": folder, "platform": "pc", "confidence": conf},
+                {"action": action_3, "target": target_file, "folder": folder, "platform": "pc", "confidence": conf},
+            ]
+        elif is_msa:
+            folder_ar = "التنزيلات" if folder == "Downloads" else ("المستندات" if folder == "Documents" else folder)
+            action_verb = "احذفه" if del_or_copy == "delete" else "انسخه إلى الحافظة"
+            action_3 = "delete_file" if del_or_copy == "delete" else "copy_to_clipboard"
+            prompt = rng.choice([
+                f"افتح مجلد {folder_ar} ثم ابحث عن {target_file} و{action_verb}",
+                f"انتقل إلى مجلد {folder_ar} وابحث عن ملف {target_file} ثم {action_verb}",
+            ])
+            steps = [
+                {"action": "open_folder", "target": folder, "platform": "pc", "confidence": conf},
+                {"action": "search_files", "target": target_file, "folder": folder, "platform": "pc", "confidence": conf},
+                {"action": action_3, "target": target_file, "folder": folder, "platform": "pc", "confidence": conf},
+            ]
+        else: # colloquial Yemeni
+            folder_ar = "الداونلودز" if folder == "Downloads" else ("المستندات" if folder == "Documents" else "المشاريع")
+            action_verb = "احذفه" if del_or_copy == "delete" else "انسخه للحافظة"
+            action_3 = "delete_file" if del_or_copy == "delete" else "copy_to_clipboard"
+            prompt = rng.choice([
+                f"افتح مجلد {folder_ar} ودور على {target_file} و{action_verb}",
+                f"افتح {folder_ar} وابحث عن {target_file} و{action_verb}",
+            ])
+            steps = [
+                {"action": "open_folder", "target": folder, "platform": "pc", "confidence": conf},
+                {"action": "search_files", "target": target_file, "folder": folder, "platform": "pc", "confidence": conf},
+                {"action": action_3, "target": target_file, "folder": folder, "platform": "pc", "confidence": conf},
+            ]
+
+    elif archetype == 3:
+        # Pattern 3: Open browser -> Open URL -> Scroll down
+        urls = [
+            ("https://google.com", "موقع قوقل", "google"),
+            ("https://github.com", "جيت هاب", "github"),
+            ("https://youtube.com", "اليوتيوب", "youtube"),
+        ]
+        url, ar_mention, en_mention = rng.choice(urls)
+        if is_english:
+            prompt = rng.choice([
+                f"open chrome and open {url} then scroll down",
+                f"launch browser and go to {url} then swipe down",
+            ])
+        elif is_msa:
+            prompt = rng.choice([
+                f"افتح متصفح كروم ثم انتقل إلى {ar_mention} وقم بالتمرير للأسفل",
+                f"شغل المتصفح وافتح {url} ثم مرر إلى الأسفل",
+            ])
+        else: # colloquial Yemeni
+            prompt = rng.choice([
+                f"افتح كروم وافتح {ar_mention} وانزل لتحت",
+                f"شغل المتصفح وادخل على {url} ومرر الشاشة للاسفل",
+            ])
+        steps = [
+            {"action": "launch_app", "target": "Chrome", "platform": "pc", "confidence": conf},
+            {"action": "open_url", "target": url, "platform": "pc", "confidence": conf},
+            {"action": "ui_scroll", "args": {"direction": "down"}, "platform": "pc", "confidence": conf},
+        ]
+
+    elif archetype == 4:
+        # Pattern 4: Open app -> Create note -> Back
+        notes = ["مهام المشروع", "قائمة المشتريات", "ملاحظات الاجتماع", "project tasks", "grocery list"]
+        note_title = rng.choice(notes)
+        if is_english:
+            prompt = f"open notepad and create note {note_title} then go back"
+            steps = [
+                {"action": "launch_app", "target": "Notepad", "platform": "pc", "confidence": conf},
+                {"action": "create_note", "target": note_title, "folder": "Notes", "platform": "pc", "confidence": conf},
+                {"action": "ui_back", "platform": "pc", "confidence": conf},
+            ]
+        elif is_msa:
+            prompt = f"افتح المفكرة ثم أنشئ ملاحظة بعنوان {note_title} ثم ارجع للخلف"
+            steps = [
+                {"action": "launch_app", "target": "Notepad", "platform": "pc", "confidence": conf},
+                {"action": "create_note", "target": note_title, "folder": "Notes", "platform": "pc", "confidence": conf},
+                {"action": "ui_back", "platform": "pc", "confidence": conf},
+            ]
+        else: # colloquial Yemeni
+            prompt = f"افتح المفكرة وسوي ملاحظة جديدة باسم {note_title} وارجع ورا"
+            steps = [
+                {"action": "launch_app", "target": "Notepad", "platform": "pc", "confidence": conf},
+                {"action": "create_note", "target": note_title, "folder": "Notes", "platform": "pc", "confidence": conf},
+                {"action": "ui_back", "platform": "pc", "confidence": conf},
+            ]
+
+    elif archetype == 5:
+        # Pattern 5: Open settings -> Toggle setting -> Home
+        settings = [("wifi", "الواي فاي", "off", "إيقاف"), ("bluetooth", "البلوتوث", "on", "تشغيل")]
+        setting_en, setting_ar, state, state_ar = rng.choice(settings)
+        if is_english:
+            prompt = f"open settings and toggle {setting_en} {state} then return to home screen"
+        elif is_msa:
+            prompt = f"افتح الإعدادات وقم بـ {state_ar} {setting_ar} ثم انتقل إلى الشاشة الرئيسية"
+        else:
+            prompt = f"افتح الضبط و{'طفي' if state == 'off' else 'شغل'} {setting_ar} وروح للهوم"
+        steps = [
+            {"action": "open_android_app", "target": "Settings", "platform": "android", "confidence": conf},
+            {"action": "toggle_setting", "target": setting_en, "args": {"state": state}, "platform": "android", "confidence": conf},
+            {"action": "ui_home", "platform": "android", "confidence": conf},
+        ]
+
+    elif archetype == 6:
+        # Pattern 6: Set volume -> Set brightness -> Show desktop
+        vol = rng.choice([40, 60, 80, 100])
+        bri = rng.choice([50, 70, 90])
+        if is_english:
+            prompt = f"set volume to {vol} and set brightness to {bri} then show desktop"
+        elif is_msa:
+            prompt = f"اضبط مستوى الصوت {vol} وعدل السطوع {bri} ثم اذهب لسطح المكتب"
+        else:
+            prompt = f"ارفع الصوت {vol} واضبط السطوع {bri} وروح لسطح المكتب"
+        steps = [
+            {"action": "set_volume", "args": {"level": vol}, "platform": "pc", "confidence": conf},
+            {"action": "set_brightness", "args": {"level": bri}, "platform": "pc", "confidence": conf},
+            {"action": "ui_home", "platform": "pc", "confidence": conf},
+        ]
+
+    else:
+        # Pattern 7: App action -> ReAct loop termination (done)
+        if is_english:
+            prompt = "open calculator and click clear all then done"
+            steps = [
+                {"action": "launch_app", "target": "Calculator", "platform": "pc", "confidence": conf},
+                {"action": "ui_click", "target": "Clear", "platform": "pc", "confidence": conf},
+                {"action": "done", "platform": "pc", "confidence": 1.0},
+            ]
+        elif is_msa:
+            prompt = "افتح الآلة الحاسبة ثم اضغط على زر المسح ثم تم"
+            steps = [
+                {"action": "launch_app", "target": "Calculator", "platform": "pc", "confidence": conf},
+                {"action": "ui_click", "target": "مسح", "platform": "pc", "confidence": conf},
+                {"action": "done", "platform": "pc", "confidence": 1.0},
+            ]
+        else:
+            prompt = "افتح الحاسبة ودوس مسح وخلصنا"
+            steps = [
+                {"action": "launch_app", "target": "Calculator", "platform": "pc", "confidence": conf},
+                {"action": "ui_click", "target": "مسح", "platform": "pc", "confidence": conf},
+                {"action": "done", "platform": "pc", "confidence": 1.0},
+            ]
+
+    payload = {"steps": steps}
+    return prompt, payload
+
+
 def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
     rng = random.Random(seed)
 
-    # Realistic linguistic distribution across 20 actions:
+    # Realistic linguistic distribution across actions:
     # 38% Colloquial Yemeni/Gulf
     # 32% Modern Standard Arabic (MSA)
     # 20% English & Code-switching
@@ -1009,9 +1226,35 @@ def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
 
     examples: List[Dict[str, Any]] = []
 
-    # Ensure balanced representation across all 20 actions
-    base_per_action = total_count // len(ACTIONS)
-    remainder = total_count % len(ACTIONS)
+    # 35% realistic multi-step compound tasks, 65% rich single-step tasks
+    multistep_count = int(total_count * 0.35)
+    singlestep_count = total_count - multistep_count
+
+    # 1. Generate 35% multi-step compound tasks (2 to 4 steps)
+    for _ in range(multistep_count):
+        cat = rng.choice(categories)
+        user_prompt, payload = build_multistep_example(cat, rng)
+        avg_conf = round(sum(s.get("confidence", 0.95) for s in payload["steps"]) / len(payload["steps"]), 2)
+        chatml_sample = {
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+                {
+                    "role": "assistant",
+                    "content": json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+                }
+            ],
+            "meta": {
+                "action": "multi_step",
+                "category": cat,
+                "confidence": avg_conf
+            }
+        }
+        examples.append(chatml_sample)
+
+    # 2. Generate 65% rich single-step examples across all 20 actions
+    base_per_action = singlestep_count // len(ACTIONS)
+    remainder = singlestep_count % len(ACTIONS)
 
     for i, action in enumerate(ACTIONS):
         count_for_action = base_per_action + (1 if i < remainder else 0)
@@ -1049,6 +1292,7 @@ def validate_and_save(
 
     total_validated = 0
     action_counts: Dict[str, int] = {a: 0 for a in ACTIONS}
+    action_counts["multi_step"] = 0
     category_counts: Dict[str, int] = {"colloquial": 0, "msa": 0, "english": 0, "adversarial": 0}
 
     # Validate 100% of generated assistant JSON payloads
@@ -1066,8 +1310,10 @@ def validate_and_save(
             )
 
         total_validated += 1
-        action_counts[sample["meta"]["action"]] += 1
-        category_counts[sample["meta"]["category"]] += 1
+        act = sample["meta"]["action"]
+        action_counts[act] = action_counts.get(act, 0) + 1
+        cat = sample["meta"]["category"]
+        category_counts[cat] = category_counts.get(cat, 0) + 1
 
     out_dir.mkdir(parents=True, exist_ok=True)
 

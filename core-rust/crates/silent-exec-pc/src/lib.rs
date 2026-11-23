@@ -7,6 +7,7 @@ pub mod fast_router;
 pub mod indexer;
 pub mod inference;
 pub mod model_manager;
+pub mod planner;
 pub mod runtime_manager;
 pub mod ui_win32;
 pub mod updater;
@@ -23,6 +24,7 @@ pub use inference::{
     EMBEDDED_ACTION_GBNF,
 };
 pub use model_manager::{ModelDownloadInfo, ModelManager, ModelReleaseInfo};
+pub use planner::{parse_plan, split_compound_prompt, PlanEngine, PlanExecutionSummary, StepEvent};
 pub use runtime_manager::{
     check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
     select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
@@ -35,7 +37,7 @@ pub use updater::{SelfUpdater, UpdateInfo};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use silent_exec_core::{ActionCommand, ActionType, Platform, SafetyGate};
+    use silent_exec_core::{ActionCommand, ActionType, MultiStepPlan, Platform, SafetyGate};
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::PathBuf;
@@ -1451,5 +1453,134 @@ mod tests {
             }
             other => panic!("Expected Success for live UiHome, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_59_fast_router_compound_command_guard() {
+        use crate::fast_router::FastRuleRouter;
+        use std::time::Instant;
+
+        // Multi-step compound commands must return None / bypass fast rules
+        let compound_ar = "افتح واتساب وابحث عن أحمد وارسل له مرحبا";
+        assert!(FastRuleRouter::is_compound_command(compound_ar));
+        assert!(FastRuleRouter::isCompoundCommand(compound_ar));
+        assert!(FastRuleRouter::route(compound_ar).is_none());
+
+        let compound_en = "open chrome and search for rust";
+        assert!(FastRuleRouter::is_compound_command(compound_en));
+        assert!(FastRuleRouter::isCompoundCommand(compound_en));
+        assert!(FastRuleRouter::route(compound_en).is_none());
+
+        // Simple commands must match in <15ms
+        let start_back = Instant::now();
+        let cmd_back = FastRuleRouter::route("ارجع").expect("Should match 'ارجع'");
+        let elapsed_back = start_back.elapsed();
+        assert_eq!(cmd_back.action, ActionType::UiBack);
+        assert!(
+            elapsed_back.as_millis() < 15,
+            "Expected <15ms, took {:?}",
+            elapsed_back
+        );
+
+        let start_dl = Instant::now();
+        let cmd_dl = FastRuleRouter::route("افتح التنزيلات").expect("Should match 'افتح التنزيلات'");
+        let elapsed_dl = start_dl.elapsed();
+        assert_eq!(cmd_dl.action, ActionType::OpenFolder);
+        assert_eq!(cmd_dl.target.as_deref(), Some("Downloads"));
+        assert!(
+            elapsed_dl.as_millis() < 15,
+            "Expected <15ms, took {:?}",
+            elapsed_dl
+        );
+    }
+
+    #[test]
+    fn test_60_compound_prompt_splitter() {
+        use crate::planner::split_compound_prompt;
+
+        let ar_prompt = "افتح واتساب وابحث عن أحمد وارسل له مرحبا";
+        let ar_clauses = split_compound_prompt(ar_prompt);
+        assert_eq!(
+            ar_clauses,
+            vec!["افتح واتساب", "ابحث عن أحمد", "ارسل له مرحبا"]
+        );
+
+        let en_prompt = "open chrome and search for rust";
+        let en_clauses = split_compound_prompt(en_prompt);
+        assert_eq!(en_clauses, vec!["open chrome", "search for rust"]);
+
+        let then_prompt = "افتح مجلد التنزيلات ثم احذف temp.txt";
+        let then_clauses = split_compound_prompt(then_prompt);
+        assert_eq!(then_clauses, vec!["افتح مجلد التنزيلات", "احذف temp.txt"]);
+
+        let single = split_compound_prompt("ارجع");
+        assert_eq!(single, vec!["ارجع"]);
+    }
+
+    #[test]
+    fn test_61_plan_engine_sequential_execution_and_events() {
+        use crate::planner::{parse_plan, PlanEngine, StepEvent};
+        use silent_exec_core::ExecutionMode;
+
+        let temp = TempDirGuard::new("plan_engine_test");
+        let indexer = FileIndexer::new(vec![temp.path.clone()]);
+        let executor = PcExecutor::new(indexer, true); // dry run
+
+        // 1. Parse multi-step JSON plan
+        let plan_json = r#"{
+            "steps": [
+                {"action": "open_folder", "target": "Downloads", "platform": "pc", "confidence": 0.95},
+                {"action": "ui_click", "target": "search bar", "platform": "pc", "confidence": 0.92},
+                {"action": "done", "platform": "pc", "confidence": 1.0}
+            ]
+        }"#;
+        let plan = parse_plan(plan_json).expect("Parse plan JSON");
+        assert_eq!(plan.steps.len(), 3);
+
+        // 2. Execute plan in DryRun mode and track events
+        let mut events = Vec::new();
+        let summary = PlanEngine::execute_plan(&executor, &plan, ExecutionMode::DryRun, |ev| {
+            events.push(ev);
+        })
+        .expect("Execution succeed");
+
+        assert!(summary.completed);
+        assert_eq!(summary.total_steps, 3);
+        assert_eq!(events[0], StepEvent::Understanding);
+        assert_eq!(events[1], StepEvent::Planned(3));
+        assert!(matches!(events[2], StepEvent::Running(1, 3, _)));
+        assert!(matches!(events[3], StepEvent::Running(2, 3, _)));
+        assert!(matches!(events[4], StepEvent::Running(3, 3, _)));
+        assert_eq!(events[5], StepEvent::Done);
+
+        // 3. Test blocked step in plan stops execution
+        let dangerous_plan = MultiStepPlan::new(vec![
+            ActionCommand {
+                action: ActionType::UiBack,
+                target: None,
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::OpenFile,
+                target: Some("../../etc/shadow".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+        ]);
+
+        let mut dangerous_events = Vec::new();
+        let dangerous_summary =
+            PlanEngine::execute_plan(&executor, &dangerous_plan, ExecutionMode::Silent, |ev| {
+                dangerous_events.push(ev);
+            })
+            .expect("Plan returns blocked summary");
+
+        assert!(!dangerous_summary.completed);
+        assert!(dangerous_events.contains(&StepEvent::Failed));
     }
 }

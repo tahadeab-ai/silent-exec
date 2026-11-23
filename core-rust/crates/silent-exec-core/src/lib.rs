@@ -27,6 +27,8 @@ pub enum ActionType {
     UiScroll,
     UiBack,
     UiHome,
+    // ReAct Loop Termination
+    Done,
 }
 
 impl ActionType {
@@ -48,7 +50,8 @@ impl ActionType {
             | Self::UiType
             | Self::UiScroll
             | Self::UiBack
-            | Self::UiHome => SafetyTier::Tier1Silent,
+            | Self::UiHome
+            | Self::Done => SafetyTier::Tier1Silent,
 
             Self::DeleteFile
             | Self::MoveFile
@@ -102,7 +105,7 @@ impl ActionCommand {
     }
 }
 
-/// Multi-step execution plan containing ordered `ActionCommand` steps.
+/// Multi-step execution plan containing ordered `ActionCommand` steps (up to 6 steps).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MultiStepPlan {
@@ -110,6 +113,8 @@ pub struct MultiStepPlan {
 }
 
 impl MultiStepPlan {
+    pub const MAX_STEPS: usize = 6;
+
     /// Creates a new `MultiStepPlan`.
     #[must_use]
     pub fn new(steps: Vec<ActionCommand>) -> Self {
@@ -119,6 +124,16 @@ impl MultiStepPlan {
     /// Parses and strictly validates a `MultiStepPlan` from a JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
         let plan: Self = serde_json::from_str(json_str).map_err(|e| e.to_string())?;
+        if plan.steps.is_empty() {
+            return Err("MultiStepPlan steps array cannot be empty".to_string());
+        }
+        if plan.steps.len() > Self::MAX_STEPS {
+            return Err(format!(
+                "MultiStepPlan exceeds maximum step limit of {} (found {})",
+                Self::MAX_STEPS,
+                plan.steps.len()
+            ));
+        }
         for (i, step) in plan.steps.iter().enumerate() {
             if !(0.0..=1.0).contains(&step.confidence) {
                 return Err(format!(
@@ -131,9 +146,44 @@ impl MultiStepPlan {
         Ok(plan)
     }
 
+    /// Parses either a `MultiStepPlan` JSON or a single `ActionCommand` JSON
+    /// into a `MultiStepPlan`.
+    pub fn from_any_json(json_str: &str) -> Result<Self, String> {
+        let trimmed = json_str.trim();
+        if trimmed.contains("\"steps\"") {
+            if let Ok(plan) = Self::from_json(trimmed) {
+                return Ok(plan);
+            }
+        }
+        // Fall back to single ActionCommand
+        let cmd = ActionCommand::from_json(trimmed)?;
+        Ok(Self { steps: vec![cmd] })
+    }
+
     /// Serializes the `MultiStepPlan` to a canonical JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
+    }
+}
+
+/// Execution mode controlling safety and confirmation behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    #[default]
+    Silent,
+    Interactive,
+    DryRun,
+}
+
+impl ExecutionMode {
+    #[must_use]
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_lowercase().trim() {
+            "interactive" => Self::Interactive,
+            "dry_run" | "dryrun" | "dry-run" => Self::DryRun,
+            _ => Self::Silent,
+        }
     }
 }
 
@@ -989,5 +1039,67 @@ mod tests {
                 other
             ),
         }
+    }
+
+    #[test]
+    fn test_26_done_action_tier_and_safety() {
+        let done_cmd = ActionCommand {
+            action: ActionType::Done,
+            target: None,
+            folder: None,
+            args: None,
+            platform: Platform::Any,
+            confidence: 1.0,
+        };
+
+        assert_eq!(done_cmd.action.tier(), SafetyTier::Tier1Silent);
+        let decision = SafetyGate::evaluate(&done_cmd);
+        assert_eq!(decision, SafetyDecision::AllowSilent);
+
+        let json = done_cmd.to_json().expect("Serialize done");
+        let parsed = ActionCommand::from_json(&json).expect("Deserialize done");
+        assert_eq!(parsed.action, ActionType::Done);
+    }
+
+    #[test]
+    fn test_27_multi_step_plan_step_bounds_and_from_any() {
+        // Empty steps rejected
+        assert!(MultiStepPlan::from_json(r#"{"steps":[]}"#).is_err());
+
+        // > 6 steps rejected
+        let seven_steps = (0..7)
+            .map(|_| ActionCommand {
+                action: ActionType::UiBack,
+                target: None,
+                folder: None,
+                args: None,
+                platform: Platform::Any,
+                confidence: 0.9,
+            })
+            .collect();
+        let plan_7 = MultiStepPlan::new(seven_steps);
+        let json_7 = serde_json::to_string(&plan_7).unwrap();
+        assert!(MultiStepPlan::from_json(&json_7).is_err());
+
+        // from_any_json with single ActionCommand wraps in MultiStepPlan
+        let single_cmd_json = r#"{"action":"ui_back","platform":"android","confidence":0.95}"#;
+        let plan_single =
+            MultiStepPlan::from_any_json(single_cmd_json).expect("Parse single as plan");
+        assert_eq!(plan_single.steps.len(), 1);
+        assert_eq!(plan_single.steps[0].action, ActionType::UiBack);
+
+        // ExecutionMode parsing
+        assert_eq!(
+            ExecutionMode::from_str_loose("silent"),
+            ExecutionMode::Silent
+        );
+        assert_eq!(
+            ExecutionMode::from_str_loose("INTERACTIVE"),
+            ExecutionMode::Interactive
+        );
+        assert_eq!(
+            ExecutionMode::from_str_loose("dry_run"),
+            ExecutionMode::DryRun
+        );
     }
 }
