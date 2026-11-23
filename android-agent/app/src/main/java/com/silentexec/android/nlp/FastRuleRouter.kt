@@ -9,8 +9,8 @@ object FastRuleRouter {
     private val RE_SET_VOLUME_AR = Regex("""(?:ارفع|خفض|اضبط|عدل|غير)\s+(?:مستوى\s+)?الصوت\s+(?:الى\s+|إلى\s+)?(\d{1,3})""", RegexOption.IGNORE_CASE)
     private val RE_SET_VOLUME_EN = Regex("""(?:set|change|adjust)\s+volume\s+(?:to\s+)?(\d{1,3})""", RegexOption.IGNORE_CASE)
 
-    private val RE_CLICK_AR = Regex("""^(?:اضغط|انقر|دوس|انقر على|اضغط على|دوس على)\s+(.+)$""", RegexOption.IGNORE_CASE)
-    private val RE_CLICK_EN = Regex("""^(?:click\s+on|click|tap\s+on|tap|press)\s+(.+)$""", RegexOption.IGNORE_CASE)
+    private val RE_CLICK_AR = Regex("""^(?:اضغط على|انقر على|دوس على|اضغط|انقر|دوس)\s+(?:على\s+)?(.+)$""", RegexOption.IGNORE_CASE)
+    private val RE_CLICK_EN = Regex("""^(?:click\s+on|tap\s+on|click|tap|press)\s+(?:on\s+)?(.+)$""", RegexOption.IGNORE_CASE)
 
     private val RE_LAUNCH_AR = Regex("""^(?:افتح|شغل|شغل لي|افتح لي)\s+(?:تطبيق\s+)?(.+)$""", RegexOption.IGNORE_CASE)
     private val RE_LAUNCH_EN = Regex("""^(?:open|launch)\s+(?:app\s+)?(.+)$""", RegexOption.IGNORE_CASE)
@@ -74,7 +74,7 @@ object FastRuleRouter {
                 confidence = 1.0
             )
         }
-        if (norm in listOf("اطلع", "ارفع", "اطلع فوق", "اطلع لفوق", "فوق", "اعلى", "scroll up", "up")) {
+        if (norm in listOf("اطلع", "ارفع", "اطلع فوق", "اطلع لفوق", "فوق", "اعلي", "اعلى", "scroll up", "up")) {
             return ActionCommand(
                 action = ActionType.UI_SCROLL,
                 target = "up",
