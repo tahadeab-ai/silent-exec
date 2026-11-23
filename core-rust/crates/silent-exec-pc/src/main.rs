@@ -122,7 +122,14 @@ fn resolve_llama_backend(
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
+    let mut args: Vec<String> = std::env::args().collect();
+    #[cfg(windows)]
+    if args.len() < 2 {
+        // On Windows, if launched with zero arguments (e.g. double-clicked from Explorer),
+        // default to running quick-bar mode rather than exiting with help text.
+        args.push("bar".to_string());
+    }
+    #[cfg(not(windows))]
     if args.len() < 2 {
         print_usage();
         return ExitCode::from(1);

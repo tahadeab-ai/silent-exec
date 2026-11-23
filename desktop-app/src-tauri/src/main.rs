@@ -1,0 +1,672 @@
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use serde::{Deserialize, Serialize};
+use silent_exec_core::{
+    ActionCommand, ActionType, ExecutionMode, MultiStepPlan, Platform, SafetyDecision, SafetyGate,
+};
+use silent_exec_pc::{
+    action_type_to_str, parse_plan, split_compound_prompt, start_bridge_server, AppConfig,
+    BridgeConfig, ExecutionResult, FastRuleRouter, FileIndexer, ModelDownloadInfo, ModelManager,
+    ModelReleaseInfo, PcExecutor, SelfUpdater, SetupResult,
+};
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Manager, State};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepInfo {
+    pub step_index: usize,
+    pub total_steps: usize,
+    pub stage: String,
+    pub description: String,
+    pub action: Option<String>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionReport {
+    pub success: bool,
+    pub query: String,
+    pub steps: Vec<StepInfo>,
+    pub message: String,
+    pub requires_confirm: bool,
+    pub pending_step_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BridgeStatusResponse {
+    pub is_running: bool,
+    pub address: Option<String>,
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfigDto {
+    pub language: String,
+    pub mode: String,
+    pub active_model_tag: Option<String>,
+    pub fast_router_enabled: bool,
+    pub bridge_running: bool,
+    pub bridge_url: Option<String>,
+    pub bridge_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateInfoDto {
+    pub current_version: String,
+    pub latest_version: String,
+    pub tag_name: String,
+    pub download_url: String,
+    pub sha256_url: String,
+    pub update_available: bool,
+}
+
+type BridgeInstance = (SocketAddr, Arc<AtomicBool>, JoinHandle<()>);
+
+struct AppState {
+    bridge_handle: Mutex<Option<BridgeInstance>>,
+    pending_execution: Mutex<Option<(ActionCommand, ExecutionMode)>>,
+}
+
+fn create_default_executor(dry_run: bool) -> PcExecutor {
+    let indexer = FileIndexer::new(FileIndexer::default_user_roots());
+    PcExecutor::new(indexer, dry_run)
+}
+
+fn format_execution_result(res: ExecutionResult) -> (String, String) {
+    match res {
+        ExecutionResult::Success { details, .. } => ("completed".to_string(), details),
+        ExecutionResult::DryRun { message, .. } => {
+            ("completed".to_string(), format!("Simulation: {}", message))
+        }
+        ExecutionResult::Error { message, .. } => ("failed".to_string(), message),
+        ExecutionResult::Blocked { reason, .. } => ("blocked".to_string(), reason),
+        ExecutionResult::ConfirmationRequired { prompt, .. } => {
+            ("awaiting_confirm".to_string(), prompt)
+        }
+    }
+}
+
+// ---------------------------------------------------------
+// Commands
+// ---------------------------------------------------------
+
+#[tauri::command]
+fn get_app_config(state: State<AppState>) -> AppConfigDto {
+    let cfg = AppConfig::load();
+    let bridge_guard = state.bridge_handle.lock().unwrap();
+    let (running, url, token) = match &*bridge_guard {
+        Some((addr, _, _)) => (
+            true,
+            Some(format!("http://{}", addr)),
+            Some("silent-exec-secret".to_string()),
+        ),
+        None => (false, None, None),
+    };
+
+    AppConfigDto {
+        language: cfg.language,
+        mode: cfg.mode,
+        active_model_tag: cfg.active_model_tag,
+        fast_router_enabled: cfg.fast_router_enabled,
+        bridge_running: running,
+        bridge_url: url,
+        bridge_token: token,
+    }
+}
+
+#[tauri::command]
+fn save_app_config(
+    language: Option<String>,
+    mode: Option<String>,
+    active_model_tag: Option<String>,
+    fast_router_enabled: Option<bool>,
+) -> Result<(), String> {
+    let mut cfg = AppConfig::load();
+    if let Some(l) = language {
+        cfg.language = l;
+    }
+    if let Some(m) = mode {
+        cfg.mode = m;
+    }
+    if let Some(t) = active_model_tag {
+        cfg.active_model_tag = Some(t);
+    }
+    if let Some(f) = fast_router_enabled {
+        cfg.fast_router_enabled = f;
+    }
+
+    let path = AppConfig::default_config_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn execute_query(
+    query: String,
+    mode: Option<String>,
+    state: State<AppState>,
+) -> Result<ExecutionReport, String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Err("Query cannot be empty".to_string());
+    }
+
+    let cfg = AppConfig::load();
+    let exec_mode = match mode.as_deref().unwrap_or(&cfg.mode) {
+        "interactive" => ExecutionMode::Interactive,
+        "dry_run" => ExecutionMode::DryRun,
+        _ => ExecutionMode::Silent,
+    };
+
+    let mut steps_out = Vec::new();
+    let executor = create_default_executor(exec_mode == ExecutionMode::DryRun);
+
+    // 1. Fast Rule Router check (if single command and enabled)
+    if cfg.fast_router_enabled {
+        if let Some(cmd) = FastRuleRouter::route(trimmed) {
+            let target_str = cmd.target.as_deref().unwrap_or("").to_string();
+            steps_out.push(StepInfo {
+                step_index: 1,
+                total_steps: 1,
+                stage: "understanding".to_string(),
+                description: "Fast Rule Router matched (<15ms)".to_string(),
+                action: Some(action_type_to_str(cmd.action).to_string()),
+                details: Some(format!("Target: {}", target_str)),
+            });
+
+            let decision = SafetyGate::evaluate(&cmd);
+            match decision {
+                SafetyDecision::Block { reason } => {
+                    steps_out.push(StepInfo {
+                        step_index: 1,
+                        total_steps: 1,
+                        stage: "blocked".to_string(),
+                        description: "Blocked by Safety Gate".to_string(),
+                        action: Some(action_type_to_str(cmd.action).to_string()),
+                        details: Some(reason.clone()),
+                    });
+                    return Ok(ExecutionReport {
+                        success: false,
+                        query: query.clone(),
+                        steps: steps_out,
+                        message: format!("Blocked: {}", reason),
+                        requires_confirm: false,
+                        pending_step_index: None,
+                    });
+                }
+                SafetyDecision::RequireConfirm { reason } => {
+                    if exec_mode != ExecutionMode::DryRun {
+                        *state.pending_execution.lock().unwrap() = Some((cmd.clone(), exec_mode));
+                        steps_out.push(StepInfo {
+                            step_index: 1,
+                            total_steps: 1,
+                            stage: "awaiting_confirm".to_string(),
+                            description: "User confirmation required".to_string(),
+                            action: Some(action_type_to_str(cmd.action).to_string()),
+                            details: Some(reason.clone()),
+                        });
+                        return Ok(ExecutionReport {
+                            success: true,
+                            query: query.clone(),
+                            steps: steps_out,
+                            message: format!("Confirmation required: {}", reason),
+                            requires_confirm: true,
+                            pending_step_index: Some(1),
+                        });
+                    }
+                }
+                SafetyDecision::AllowSilent => {}
+            }
+
+            if exec_mode == ExecutionMode::Interactive {
+                *state.pending_execution.lock().unwrap() = Some((cmd.clone(), exec_mode));
+                steps_out.push(StepInfo {
+                    step_index: 1,
+                    total_steps: 1,
+                    stage: "awaiting_confirm".to_string(),
+                    description: "Interactive mode: Confirm step".to_string(),
+                    action: Some(action_type_to_str(cmd.action).to_string()),
+                    details: Some(format!("Target: {}", target_str)),
+                });
+                return Ok(ExecutionReport {
+                    success: true,
+                    query: query.clone(),
+                    steps: steps_out,
+                    message: "Interactive mode confirmation".to_string(),
+                    requires_confirm: true,
+                    pending_step_index: Some(1),
+                });
+            }
+
+            let dry_run = exec_mode == ExecutionMode::DryRun;
+            let result = executor.execute(&cmd, dry_run);
+            let (stage, details) = format_execution_result(result);
+
+            steps_out.push(StepInfo {
+                step_index: 1,
+                total_steps: 1,
+                stage,
+                description: format!("Execute action '{}'", action_type_to_str(cmd.action)),
+                action: Some(action_type_to_str(cmd.action).to_string()),
+                details: Some(details),
+            });
+
+            return Ok(ExecutionReport {
+                success: true,
+                query: query.clone(),
+                steps: steps_out,
+                message: "Completed successfully".to_string(),
+                requires_confirm: false,
+                pending_step_index: None,
+            });
+        }
+    }
+
+    // 2. Compound or Multi-Step Planning
+    let clauses = split_compound_prompt(trimmed);
+    let plan = if clauses.len() > 1 {
+        let mut steps = Vec::new();
+        for clause in &clauses {
+            if let Some(cmd) = FastRuleRouter::route(clause) {
+                steps.push(cmd);
+            } else {
+                steps.push(ActionCommand {
+                    action: ActionType::LaunchApp,
+                    target: Some(clause.clone()),
+                    folder: None,
+                    args: None,
+                    platform: Platform::Pc,
+                    confidence: 0.9,
+                });
+            }
+        }
+        MultiStepPlan { steps }
+    } else {
+        match parse_plan(trimmed) {
+            Ok(p) => p,
+            Err(_) => MultiStepPlan {
+                steps: vec![ActionCommand {
+                    action: ActionType::LaunchApp,
+                    target: Some(trimmed.to_string()),
+                    folder: None,
+                    args: None,
+                    platform: Platform::Pc,
+                    confidence: 0.85,
+                }],
+            },
+        }
+    };
+
+    let total = plan.steps.len();
+    steps_out.push(StepInfo {
+        step_index: 1,
+        total_steps: total,
+        stage: "planned".to_string(),
+        description: format!("Formulated plan with {} step(s)", total),
+        action: None,
+        details: Some(format!("Clauses: {:?}", clauses)),
+    });
+
+    for (idx, step) in plan.steps.iter().enumerate() {
+        let step_num = idx + 1;
+        let decision = SafetyGate::evaluate(step);
+        match decision {
+            SafetyDecision::Block { reason } => {
+                steps_out.push(StepInfo {
+                    step_index: step_num,
+                    total_steps: total,
+                    stage: "blocked".to_string(),
+                    description: format!("Step {} blocked by Safety Policy", step_num),
+                    action: Some(action_type_to_str(step.action).to_string()),
+                    details: Some(reason.clone()),
+                });
+                return Ok(ExecutionReport {
+                    success: false,
+                    query: query.clone(),
+                    steps: steps_out,
+                    message: format!("Step {} blocked: {}", step_num, reason),
+                    requires_confirm: false,
+                    pending_step_index: None,
+                });
+            }
+            SafetyDecision::RequireConfirm { reason } => {
+                if exec_mode != ExecutionMode::DryRun {
+                    *state.pending_execution.lock().unwrap() = Some((step.clone(), exec_mode));
+                    steps_out.push(StepInfo {
+                        step_index: step_num,
+                        total_steps: total,
+                        stage: "awaiting_confirm".to_string(),
+                        description: format!("Step {} requires user confirmation", step_num),
+                        action: Some(action_type_to_str(step.action).to_string()),
+                        details: Some(reason.clone()),
+                    });
+                    return Ok(ExecutionReport {
+                        success: true,
+                        query: query.clone(),
+                        steps: steps_out,
+                        message: format!("Confirm step {}: {}", step_num, reason),
+                        requires_confirm: true,
+                        pending_step_index: Some(step_num),
+                    });
+                }
+            }
+            SafetyDecision::AllowSilent => {}
+        }
+
+        if exec_mode == ExecutionMode::Interactive {
+            let target_str = step.target.as_deref().unwrap_or("").to_string();
+            *state.pending_execution.lock().unwrap() = Some((step.clone(), exec_mode));
+            steps_out.push(StepInfo {
+                step_index: step_num,
+                total_steps: total,
+                stage: "awaiting_confirm".to_string(),
+                description: format!("Interactive mode: Step {} confirmation", step_num),
+                action: Some(action_type_to_str(step.action).to_string()),
+                details: Some(format!("Target: {}", target_str)),
+            });
+            return Ok(ExecutionReport {
+                success: true,
+                query: query.clone(),
+                steps: steps_out,
+                message: format!("Confirm step {} of {}", step_num, total),
+                requires_confirm: true,
+                pending_step_index: Some(step_num),
+            });
+        }
+
+        let dry_run = exec_mode == ExecutionMode::DryRun;
+        let res = executor.execute(step, dry_run);
+        let (stage, details) = format_execution_result(res);
+
+        steps_out.push(StepInfo {
+            step_index: step_num,
+            total_steps: total,
+            stage,
+            description: format!("Step {}: {}", step_num, action_type_to_str(step.action)),
+            action: Some(action_type_to_str(step.action).to_string()),
+            details: Some(details),
+        });
+    }
+
+    Ok(ExecutionReport {
+        success: true,
+        query,
+        steps: steps_out,
+        message: "Plan executed successfully".to_string(),
+        requires_confirm: false,
+        pending_step_index: None,
+    })
+}
+
+#[tauri::command]
+fn confirm_step(
+    step_index: usize,
+    proceed: bool,
+    state: State<AppState>,
+) -> Result<ExecutionReport, String> {
+    let pending = state.pending_execution.lock().unwrap().take();
+    let (cmd, mode) = match pending {
+        Some(p) => p,
+        None => return Err("No pending step awaiting confirmation".to_string()),
+    };
+
+    let mut steps_out = Vec::new();
+    if !proceed {
+        steps_out.push(StepInfo {
+            step_index,
+            total_steps: step_index,
+            stage: "failed".to_string(),
+            description: format!("Step {} skipped or cancelled by user", step_index),
+            action: Some(action_type_to_str(cmd.action).to_string()),
+            details: Some("User chose not to proceed".to_string()),
+        });
+        return Ok(ExecutionReport {
+            success: false,
+            query: "User skipped".to_string(),
+            steps: steps_out,
+            message: "Step skipped".to_string(),
+            requires_confirm: false,
+            pending_step_index: None,
+        });
+    }
+
+    let executor = create_default_executor(mode == ExecutionMode::DryRun);
+    let dry_run = mode == ExecutionMode::DryRun;
+    let res = executor.execute(&cmd, dry_run);
+    let (stage, details) = format_execution_result(res);
+
+    steps_out.push(StepInfo {
+        step_index,
+        total_steps: step_index,
+        stage,
+        description: format!(
+            "Confirmed and executed '{}'",
+            action_type_to_str(cmd.action)
+        ),
+        action: Some(action_type_to_str(cmd.action).to_string()),
+        details: Some(details),
+    });
+
+    Ok(ExecutionReport {
+        success: true,
+        query: "Confirmed step".to_string(),
+        steps: steps_out,
+        message: "Step executed successfully".to_string(),
+        requires_confirm: false,
+        pending_step_index: None,
+    })
+}
+
+#[tauri::command]
+fn list_models() -> Result<Vec<ModelReleaseInfo>, String> {
+    let cfg = AppConfig::load();
+    let mgr = ModelManager::new(None)?;
+    mgr.list_available_models(cfg.active_model_tag.as_deref())
+}
+
+#[tauri::command]
+fn download_model(tag: String) -> Result<ModelDownloadInfo, String> {
+    let mgr = ModelManager::new(None)?;
+    mgr.download_model(&tag).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn activate_model(tag: String) -> Result<(), String> {
+    let mut cfg = AppConfig::load();
+    cfg.active_model_tag = Some(tag);
+    let path = AppConfig::default_config_path();
+    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_model(tag: String) -> Result<(), String> {
+    let mgr = ModelManager::new(None)?;
+    let models = mgr.list_available_models(None)?;
+    for m in models {
+        if m.tag == tag {
+            let file_path = mgr.cache_dir().join(&m.filename);
+            if file_path.exists() {
+                std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
+            }
+            return Ok(());
+        }
+    }
+    Err(format!("Model with tag {} not found", tag))
+}
+
+#[tauri::command]
+fn setup_runtime(model_tag: Option<String>) -> Result<SetupResult, String> {
+    let tag = model_tag.unwrap_or_else(|| "v0.3.0-model".to_string());
+    silent_exec_pc::run_setup(Some(&tag), None, None).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn toggle_lan_bridge(enable: bool, state: State<AppState>) -> Result<BridgeStatusResponse, String> {
+    let mut guard = state.bridge_handle.lock().unwrap();
+
+    if enable {
+        if guard.is_some() {
+            let (addr, _, _) = guard.as_ref().unwrap();
+            return Ok(BridgeStatusResponse {
+                is_running: true,
+                address: Some(format!("http://{}", addr)),
+                token: Some("silent-exec-secret".to_string()),
+            });
+        }
+
+        let config = BridgeConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8765,
+            token: "silent-exec-secret".to_string(),
+            dry_run: false,
+            server_url: None,
+            roots: vec![PathBuf::from(".")],
+        };
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let (addr, handle) = start_bridge_server(config, Some(shutdown.clone()))?;
+        *guard = Some((addr, shutdown, handle));
+
+        Ok(BridgeStatusResponse {
+            is_running: true,
+            address: Some(format!("http://{}", addr)),
+            token: Some("silent-exec-secret".to_string()),
+        })
+    } else {
+        if let Some((_, shutdown, handle)) = guard.take() {
+            shutdown.store(true, Ordering::SeqCst);
+            let _ = handle.join();
+        }
+        Ok(BridgeStatusResponse {
+            is_running: false,
+            address: None,
+            token: None,
+        })
+    }
+}
+
+#[tauri::command]
+fn check_updates() -> Result<UpdateInfoDto, String> {
+    let updater = SelfUpdater::default();
+    let info = updater.check_for_update()?;
+    Ok(UpdateInfoDto {
+        current_version: info.current_version,
+        latest_version: info.latest_version,
+        tag_name: info.tag_name,
+        download_url: info.download_url,
+        sha256_url: info.sha256_url,
+        update_available: info.update_available,
+    })
+}
+
+// ---------------------------------------------------------
+// Main Entrypoint
+// ---------------------------------------------------------
+
+fn main() {
+    let app_state = AppState {
+        bridge_handle: Mutex::new(None),
+        pending_execution: Mutex::new(None),
+    };
+
+    tauri::Builder::default()
+        .manage(app_state)
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .setup(|app| {
+            // Setup Tray Icon & Context Menu
+            let show_i = MenuItem::with_id(app, "show", "Show SilentExec", true, None::<&str>)?;
+            let hide_i = MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "hide" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Register global shortcut: Alt+Space
+            let shortcut = "Alt+Space".parse::<Shortcut>().unwrap();
+            let app_handle = app.handle().clone();
+            let _ = app
+                .global_shortcut()
+                .on_shortcut(shortcut, move |_app, _sc, _ev| {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        if window.is_visible().unwrap_or(false) {
+                            let _ = window.hide();
+                        } else {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_app_config,
+            save_app_config,
+            execute_query,
+            confirm_step,
+            list_models,
+            download_model,
+            activate_model,
+            delete_model,
+            setup_runtime,
+            toggle_lan_bridge,
+            check_updates
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running SilentExec Desktop application");
+}

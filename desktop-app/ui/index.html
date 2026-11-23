@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SilentExec Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <div class="app-layout">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 32 32" fill="none" class="icon-svg">
+            <rect width="32" height="32" rx="8" fill="#0f172a" stroke="#10b981" stroke-width="1.5"/>
+            <path d="M7 11h18M7 7h18" stroke="#334155" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M8 18l4 3-4 3" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <polygon points="20,13 14,21 18,21 15,27 24,19 19,19" fill="#10b981"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1 class="brand-title">SilentExec</h1>
+          <span class="brand-subtitle" id="labelSubtitle">وكيل سطح المكتب الذكي</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="header-nav">
+        <button class="nav-tab active" data-tab="agent" id="tabAgent">
+          <span class="tab-icon">⚡</span>
+          <span class="tab-text" data-i18n="tab_agent">الوكيل</span>
+        </button>
+        <button class="nav-tab" data-tab="models" id="tabModels">
+          <span class="tab-icon">📦</span>
+          <span class="tab-text" data-i18n="tab_models">النماذج</span>
+        </button>
+        <button class="nav-tab" data-tab="settings" id="tabSettings">
+          <span class="tab-icon">⚙️</span>
+          <span class="tab-text" data-i18n="tab_settings">الإعدادات</span>
+        </button>
+      </nav>
+
+      <!-- Quick Controls: Theme & Lang -->
+      <div class="header-actions">
+        <div class="status-indicator" id="modelStatusPill" title="النموذج النشط">
+          <span class="status-dot"></span>
+          <span class="status-label" id="activeModelName">Qwen 1.5B</span>
+        </div>
+        <button class="icon-btn" id="langToggleBtn" title="تغيير اللغة / Switch Language">
+          <span id="langBadge">EN</span>
+        </button>
+        <button class="icon-btn" id="themeToggleBtn" title="تبديل المظهر / Toggle Theme">
+          <span id="themeIcon">☀️</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- TAB 1: AGENT CONSOLE -->
+      <section class="tab-content active" id="viewAgent">
+        <!-- Command Input Card -->
+        <div class="glass-card command-box-card">
+          <div class="card-meta">
+            <span class="section-tag" data-i18n="console_heading">موجه الأوامر الذكي</span>
+            <div class="mode-pill mode-silent" id="currentModeBadge">
+              <span class="mode-dot"></span>
+              <span id="currentModeLabel" data-i18n="mode_silent">صامت</span>
+            </div>
+          </div>
+
+          <div class="input-wrapper">
+            <textarea 
+              id="promptInput" 
+              class="command-textarea" 
+              placeholder="اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح واتساب وابحث عن أحمد وارسل له مرحبا)..."
+              rows="3"
+            ></textarea>
+            <div class="input-actions">
+              <button class="btn btn-secondary" id="stopBtn" disabled>
+                <span class="btn-icon">⏹</span>
+                <span data-i18n="btn_stop">إيقاف</span>
+              </button>
+              <button class="btn btn-primary" id="runBtn">
+                <span class="btn-icon">⚡</span>
+                <span data-i18n="btn_run">تشغيل</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Suggestions Chips -->
+          <div class="quick-examples">
+            <span class="examples-label" data-i18n="quick_examples_label">أمثلة سريعة:</span>
+            <div class="chips-container" id="quickChips">
+              <!-- Dynamically populated per language -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Confirmation Bar (Shown in Interactive Mode) -->
+        <div class="glass-card confirmation-bar" id="confirmBar" style="display: none;">
+          <div class="confirm-content">
+            <div class="confirm-icon">⚠️</div>
+            <div class="confirm-text">
+              <h4 id="confirmTitle" data-i18n="confirm_required_title">تأكيد تنفيذ الخطوة</h4>
+              <p id="confirmDesc">هل تريد بالتأكيد تشغيل هذا الإجراء؟</p>
+            </div>
+          </div>
+          <div class="confirm-actions">
+            <button class="btn btn-sm btn-primary" id="confirmProceedBtn">
+              <span data-i18n="btn_execute_step">تنفيذ الخطوة</span>
+            </button>
+            <button class="btn btn-sm btn-secondary" id="confirmSkipBtn">
+              <span data-i18n="btn_skip_step">تخطي</span>
+            </button>
+            <button class="btn btn-sm btn-danger" id="confirmCancelBtn">
+              <span data-i18n="btn_cancel">إلغاء</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step-by-Step Execution Timeline Card -->
+        <div class="glass-card timeline-card">
+          <div class="timeline-header">
+            <h3 class="card-title" data-i18n="timeline_title">مخطط التنفيذ المباشر</h3>
+            <span class="step-counter" id="stepCounterLabel" data-i18n="status_idle">جاهز للأوامر</span>
+          </div>
+
+          <div class="timeline-body" id="timelineContainer">
+            <div class="empty-timeline-state">
+              <div class="empty-icon">🎯</div>
+              <p data-i18n="empty_timeline_hint">أدخل أمراً أعلاه لمشاهدة تحليل المهام وتنفيذ الخطوات ومراقبة الأمان في الوقت الفعلي.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: MODELS HUB -->
+      <section class="tab-content" id="viewModels">
+        <div class="glass-card runtime-setup-card">
+          <div class="runtime-info">
+            <div class="runtime-icon">🚀</div>
+            <div>
+              <h3 class="card-title" data-i18n="runtime_title">بيئة التشغيل المحلية (llama-server)</h3>
+              <p class="card-desc" data-i18n="runtime_desc">تتيح معالجة الذكاء الاصطناعي محلياً وبسرعة فائقة دون اتصال بالإنترنت أو الاعتماد على سحابة خارجية.</p>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="setupRuntimeBtn">
+            <span class="btn-icon">⚡</span>
+            <span data-i18n="btn_setup_runtime">إعداد بيئة التشغيل تلقائياً</span>
+          </button>
+        </div>
+
+        <div class="glass-card models-list-card">
+          <div class="models-header">
+            <div>
+              <h3 class="card-title" data-i18n="models_catalog_title">مستودع نماذج SilentExec</h3>
+              <p class="card-desc" data-i18n="models_catalog_desc">نماذج مخصصة تم تدريبها بأسلوب QLoRA للتحكم في سطح المكتب باللغتين العربية والإنجليزية.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="refreshModelsBtn">
+              <span class="btn-icon">🔄</span>
+              <span data-i18n="btn_refresh_models">تحديث النماذج</span>
+            </button>
+          </div>
+
+          <div class="models-grid" id="modelsGrid">
+            <!-- Dynamically populated models cards -->
+            <div class="loading-state">
+              <div class="spinner"></div>
+              <p data-i18n="loading_models">جارٍ استعلام مستودع GitHub Releases...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: SETTINGS -->
+      <section class="tab-content" id="viewSettings">
+        <!-- Appearance & Language Card -->
+        <div class="glass-card settings-card">
+          <h3 class="settings-group-title" data-i18n="settings_general_group">الإعدادات العامة واللغة</h3>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label" data-i18n="setting_lang_label">لغة الواجهة</span>
+              <span class="setting-desc" data-i18n="setting_lang_desc">اختر اللغة المفضلة للواجهة والموجهات</span>
+            </div>
+            <div class="btn-group" id="langSelectorGroup">
+              <button class="btn-segment active" data-val="ar">العربية (RTL)</button>
+              <button class="btn-segment" data-val="en">English (LTR)</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label" data-i18n="setting_theme_label">المظهر المرئي</span>
+              <span class="setting-desc" data-i18n="setting_theme_desc">التبديل بين النمط الداكن والفاتح</span>
+            </div>
+            <div class="btn-group" id="themeSelectorGroup">
+              <button class="btn-segment active" data-val="dark" data-i18n="theme_dark">داكن</button>
+              <button class="btn-segment" data-val="light" data-i18n="theme_light">فاتح</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Execution Mode & Fast Router Card -->
+        <div class="glass-card settings-card">
+          <h3 class="settings-group-title" data-i18n="settings_execution_group">وضع التنفيذ وبوابات الأمان</h3>
+          
+          <div class="mode-options-grid">
+            <div class="mode-option-card active" data-mode="silent">
+              <div class="mode-opt-header">
+                <span class="mode-badge silent" data-i18n="mode_silent">صامت</span>
+                <span class="mode-check">✓</span>
+              </div>
+              <h4 class="mode-opt-title" data-i18n="mode_silent_title">تنفيذ ذاتي صامت</h4>
+              <p class="mode-opt-desc" data-i18n="mode_silent_desc">تنفيذ الأوامر المصرح بها فوراً في الخلفية مع تسجيل الأحداث دون مقاطعة المستخدم.</p>
+            </div>
+
+            <div class="mode-option-card" data-mode="interactive">
+              <div class="mode-opt-header">
+                <span class="mode-badge interactive" data-i18n="mode_interactive">تفاعلي</span>
+                <span class="mode-check">✓</span>
+              </div>
+              <h4 class="mode-opt-title" data-i18n="mode_interactive_title">تأكيد خطوة بخطوة</h4>
+              <p class="mode-opt-desc" data-i18n="mode_interactive_desc">طلب موافقة صريحة قبل أي إجراء مهم لتوفير أقصى درجات الأمان والرقابة.</p>
+            </div>
+
+            <div class="mode-option-card" data-mode="dry_run">
+              <div class="mode-opt-header">
+                <span class="mode-badge dry_run" data-i18n="mode_dry_run">تجريبي</span>
+                <span class="mode-check">✓</span>
+              </div>
+              <h4 class="mode-opt-title" data-i18n="mode_dry_run_title">محاكاة آمنة (Dry-Run)</h4>
+              <p class="mode-opt-desc" data-i18n="mode_dry_run_desc">فحص الخطة ومحاكاة التنفيذ واختبار الصلاحيات دون إجراء أي تعديل حقيقي على النظام.</p>
+            </div>
+          </div>
+
+          <div class="setting-row" style="margin-top: 16px;">
+            <div class="setting-info">
+              <span class="setting-label" data-i18n="setting_fast_router_label">موجّه القواعد السريعة (Fast Rule Router)</span>
+              <span class="setting-desc" data-i18n="setting_fast_router_desc">استجابة فورية فائقة السرعة (&lt;15ms) للأوامر المباشرة مع استثناء الأوامر المركبة</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="fastRouterToggle" checked>
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- LAN Bridge Server for Phone Pairing Card -->
+        <div class="glass-card settings-card">
+          <h3 class="settings-group-title" data-i18n="settings_bridge_group">خادم جسر الشبكة المحلية (LAN Bridge)</h3>
+          <p class="card-desc" data-i18n="settings_bridge_desc">ربط وتكامل تطبيق الهاتف (Android Agent) مع الحاسوب عبر الشبكة المحلية لتنفيذ الأوامر المشتركة.</p>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label" data-i18n="bridge_service_toggle">حالة خادم الجسر</span>
+              <span class="setting-desc" id="bridgeStatusText" data-i18n="bridge_status_stopped">متوقف</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="lanBridgeToggle">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <div class="bridge-details" id="bridgeDetailsBox" style="display: none;">
+            <div class="bridge-detail-item">
+              <span class="detail-label" data-i18n="bridge_address_label">عنوان الاتصال:</span>
+              <code class="detail-val" id="bridgeAddressVal">http://192.168.1.50:8765</code>
+              <button class="btn btn-xs btn-secondary" id="copyBridgeAddrBtn" data-i18n="btn_copy">نسخ</button>
+            </div>
+            <div class="bridge-detail-item">
+              <span class="detail-label" data-i18n="bridge_token_label">رمز التوثيق:</span>
+              <code class="detail-val" id="bridgeTokenVal">silent-exec-secret</code>
+              <button class="btn btn-xs btn-secondary" id="copyBridgeTokenBtn" data-i18n="btn_copy">نسخ</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Updates Card -->
+        <div class="glass-card settings-card">
+          <div class="update-card-content">
+            <div>
+              <h3 class="settings-group-title" data-i18n="update_title">تحديثات SilentExec Desktop</h3>
+              <p class="card-desc" id="versionLabel">الإصدار الحالي: v0.4.0 (Windows x86_64)</p>
+            </div>
+            <button class="btn btn-secondary" id="checkUpdatesBtn">
+              <span class="btn-icon">🔄</span>
+              <span data-i18n="btn_check_updates">التحقق من التحديثات</span>
+            </button>
+          </div>
+          <div id="updateStatusMsg" class="update-status-box" style="display: none;"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Global Toast Notification -->
+    <div id="toast" class="toast-notification"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

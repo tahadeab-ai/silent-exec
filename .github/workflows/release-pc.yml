@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.1.0-pc)'
+        description: 'Release Tag (e.g. v0.4.0-pc)'
         required: true
-        default: 'v0.1.0-pc'
+        default: 'v0.4.0-pc'
 
 env:
   CARGO_TERM_COLOR: always
@@ -31,13 +31,17 @@ jobs:
       - name: Build Release Binary (silent-exec-pc)
         run: cargo build --release --bin silent-exec-pc --manifest-path core-rust/Cargo.toml
 
+      - name: Build Release Desktop GUI App (SilentExec-Desktop)
+        run: cargo build --release --manifest-path desktop-app/src-tauri/Cargo.toml
+
       - name: Package Assets & Generate Checksum
         shell: bash
         run: |
           mkdir -p release_assets
           cp core-rust/target/release/silent-exec-pc.exe release_assets/
+          cp desktop-app/src-tauri/target/release/silent-exec-desktop.exe release_assets/SilentExec-Desktop-x64.exe
           cd release_assets
-          sha256sum silent-exec-pc.exe > SHA256SUMS.txt
+          sha256sum silent-exec-pc.exe SilentExec-Desktop-x64.exe > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Determine Release Tag
@@ -55,13 +59,16 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "SilentExec PC Agent ${{ env.RELEASE_TAG }}"
           body: |
-            Automated production build for SilentExec PC Agent (`silent-exec-pc.exe`).
+            Automated production build for SilentExec PC Agent and Desktop GUI.
             
             - **Platform**: Windows x86_64
+            - **Desktop GUI**: `SilentExec-Desktop-x64.exe` (Tauri v2, Zero Node.js / Zero npm)
+            - **CLI / Bar**: `silent-exec-pc.exe`
             - **Safety Gate**: Deterministic 3-Tier validation with `--dry-run` and confirmation gates
             - **NLP / Indexer**: Sub-15ms Arabic & English Unicode fuzzy file indexer
           files: |
             release_assets/silent-exec-pc.exe
+            release_assets/SilentExec-Desktop-x64.exe
             release_assets/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
