@@ -184,17 +184,23 @@ impl LlamaBackend {
         ActionCommand::from_json(&clean_json)
     }
 
-    /// Execute completion against `llama-server` `/completion` endpoint via `curl`.
-    fn complete_server(url: &str, prompt: &str, grammar: &str) -> Result<String, String> {
-        let endpoint = format!("{}/completion", url.trim_end_matches('/'));
-
-        let payload = serde_json::json!({
+    /// Generates the canonical JSON request payload for llama-server `/completion` endpoint.
+    /// Explicitly enables `"cache_prompt": true` for KV-cache reuse.
+    pub fn build_completion_payload(prompt: &str, grammar: &str) -> serde_json::Value {
+        serde_json::json!({
             "prompt": prompt,
             "grammar": grammar,
             "temperature": 0.0,
             "n_predict": 160,
-            "stream": false
-        });
+            "stream": false,
+            "cache_prompt": true
+        })
+    }
+
+    /// Execute completion against `llama-server` `/completion` endpoint via `curl`.
+    fn complete_server(url: &str, prompt: &str, grammar: &str) -> Result<String, String> {
+        let endpoint = format!("{}/completion", url.trim_end_matches('/'));
+        let payload = Self::build_completion_payload(prompt, grammar);
 
         let payload_str = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize request payload: {}", e))?;

@@ -19,6 +19,16 @@ pub struct ModelDownloadInfo {
     pub already_cached: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelReleaseInfo {
+    pub tag: String,
+    pub name: String,
+    pub filename: String,
+    pub size_bytes: u64,
+    pub is_cached: bool,
+    pub is_active: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModelManager {
     cache_dir: PathBuf,
@@ -251,5 +261,86 @@ impl ModelManager {
             size_bytes,
             already_cached: false,
         })
+    }
+
+    /// Lists all available *-model releases from GitHub, including sizes and local cache status.
+    pub fn list_available_models(
+        &self,
+        active_tag: Option<&str>,
+    ) -> Result<Vec<ModelReleaseInfo>, String> {
+        let api_url = format!("https://api.github.com/repos/{}/releases", self.repo);
+
+        let output = Command::new("curl")
+            .args([
+                "-sSfL",
+                "-H",
+                "User-Agent: silent-exec-pc",
+                "-H",
+                "Accept: application/vnd.github.v3+json",
+                &api_url,
+            ])
+            .output()
+            .map_err(|e| format!("Failed to invoke curl: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "Failed to fetch model releases: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        let releases_json: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .map_err(|e| format!("Failed to parse releases JSON: {}", e))?;
+
+        let releases = releases_json
+            .as_array()
+            .ok_or_else(|| "Releases response is not an array".to_string())?;
+
+        let mut models = Vec::new();
+
+        for release in releases {
+            let tag = match release.get("tag_name").and_then(|t| t.as_str()) {
+                Some(t) => t,
+                None => continue,
+            };
+
+            if tag.contains("-model") {
+                let release_name = release
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or(tag)
+                    .to_string();
+
+                let mut gguf_filename = String::new();
+                let mut size_bytes = 0u64;
+
+                if let Some(assets) = release.get("assets").and_then(|a| a.as_array()) {
+                    for asset in assets {
+                        let name = asset.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                        if name.ends_with(".gguf") {
+                            gguf_filename = name.to_string();
+                            size_bytes = asset.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
+                            break;
+                        }
+                    }
+                }
+
+                if !gguf_filename.is_empty() {
+                    let is_cached = self.cache_dir.join(&gguf_filename).exists();
+                    let is_active = active_tag == Some(tag);
+
+                    models.push(ModelReleaseInfo {
+                        tag: tag.to_string(),
+                        name: release_name,
+                        filename: gguf_filename,
+                        size_bytes,
+                        is_cached,
+                        is_active,
+                    });
+                }
+            }
+        }
+
+        Ok(models)
     }
 }

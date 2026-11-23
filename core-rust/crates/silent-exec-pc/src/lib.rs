@@ -1,15 +1,20 @@
 //! SilentExec PC Executor, Arabic/English Fuzzy Indexer, Inference & LAN Bridge Library
 
 pub mod bridge;
+pub mod config;
 pub mod executor;
+pub mod fast_router;
 pub mod indexer;
 pub mod inference;
 pub mod model_manager;
 pub mod runtime_manager;
 pub mod ui_win32;
+pub mod updater;
 
 pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
+pub use config::AppConfig;
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
+pub use fast_router::FastRuleRouter;
 pub use indexer::{
     compute_fuzzy_score, normalize_arabic_english, FileIndexer, IndexedItem, ScoredMatch,
 };
@@ -17,7 +22,7 @@ pub use inference::{
     build_chatml_prompt, extract_action_json, format_prompt, LlamaBackend, DEFAULT_SYSTEM_PROMPT,
     EMBEDDED_ACTION_GBNF,
 };
-pub use model_manager::{ModelDownloadInfo, ModelManager};
+pub use model_manager::{ModelDownloadInfo, ModelManager, ModelReleaseInfo};
 pub use runtime_manager::{
     check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
     select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
@@ -25,6 +30,7 @@ pub use runtime_manager::{
 pub use ui_win32::{
     map_result_to_ui_outcome, run_command_bar, string_to_utf16, utf16_to_string, UiActionOutcome,
 };
+pub use updater::{SelfUpdater, UpdateInfo};
 
 #[cfg(test)]
 mod tests {
@@ -1123,5 +1129,327 @@ mod tests {
         let prompt_sub = bar.handle_submit("  افتح ملف التقرير  ".to_string());
         assert_eq!(prompt_sub, Some("افتح ملف التقرير".to_string()));
         assert!(!bar.is_visible);
+    }
+
+    #[test]
+    fn test_48_fast_router_yemeni_and_msa_back_and_home() {
+        use crate::fast_router::FastRuleRouter;
+
+        // Back commands
+        for cmd_str in ["ارجع", "ارجع للخلف", "رجوع", "باك", "ارجع ورا", "سوي باك"]
+        {
+            let res = FastRuleRouter::route(cmd_str).expect("Should route back command");
+            assert_eq!(res.action, ActionType::UiBack);
+            assert_eq!(res.confidence, 1.0);
+        }
+
+        // Home commands
+        for cmd_str in [
+            "الشاشة الرئيسية",
+            "سطح المكتب",
+            "الهوم",
+            "روح للشاشة الرئيسية",
+            "ارجع لسطح المكتب",
+        ] {
+            let res = FastRuleRouter::route(cmd_str).expect("Should route home command");
+            assert_eq!(res.action, ActionType::UiHome);
+            assert_eq!(res.confidence, 1.0);
+        }
+    }
+
+    #[test]
+    fn test_49_fast_router_english_back_and_home() {
+        use crate::fast_router::FastRuleRouter;
+
+        for cmd_str in ["back", "go back", "navigate back", "return"] {
+            let res = FastRuleRouter::route(cmd_str).expect("Should route english back");
+            assert_eq!(res.action, ActionType::UiBack);
+            assert_eq!(res.confidence, 1.0);
+        }
+
+        for cmd_str in ["desktop", "home", "home screen", "go home", "show desktop"] {
+            let res = FastRuleRouter::route(cmd_str).expect("Should route english home");
+            assert_eq!(res.action, ActionType::UiHome);
+            assert_eq!(res.confidence, 1.0);
+        }
+    }
+
+    #[test]
+    fn test_50_fast_router_scroll_directions() {
+        use crate::fast_router::FastRuleRouter;
+
+        let down_res = FastRuleRouter::route("انزل لتحت").expect("Should route down");
+        assert_eq!(down_res.action, ActionType::UiScroll);
+        assert_eq!(
+            down_res
+                .args
+                .as_ref()
+                .and_then(|a| a.get("direction"))
+                .and_then(|d| d.as_str()),
+            Some("down")
+        );
+
+        let up_res = FastRuleRouter::route("scroll up").expect("Should route up");
+        assert_eq!(up_res.action, ActionType::UiScroll);
+        assert_eq!(
+            up_res
+                .args
+                .as_ref()
+                .and_then(|a| a.get("direction"))
+                .and_then(|d| d.as_str()),
+            Some("up")
+        );
+
+        let left_res = FastRuleRouter::route("swipe left").expect("Should route left");
+        assert_eq!(left_res.action, ActionType::UiScroll);
+        assert_eq!(
+            left_res
+                .args
+                .as_ref()
+                .and_then(|a| a.get("direction"))
+                .and_then(|d| d.as_str()),
+            Some("left")
+        );
+
+        let right_res = FastRuleRouter::route("مرر لليمين").expect("Should route right");
+        assert_eq!(right_res.action, ActionType::UiScroll);
+        assert_eq!(
+            right_res
+                .args
+                .as_ref()
+                .and_then(|a| a.get("direction"))
+                .and_then(|d| d.as_str()),
+            Some("right")
+        );
+    }
+
+    #[test]
+    fn test_51_fast_router_set_volume() {
+        use crate::fast_router::FastRuleRouter;
+
+        let vol80 = FastRuleRouter::route("ارفع الصوت 80").expect("Should route volume 80");
+        assert_eq!(vol80.action, ActionType::SetVolume);
+        assert_eq!(
+            vol80
+                .args
+                .as_ref()
+                .and_then(|a| a.get("level"))
+                .and_then(|l| l.as_i64()),
+            Some(80)
+        );
+
+        let vol50 = FastRuleRouter::route("set volume to 50").expect("Should route volume 50");
+        assert_eq!(vol50.action, ActionType::SetVolume);
+        assert_eq!(
+            vol50
+                .args
+                .as_ref()
+                .and_then(|a| a.get("level"))
+                .and_then(|l| l.as_i64()),
+            Some(50)
+        );
+    }
+
+    #[test]
+    fn test_52_fast_router_open_folder() {
+        use crate::fast_router::FastRuleRouter;
+
+        let dl = FastRuleRouter::route("افتح التنزيلات").expect("Should route open downloads");
+        assert_eq!(dl.action, ActionType::OpenFolder);
+        assert_eq!(dl.target.as_deref(), Some("Downloads"));
+
+        let docs = FastRuleRouter::route("مجلد المستندات").expect("Should route documents");
+        assert_eq!(docs.action, ActionType::OpenFolder);
+        assert_eq!(docs.target.as_deref(), Some("Documents"));
+
+        let pics = FastRuleRouter::route("open pictures").expect("Should route pictures");
+        assert_eq!(pics.action, ActionType::OpenFolder);
+        assert_eq!(pics.target.as_deref(), Some("Pictures"));
+    }
+
+    #[test]
+    fn test_53_fast_router_fallback_to_none_for_complex() {
+        use crate::fast_router::FastRuleRouter;
+
+        // Complex queries that must fall back to LLM inference
+        assert!(FastRuleRouter::route("ابحث عن تقرير المبيعات في التنزيلات").is_none());
+        assert!(FastRuleRouter::route("click the green submit button on the left").is_none());
+        assert!(FastRuleRouter::route("اكتب مرحبا في شريط البحث").is_none());
+        assert!(FastRuleRouter::route("").is_none());
+    }
+
+    #[test]
+    fn test_54_config_persistence_roundtrip() {
+        use crate::config::AppConfig;
+
+        let temp_dir = TempDirGuard::new("config_test");
+        let cfg_path = temp_dir.path.join("config.json");
+
+        let mut config = AppConfig::default();
+        assert_eq!(config.language, "ar");
+        assert_eq!(config.mode, "silent");
+        assert!(config.fast_router_enabled);
+
+        // Update fields
+        config
+            .update(
+                Some("en"),
+                Some("dry_run"),
+                Some("v0.3.0-model"),
+                Some(false),
+            )
+            .expect("Valid update");
+        assert_eq!(config.language, "en");
+        assert_eq!(config.mode, "dry_run");
+        assert_eq!(config.active_model_tag.as_deref(), Some("v0.3.0-model"));
+        assert!(!config.fast_router_enabled);
+
+        // Save and reload
+        config.save_to(&cfg_path).expect("Should save config");
+        let loaded = AppConfig::load_from(&cfg_path).expect("Should load config");
+        assert_eq!(config, loaded);
+
+        // Invalid validation tests
+        assert!(config.update(Some("fr"), None, None, None).is_err());
+        assert!(config
+            .update(None, Some("unsafe_mode"), None, None)
+            .is_err());
+    }
+
+    #[test]
+    fn test_55_updater_version_comparison() {
+        use crate::updater::SelfUpdater;
+
+        assert_eq!(SelfUpdater::parse_version("v0.3.0-pc"), (0, 3, 0));
+        assert_eq!(SelfUpdater::parse_version("0.3.0"), (0, 3, 0));
+        assert_eq!(SelfUpdater::parse_version("v1.2.3"), (1, 2, 3));
+
+        // Newer version comparisons
+        assert!(SelfUpdater::is_newer("0.3.0", "v0.3.1-pc"));
+        assert!(SelfUpdater::is_newer("0.3.0", "v0.4.0-pc"));
+        assert!(SelfUpdater::is_newer("0.3.0", "v1.0.0-pc"));
+
+        // Same or older
+        assert!(!SelfUpdater::is_newer("0.3.0", "v0.3.0-pc"));
+        assert!(!SelfUpdater::is_newer("0.3.0", "v0.2.0-pc"));
+        assert!(!SelfUpdater::is_newer("0.3.0", "v0.1.0-pc"));
+    }
+
+    #[test]
+    fn test_56_cache_prompt_payload_verification() {
+        use crate::inference::{LlamaBackend, DEFAULT_SYSTEM_PROMPT};
+
+        let prompt = "test query";
+        let grammar = "root ::= \"test\"";
+        let payload = LlamaBackend::build_completion_payload(prompt, grammar);
+
+        assert_eq!(
+            payload.get("cache_prompt").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            payload.get("temperature").and_then(|v| v.as_f64()),
+            Some(0.0)
+        );
+        assert_eq!(payload.get("prompt").and_then(|v| v.as_str()), Some(prompt));
+
+        // Invariant: System prompt must be 100% static (no dynamic timestamps or dates)
+        assert!(!DEFAULT_SYSTEM_PROMPT.contains("202"));
+        assert!(!DEFAULT_SYSTEM_PROMPT.contains("time"));
+        assert!(!DEFAULT_SYSTEM_PROMPT.contains("date"));
+    }
+
+    #[test]
+    fn test_57_dry_run_gui_actions() {
+        let temp = TempDirGuard::new("executor_gui_dry");
+        let indexer = FileIndexer::new(vec![temp.path.clone()]);
+        let executor = PcExecutor::new(indexer, true); // dry_run = true
+
+        let gui_cmds = [
+            ActionCommand {
+                action: ActionType::UiClick,
+                target: Some("submit_button".to_string()),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiType,
+                target: Some("search_bar".to_string()),
+                folder: None,
+                args: Some(serde_json::json!({"text": "hello"})),
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiScroll,
+                target: None,
+                folder: None,
+                args: Some(serde_json::json!({"direction": "down"})),
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiBack,
+                target: None,
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+            ActionCommand {
+                action: ActionType::UiHome,
+                target: None,
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            },
+        ];
+
+        for cmd in &gui_cmds {
+            let res = executor.execute(cmd, false);
+            match res {
+                ExecutionResult::DryRun {
+                    action, message, ..
+                } => {
+                    assert_eq!(action, action_type_to_str(cmd.action));
+                    assert!(message.contains("Would"));
+                }
+                other => panic!("Expected DryRun for {:?}, got {:?}", cmd.action, other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_58_live_gui_actions_execution() {
+        let temp = TempDirGuard::new("executor_gui_live");
+        let indexer = FileIndexer::new(vec![temp.path.clone()]);
+        let executor = PcExecutor::new(indexer, false); // live mode
+
+        let cmd_home = ActionCommand {
+            action: ActionType::UiHome,
+            target: None,
+            folder: None,
+            args: None,
+            platform: Platform::Pc,
+            confidence: 0.95,
+        };
+
+        let res = executor.execute(&cmd_home, false);
+        match res {
+            ExecutionResult::Success {
+                action, details, ..
+            } => {
+                assert_eq!(action, "ui_home");
+                assert!(
+                    details.contains("home")
+                        || details.contains("desktop")
+                        || details.contains("via")
+                );
+            }
+            other => panic!("Expected Success for live UiHome, got {:?}", other),
+        }
     }
 }

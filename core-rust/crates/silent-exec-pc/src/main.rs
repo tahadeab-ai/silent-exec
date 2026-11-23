@@ -2,8 +2,9 @@
 
 use silent_exec_core::ActionCommand;
 use silent_exec_pc::{
-    ensure_llama_server_running, run_setup, BridgeConfig, ExecutionResult, FileIndexer,
-    LlamaBackend, ModelManager, PcExecutor, RuntimeManager,
+    ensure_llama_server_running, run_setup, AppConfig, BridgeConfig, ExecutionResult,
+    FastRuleRouter, FileIndexer, LlamaBackend, ModelManager, PcExecutor, RuntimeManager,
+    SelfUpdater,
 };
 use std::fs;
 use std::io::{self, BufRead, Read};
@@ -11,7 +12,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn print_usage() {
-    eprintln!("SilentExec PC Execution Agent, LAN Bridge & Model Manager");
+    eprintln!(
+        "SilentExec PC Execution Agent, LAN Bridge & Model Manager (v{})",
+        env!("CARGO_PKG_VERSION")
+    );
     eprintln!();
     eprintln!("Usage:");
     eprintln!("  silent-exec-pc bar [--dry-run] [--port <PORT>] [--server-url <URL>] [--llama-bin <PATH>] [--model <PATH>] [--roots <R1,R2>]");
@@ -24,6 +28,11 @@ fn print_usage() {
     eprintln!(
         "  silent-exec-pc quick [--dry-run] [--confirm] [--server-url <URL>] [--llama-bin <PATH>] [--model <PATH>] [--roots <R1,R2>]"
     );
+    eprintln!(
+        "  silent-exec-pc config [--lang ar|en] [--mode silent|interactive|dry_run] [--show]"
+    );
+    eprintln!("  silent-exec-pc models [use <TAG>]");
+    eprintln!("  silent-exec-pc update [--check]");
     eprintln!(
         "  silent-exec-pc serve [--host <HOST>] [--port <PORT>] [--token <SECRET>] [--dry-run] [--server-url <URL>] [--roots <R1,R2>]"
     );
@@ -260,20 +269,53 @@ fn main() -> ExitCode {
                 idx += 1;
             }
 
-            let backend =
-                match resolve_llama_backend(server_url, llama_bin, model_path, grammar_path) {
-                    Ok(b) => b,
+            let config = AppConfig::load();
+            if !dry_run && config.mode == "dry_run" {
+                dry_run = true;
+            }
+
+            let cmd = if config.fast_router_enabled {
+                if let Some(routed) = FastRuleRouter::route(user_prompt) {
+                    println!("(Fast Rule Router: routed in <15ms)");
+                    routed
+                } else {
+                    let backend = match resolve_llama_backend(
+                        server_url,
+                        llama_bin,
+                        model_path,
+                        grammar_path,
+                    ) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprintln!("Backend initialization error: {}", e);
+                            return ExitCode::from(1);
+                        }
+                    };
+
+                    match backend.infer(user_prompt) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Inference error: {}", e);
+                            return ExitCode::from(1);
+                        }
+                    }
+                }
+            } else {
+                let backend =
+                    match resolve_llama_backend(server_url, llama_bin, model_path, grammar_path) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprintln!("Backend initialization error: {}", e);
+                            return ExitCode::from(1);
+                        }
+                    };
+
+                match backend.infer(user_prompt) {
+                    Ok(c) => c,
                     Err(e) => {
-                        eprintln!("Backend initialization error: {}", e);
+                        eprintln!("Inference error: {}", e);
                         return ExitCode::from(1);
                     }
-                };
-
-            let cmd = match backend.infer(user_prompt) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Inference error: {}", e);
-                    return ExitCode::from(1);
                 }
             };
 
@@ -337,6 +379,11 @@ fn main() -> ExitCode {
                 }
             };
 
+            let config = AppConfig::load();
+            if !dry_run && config.mode == "dry_run" {
+                dry_run = true;
+            }
+
             let roots = parse_roots(roots_arg);
             let mut indexer = FileIndexer::new(roots);
             let _ = indexer.build_index();
@@ -356,11 +403,26 @@ fn main() -> ExitCode {
                     break;
                 }
 
-                let cmd = match backend.infer(trimmed) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        println!("! inference failed: {}", e);
-                        continue;
+                let cmd = if config.fast_router_enabled {
+                    if let Some(routed) = FastRuleRouter::route(trimmed) {
+                        println!("(Fast Rule Router: <15ms)");
+                        routed
+                    } else {
+                        match backend.infer(trimmed) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                println!("! inference failed: {}", e);
+                                continue;
+                            }
+                        }
+                    }
+                } else {
+                    match backend.infer(trimmed) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            println!("! inference failed: {}", e);
+                            continue;
+                        }
                     }
                 };
 
@@ -593,6 +655,166 @@ fn main() -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("Failed to download model for tag '{}': {}", tag, e);
+                    ExitCode::from(1)
+                }
+            }
+        }
+        "config" => {
+            let mut lang_arg = None;
+            let mut mode_arg = None;
+            let mut show_flag = false;
+
+            let mut idx = 2;
+            while idx < args.len() {
+                match args[idx].as_str() {
+                    "--lang" if idx + 1 < args.len() => {
+                        lang_arg = Some(args[idx + 1].clone());
+                        idx += 1;
+                    }
+                    "--mode" if idx + 1 < args.len() => {
+                        mode_arg = Some(args[idx + 1].clone());
+                        idx += 1;
+                    }
+                    "--show" => {
+                        show_flag = true;
+                    }
+                    _ => {}
+                }
+                idx += 1;
+            }
+
+            let mut config = AppConfig::load();
+            if lang_arg.is_some() || mode_arg.is_some() {
+                if let Err(e) = config.update(lang_arg.as_deref(), mode_arg.as_deref(), None, None)
+                {
+                    eprintln!("Configuration error: {}", e);
+                    return ExitCode::from(1);
+                }
+                if let Err(e) = config.save() {
+                    eprintln!("Failed to save config: {}", e);
+                    return ExitCode::from(1);
+                }
+                println!(
+                    "✓ Configuration saved to {}",
+                    AppConfig::default_config_path().display()
+                );
+            }
+
+            if show_flag || (lang_arg.is_none() && mode_arg.is_none()) {
+                println!("{}", serde_json::to_string_pretty(&config).unwrap());
+            }
+            ExitCode::SUCCESS
+        }
+        "models" => {
+            let manager = match ModelManager::new(None) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("ModelManager initialization error: {}", e);
+                    return ExitCode::from(1);
+                }
+            };
+
+            let mut config = AppConfig::load();
+
+            if args.len() >= 4 && args[2] == "use" {
+                let tag = &args[3];
+                println!("Selecting model tag '{}'...", tag);
+                match manager.download_model(tag) {
+                    Ok(info) => {
+                        config.active_model_tag = Some(tag.clone());
+                        let _ = config.save();
+                        println!("✓ Active model set to '{}' ({})", tag, info.filename);
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to prepare model '{}': {}", tag, e);
+                        ExitCode::from(1)
+                    }
+                }
+            } else {
+                println!("=== Available GGUF Models (Model Hub) ===");
+                println!("Cache Directory: {}\n", manager.cache_dir().display());
+                match manager.list_available_models(config.active_model_tag.as_deref()) {
+                    Ok(models) => {
+                        if models.is_empty() {
+                            println!("No *-model releases found.");
+                        } else {
+                            for m in &models {
+                                let status_cached =
+                                    if m.is_cached { "[CACHED]" } else { "[REMOTE]" };
+                                let status_active =
+                                    if m.is_active { "*ACTIVE*" } else { "        " };
+                                let size_mb = m.size_bytes as f64 / (1024.0 * 1024.0);
+                                println!(
+                                    "{} {} {:15} | {:<20} | {:>7.1} MB | {}",
+                                    status_active,
+                                    status_cached,
+                                    m.tag,
+                                    m.filename,
+                                    size_mb,
+                                    m.name
+                                );
+                            }
+                            println!(
+                                "\nUse 'silent-exec-pc models use <TAG>' to activate a model."
+                            );
+                        }
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to query model releases: {}", e);
+                        ExitCode::from(1)
+                    }
+                }
+            }
+        }
+        "update" => {
+            let check_only = args.iter().any(|a| a == "--check");
+            let updater = SelfUpdater::default();
+
+            println!("Checking for updates at GitHub Releases...");
+            match updater.check_for_update() {
+                Ok(info) => {
+                    println!("Current version: v{}", info.current_version);
+                    println!("Latest release:  {}", info.latest_version);
+
+                    if info.update_available {
+                        println!(
+                            "\nUpdate available: v{} -> {}",
+                            info.current_version, info.latest_version
+                        );
+                        if check_only {
+                            println!(
+                                "Run 'silent-exec-pc update' to download and install this update."
+                            );
+                            ExitCode::SUCCESS
+                        } else {
+                            println!("Downloading and applying update...");
+                            match updater.download_and_apply(&info) {
+                                Ok(new_path) => {
+                                    println!(
+                                        "✓ Successfully updated to {} at {}",
+                                        info.latest_version,
+                                        new_path.display()
+                                    );
+                                    ExitCode::SUCCESS
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to apply update: {}", e);
+                                    ExitCode::from(1)
+                                }
+                            }
+                        }
+                    } else {
+                        println!(
+                            "✓ SilentExec PC is up to date (version v{}).",
+                            info.current_version
+                        );
+                        ExitCode::SUCCESS
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Update check failed: {}", e);
                     ExitCode::from(1)
                 }
             }

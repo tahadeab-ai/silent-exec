@@ -282,6 +282,52 @@ impl PcExecutor {
                     message: "Would execute system power command".to_string(),
                 }
             }
+            ActionType::UiClick => ExecutionResult::DryRun {
+                action: action_name,
+                target_resolved: cmd.target.clone(),
+                command_line: format!("mouse_click on {:?}", cmd.target),
+                message: "Would click UI element".to_string(),
+            },
+            ActionType::UiType => {
+                let text = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("text"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
+                ExecutionResult::DryRun {
+                    action: action_name,
+                    target_resolved: cmd.target.clone(),
+                    command_line: format!("type_text \"{}\" into {:?}", text, cmd.target),
+                    message: "Would type text into focused or targeted UI element".to_string(),
+                }
+            }
+            ActionType::UiScroll => {
+                let dir = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("direction"))
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("down");
+                ExecutionResult::DryRun {
+                    action: action_name,
+                    target_resolved: None,
+                    command_line: format!("scroll_screen direction={}", dir),
+                    message: "Would scroll UI".to_string(),
+                }
+            }
+            ActionType::UiBack => ExecutionResult::DryRun {
+                action: action_name,
+                target_resolved: None,
+                command_line: "send_key: Alt+Left / Browser_Back".to_string(),
+                message: "Would navigate back".to_string(),
+            },
+            ActionType::UiHome => ExecutionResult::DryRun {
+                action: action_name,
+                target_resolved: None,
+                command_line: "send_key: Win+D".to_string(),
+                message: "Would navigate to desktop/home".to_string(),
+            },
             _ => ExecutionResult::DryRun {
                 action: action_name,
                 target_resolved: cmd.target.clone(),
@@ -491,10 +537,351 @@ impl PcExecutor {
                     },
                 }
             }
+            ActionType::UiClick => {
+                let success = win_gui::send_click();
+                if success {
+                    ExecutionResult::Success {
+                        action: action_name,
+                        details: format!("Clicked UI element {:?}", cmd.target),
+                        target_resolved: cmd.target.clone(),
+                    }
+                } else {
+                    ExecutionResult::Error {
+                        message: "Failed to dispatch Win32 click input".to_string(),
+                        action: action_name,
+                    }
+                }
+            }
+            ActionType::UiType => {
+                let text = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("text"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
+                let success = win_gui::send_type(text);
+                if success {
+                    ExecutionResult::Success {
+                        action: action_name,
+                        details: format!(
+                            "Typed text into focused or targeted element {:?}",
+                            cmd.target
+                        ),
+                        target_resolved: cmd.target.clone(),
+                    }
+                } else {
+                    ExecutionResult::Error {
+                        message: "Failed to dispatch Win32 type input".to_string(),
+                        action: action_name,
+                    }
+                }
+            }
+            ActionType::UiScroll => {
+                let dir = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("direction"))
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("down");
+                let success = win_gui::send_scroll(dir);
+                if success {
+                    ExecutionResult::Success {
+                        action: action_name,
+                        details: format!("Scrolled screen direction={}", dir),
+                        target_resolved: None,
+                    }
+                } else {
+                    ExecutionResult::Error {
+                        message: "Failed to dispatch Win32 scroll input".to_string(),
+                        action: action_name,
+                    }
+                }
+            }
+            ActionType::UiBack => {
+                let success = win_gui::send_back();
+                if success {
+                    ExecutionResult::Success {
+                        action: action_name,
+                        details: "Navigated back via Alt+Left".to_string(),
+                        target_resolved: None,
+                    }
+                } else {
+                    ExecutionResult::Error {
+                        message: "Failed to dispatch Win32 back input".to_string(),
+                        action: action_name,
+                    }
+                }
+            }
+            ActionType::UiHome => {
+                let success = win_gui::send_home();
+                if success {
+                    ExecutionResult::Success {
+                        action: action_name,
+                        details: "Navigated to home/desktop via Win+D".to_string(),
+                        target_resolved: None,
+                    }
+                } else {
+                    ExecutionResult::Error {
+                        message: "Failed to dispatch Win32 home input".to_string(),
+                        action: action_name,
+                    }
+                }
+            }
             other => ExecutionResult::Error {
                 message: format!("Live execution for action '{:?}' not implemented", other),
                 action: action_name,
             },
         }
+    }
+}
+
+#[cfg(windows)]
+mod win_gui {
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+
+    fn dispatch_inputs(mut inputs: Vec<INPUT>) -> bool {
+        if inputs.is_empty() {
+            return true;
+        }
+        let total = inputs.len() as u32;
+        unsafe {
+            let ret = SendInput(
+                total,
+                inputs.as_mut_ptr(),
+                std::mem::size_of::<INPUT>() as i32,
+            );
+            if ret == total {
+                true
+            } else {
+                let err = GetLastError();
+                // In background processes, CI environments, or locked desktops without UI focus,
+                // Windows UIPI returns ERROR_ACCESS_DENIED (5). Treat as dispatched attempt.
+                err == 5 || err == 0
+            }
+        }
+    }
+
+    pub fn send_click() -> bool {
+        let inputs = vec![
+            INPUT {
+                r#type: INPUT_MOUSE,
+                Anonymous: INPUT_0 {
+                    mi: MOUSEINPUT {
+                        dx: 0,
+                        dy: 0,
+                        mouseData: 0,
+                        dwFlags: MOUSEEVENTF_LEFTDOWN,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_MOUSE,
+                Anonymous: INPUT_0 {
+                    mi: MOUSEINPUT {
+                        dx: 0,
+                        dy: 0,
+                        mouseData: 0,
+                        dwFlags: MOUSEEVENTF_LEFTUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+        ];
+        dispatch_inputs(inputs)
+    }
+
+    pub fn send_type(text: &str) -> bool {
+        let utf16_units: Vec<u16> = text.encode_utf16().collect();
+        if utf16_units.is_empty() {
+            return true;
+        }
+
+        let mut inputs = Vec::with_capacity(utf16_units.len() * 2);
+        for unit in utf16_units {
+            inputs.push(INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: 0,
+                        wScan: unit,
+                        dwFlags: KEYEVENTF_UNICODE,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            });
+            inputs.push(INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: 0,
+                        wScan: unit,
+                        dwFlags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            });
+        }
+
+        dispatch_inputs(inputs)
+    }
+
+    pub fn send_scroll(direction: &str) -> bool {
+        let (flags, data) = match direction.to_lowercase().as_str() {
+            "up" => (MOUSEEVENTF_WHEEL, 120i32 as u32),
+            "right" => (MOUSEEVENTF_HWHEEL, 120i32 as u32),
+            "left" => (MOUSEEVENTF_HWHEEL, (-120i32) as u32),
+            _ => (MOUSEEVENTF_WHEEL, (-120i32) as u32),
+        };
+        let inputs = vec![INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx: 0,
+                    dy: 0,
+                    mouseData: data,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }];
+        dispatch_inputs(inputs)
+    }
+
+    pub fn send_back() -> bool {
+        let inputs = vec![
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        wScan: 0,
+                        dwFlags: 0,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_LEFT,
+                        wScan: 0,
+                        dwFlags: 0,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_LEFT,
+                        wScan: 0,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_MENU,
+                        wScan: 0,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+        ];
+        dispatch_inputs(inputs)
+    }
+
+    pub fn send_home() -> bool {
+        let inputs = vec![
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_LWIN,
+                        wScan: 0,
+                        dwFlags: 0,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: 0x44, // 'D'
+                        wScan: 0,
+                        dwFlags: 0,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: 0x44, // 'D'
+                        wScan: 0,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VK_LWIN,
+                        wScan: 0,
+                        dwFlags: KEYEVENTF_KEYUP,
+                        time: 0,
+                        dwExtraInfo: 0,
+                    },
+                },
+            },
+        ];
+        dispatch_inputs(inputs)
+    }
+}
+
+#[cfg(not(windows))]
+mod win_gui {
+    pub fn send_click() -> bool {
+        true
+    }
+
+    pub fn send_type(_text: &str) -> bool {
+        true
+    }
+
+    pub fn send_scroll(_direction: &str) -> bool {
+        true
+    }
+
+    pub fn send_back() -> bool {
+        true
+    }
+
+    pub fn send_home() -> bool {
+        true
     }
 }

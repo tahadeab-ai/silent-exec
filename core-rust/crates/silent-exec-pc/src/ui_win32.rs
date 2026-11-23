@@ -129,6 +129,9 @@ pub fn run_command_bar(
     };
 
     let stdin = std::io::stdin();
+    let config = crate::config::AppConfig::load();
+    let is_ar = config.language == "ar";
+
     for line_res in std::io::BufRead::lines(stdin.lock()) {
         let line = match line_res {
             Ok(l) => l,
@@ -141,13 +144,46 @@ pub fn run_command_bar(
         if trimmed.eq_ignore_ascii_case("exit") || trimmed.eq_ignore_ascii_case("quit") {
             break;
         }
-        let cmd = match backend.infer(trimmed) {
-            Ok(c) => c,
-            Err(e) => {
-                println!("! inference failed: {}", e);
-                continue;
+
+        // Fast Rule Router check
+        let cmd = if config.fast_router_enabled {
+            if let Some(routed) = crate::fast_router::FastRuleRouter::route(trimmed) {
+                routed
+            } else {
+                if is_ar {
+                    println!("جاري الفهم...");
+                } else {
+                    println!("Understanding...");
+                }
+                match backend.infer(trimmed) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        println!("! inference failed: {}", e);
+                        continue;
+                    }
+                }
+            }
+        } else {
+            if is_ar {
+                println!("جاري الفهم...");
+            } else {
+                println!("Understanding...");
+            }
+            match backend.infer(trimmed) {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("! inference failed: {}", e);
+                    continue;
+                }
             }
         };
+
+        if is_ar {
+            println!("جاري التنفيذ...");
+        } else {
+            println!("Executing...");
+        }
+
         let res = executor.execute(&cmd, confirm);
         match map_result_to_ui_outcome(&res) {
             UiActionOutcome::SilentSuccess { action } => println!("✓ {}", action),
@@ -364,15 +400,55 @@ mod win32_impl {
                 None => return,
             };
 
-            let cmd_res = backend.infer(&rx_target);
-            let cmd = match cmd_res {
-                Ok(c) => c,
-                Err(e) => {
-                    let msg = format!("✗ Inference failed: {}", e);
-                    send_banner_update(hwnd, msg);
-                    return;
+            let config = crate::config::AppConfig::load();
+            let is_ar = config.language == "ar";
+
+            // Stage 1: Fast Router or LLM Understanding
+            let cmd = if config.fast_router_enabled {
+                if let Some(routed) = crate::fast_router::FastRuleRouter::route(&rx_target) {
+                    routed
+                } else {
+                    let understanding_msg = if is_ar {
+                        "جاري الفهم...".to_string()
+                    } else {
+                        "Understanding...".to_string()
+                    };
+                    send_banner_update(hwnd, understanding_msg);
+
+                    match backend.infer(&rx_target) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            let msg = format!("✗ Inference failed: {}", e);
+                            send_banner_update(hwnd, msg);
+                            return;
+                        }
+                    }
+                }
+            } else {
+                let understanding_msg = if is_ar {
+                    "جاري الفهم...".to_string()
+                } else {
+                    "Understanding...".to_string()
+                };
+                send_banner_update(hwnd, understanding_msg);
+
+                match backend.infer(&rx_target) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let msg = format!("✗ Inference failed: {}", e);
+                        send_banner_update(hwnd, msg);
+                        return;
+                    }
                 }
             };
+
+            // Stage 2: Execution stage feedback
+            let executing_msg = if is_ar {
+                "جاري التنفيذ...".to_string()
+            } else {
+                "Executing...".to_string()
+            };
+            send_banner_update(hwnd, executing_msg);
 
             let res = executor.lock().unwrap().execute(&cmd, false);
             let outcome = map_result_to_ui_outcome(&res);
@@ -383,11 +459,22 @@ mod win32_impl {
                     send_banner_update(hwnd, msg);
                 }
                 UiActionOutcome::RequireConfirmation { action, prompt: _ } => {
-                    let title = string_to_utf16("SilentExec - Authorization Required");
-                    let text = string_to_utf16(&format!(
-                        "Tier-2 Action: {}\n\nThis command requires explicit user confirmation.\nAuthorize execution?",
-                        action
-                    ));
+                    let title = if is_ar {
+                        string_to_utf16("SilentExec - يلزم التأكيد")
+                    } else {
+                        string_to_utf16("SilentExec - Authorization Required")
+                    };
+                    let text = if is_ar {
+                        string_to_utf16(&format!(
+                            "إجراء المستوى 2: {}\n\nيتطلب هذا الأمر تأكيد المستخدم.\nهل ترغب في التنفيذ؟",
+                            action
+                        ))
+                    } else {
+                        string_to_utf16(&format!(
+                            "Tier-2 Action: {}\n\nThis command requires explicit user confirmation.\nAuthorize execution?",
+                            action
+                        ))
+                    };
 
                     let choice = unsafe {
                         MessageBoxW(
