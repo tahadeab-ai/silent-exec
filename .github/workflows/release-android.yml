@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.2.0-android)'
+        description: 'Release Tag (e.g. v0.3.0-android)'
         required: true
-        default: 'v0.2.0-android'
+        default: 'v0.3.0-android'
 
 jobs:
   build-and-release-android:
@@ -86,14 +86,17 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "SilentExec Android Agent ${{ env.RELEASE_TAG }}"
           body: |
-            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) v0.2.0.
+            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) v0.3.0.
 
             - **Platform**: Android (`arm64-v8a`)
-            - **Offline NLP**: Real on-device `llama.cpp` inference engine (`libllama_jni.so`) with GBNF grammar constraints
-            - **Model Downloader**: Built-in streaming downloader for `Qwen2.5-0.5B-Instruct.Q4_K_M.gguf` (379 MB) with SHA-256 integrity verification
-            - **Voice Input**: Native zero-overhead Arabic (`ar-SA`) & English speech recognition
-            - **Dual Mode**: Seamless toggling between **Offline (On-Device)** and **LAN Bridge (PC)**
-            - **Safety Gate**: Deterministic 3-Tier safety policy with interactive confirmation dialogs
+            - **GUI Agent**: Full multi-step GUI Automation via AccessibilityService (`ui_click`, `ui_type`, `ui_scroll`, `ui_back`, `ui_home`)
+            - **Live Floating Status Pill**: Compact overlay showing live execution stage with 1-tap instant stop (`⏹`)
+            - **Fast Rule Router**: Deterministic <15ms Arabic (Yemeni + MSA) & English pattern matcher
+            - **KV-Cache Prompt Caching**: Static ChatML prefix KV-cache reuse in `libllama_jni.so` for accelerated repeat on-device execution
+            - **Dynamic Model Hub & Self-Updater**: In-app download, activation, and management of GGUF models and APK updates
+            - **Quick Settings Tile**: 1-tap voice & text execution from any screen
+            - **Bilingual Material 3 UI**: Instant Arabic RTL / English LTR locale switching
+            - **Safety Gate**: Deterministic 3-Tier safety policy with multi-step plan evaluation
             - **Target SDK**: 35 (Android 15), Min SDK 26 (Android 8.0)
 
             ### Installation
