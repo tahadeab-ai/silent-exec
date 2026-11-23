@@ -122,7 +122,11 @@ fn resolve_llama_backend(
 }
 
 fn main() -> ExitCode {
+    #[cfg(windows)]
     let mut args: Vec<String> = std::env::args().collect();
+    #[cfg(not(windows))]
+    let args: Vec<String> = std::env::args().collect();
+
     #[cfg(windows)]
     if args.len() < 2 {
         // On Windows, if launched with zero arguments (e.g. double-clicked from Explorer),
