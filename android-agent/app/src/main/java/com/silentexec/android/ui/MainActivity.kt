@@ -40,6 +40,7 @@ import com.silentexec.android.core.Platform
 import com.silentexec.android.core.SafetyDecision
 import com.silentexec.android.core.SafetyGate
 import com.silentexec.android.core.SafetyTier
+import com.silentexec.android.core.ThemeMode
 import com.silentexec.android.exec.AndroidActionExecutor
 import com.silentexec.android.exec.AndroidExecutionResult
 import com.silentexec.android.exec.SilentExecAccessibilityService
@@ -911,16 +912,16 @@ class MainActivity : AppCompatActivity() {
 
         // 2. Theme Mode Toggle (System, Dark, Light)
         when (settings.themeMode) {
-            AppSettings.ThemeMode.SYSTEM -> rbThemeSystem.isChecked = true
-            AppSettings.ThemeMode.DARK -> rbThemeDark.isChecked = true
-            AppSettings.ThemeMode.LIGHT -> rbThemeLight.isChecked = true
+            ThemeMode.SYSTEM -> rbThemeSystem.isChecked = true
+            ThemeMode.DARK -> rbThemeDark.isChecked = true
+            ThemeMode.LIGHT -> rbThemeLight.isChecked = true
         }
 
         rgThemeMode.setOnCheckedChangeListener { _, checkedId ->
             val newTheme = when (checkedId) {
-                R.id.rbThemeDark -> AppSettings.ThemeMode.DARK
-                R.id.rbThemeLight -> AppSettings.ThemeMode.LIGHT
-                else -> AppSettings.ThemeMode.SYSTEM
+                R.id.rbThemeDark -> ThemeMode.DARK
+                R.id.rbThemeLight -> ThemeMode.LIGHT
+                else -> ThemeMode.SYSTEM
             }
             if (settings.themeMode != newTheme) {
                 settings.themeMode = newTheme
