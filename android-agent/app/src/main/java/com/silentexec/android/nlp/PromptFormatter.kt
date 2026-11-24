@@ -2,6 +2,8 @@ package com.silentexec.android.nlp
 
 import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ActionJson
+import com.silentexec.android.core.MemoryItem
+import com.silentexec.android.core.MemoryStore
 import com.silentexec.android.core.MultiStepPlan
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -51,13 +53,55 @@ object PromptFormatter {
     /**
      * Builds a screen-aware ChatML prompt for iterative ReAct loop:
      * - The full user goal
+     * - Relevant user preferences from MemoryStore
      * - The live pruned screen elements
      * - Step history of completed actions
      */
     fun buildScreenAwarePrompt(
         userGoal: String,
         prunedUiTree: List<String>,
-        stepHistory: List<String>
+        stepHistory: List<String>,
+        memories: List<MemoryItem> = MemoryStore.getRelevantMemories(userGoal, limit = 4)
+    ): String {
+        val memorySection = if (memories.isNotEmpty()) {
+            "User Preferences & Context:\n" + memories.joinToString("\n") { "- ${it.key}: ${it.content}" }
+        } else {
+            ""
+        }
+
+        val screenSection = if (prunedUiTree.isNotEmpty()) {
+            "Current screen elements:\n" + prunedUiTree.joinToString("\n")
+        } else {
+            "Current screen elements: none visible"
+        }
+
+        val historySection = if (stepHistory.isNotEmpty()) {
+            "Completed steps:\n" + stepHistory.joinToString("\n")
+        } else {
+            "Completed steps: none"
+        }
+
+        val sections = listOf(
+            "Goal: ${userGoal.trim()}",
+            memorySection,
+            historySection,
+            screenSection,
+            "Emit the next ActionCommand JSON or final {\"action\":\"done\",\"platform\":\"android\",\"confidence\":1.0} when the goal is achieved."
+        ).filter { it.isNotBlank() }
+
+        val userQuery = sections.joinToString("\n\n")
+        return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery)
+    }
+
+    /**
+     * Builds a 1-retry self-healing prompt feeding the screen UI tree and correction hint back.
+     */
+    fun buildSelfHealingPrompt(
+        userGoal: String,
+        prunedUiTree: List<String>,
+        stepHistory: List<String>,
+        malformedOutput: String,
+        memories: List<MemoryItem> = MemoryStore.getRelevantMemories(userGoal, limit = 4)
     ): String {
         val screenSection = if (prunedUiTree.isNotEmpty()) {
             "Current screen elements:\n" + prunedUiTree.joinToString("\n")
@@ -76,7 +120,10 @@ Goal: ${userGoal.trim()}
 $historySection
 $screenSection
 
-Emit the next ActionCommand JSON or final {"action":"done","platform":"android","confidence":1.0} when the goal is achieved.
+Correction: Your previous response was not valid ActionCommand JSON:
+"$malformedOutput"
+Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
+{"action":"ui_click","target":"Search","platform":"android","confidence":0.9}
 """.trimIndent()
 
         return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery)

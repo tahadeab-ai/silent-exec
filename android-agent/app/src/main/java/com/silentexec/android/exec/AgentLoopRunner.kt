@@ -16,6 +16,8 @@ import com.silentexec.android.nlp.CloudApiClient
 import com.silentexec.android.nlp.OnDeviceLlamaEngine
 import com.silentexec.android.nlp.PlanOrAction
 import com.silentexec.android.nlp.PromptFormatter
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 
@@ -143,12 +145,30 @@ class AgentLoopRunner(
                 return
             }
 
-            val planOrAction = try {
+            var planOrAction = try {
                 PromptFormatter.parsePlanOrSingleAction(rawDecision)
-            } catch (e: Exception) {
-                // If model output cannot be parsed, fallback to local heuristic
+            } catch (_: Exception) {
+                null
+            }
+
+            if (planOrAction == null) {
+                // 1-Retry Self-Healing: Feed exact screen UI tree + correction hint back once before failing
+                val healingPrompt = PromptFormatter.buildSelfHealingPrompt(
+                    userGoal = cleanGoal,
+                    prunedUiTree = screenElements,
+                    stepHistory = stepHistory,
+                    malformedOutput = rawDecision
+                )
+                val healedDecision = runCatching { obtainDecision(healingPrompt, cleanGoal) }.getOrNull()
+                planOrAction = healedDecision?.let {
+                    runCatching { PromptFormatter.parsePlanOrSingleAction(it) }.getOrNull()
+                }
+            }
+
+            if (planOrAction == null) {
+                // If model output still cannot be parsed, fallback to local heuristic
                 val fallbackCmd = parseLocalIntentFallback(cleanGoal)
-                PlanOrAction.Action(fallbackCmd)
+                planOrAction = PlanOrAction.Action(fallbackCmd)
             }
 
             when (planOrAction) {
@@ -397,6 +417,19 @@ class AgentLoopRunner(
             }
         }
 
+        if (settings.inferenceSource == InferenceSource.LOCAL_ON_DEVICE) {
+            if (llamaEngine == null || !llamaEngine.isLoaded()) {
+                throw IllegalStateException("يرجى تحميل نموذج من تبويب النماذج أو اختيار Cloud API من الإعدادات")
+            }
+            val res = llamaEngine.inferActionCommand(
+                userQuery = prompt,
+                grammarText = grammarText,
+                maxTokens = 192
+            )
+            val cmd = res.getOrThrow()
+            return ActionJson.toJson(cmd)
+        }
+
         if (llamaEngine != null && llamaEngine.isLoaded()) {
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
@@ -414,6 +447,26 @@ class AgentLoopRunner(
 
     private fun parseLocalIntentFallback(text: String): ActionCommand {
         val lower = text.lowercase(Locale.ROOT).trim()
+
+        // Check for compound YouTube search task: "افتح اليوتيوب وابحث عن <query>" or "open youtube and search <query>"
+        if ((lower.contains("youtube") || lower.contains("يوتيوب")) &&
+            (lower.contains("search") || lower.contains("ابحث") || lower.contains("بحث"))
+        ) {
+            val query = text.replace(
+                Regex(".*(?:ابحث عن|بحث عن|ابحث|search for|search)\\s+", RegexOption.IGNORE_CASE),
+                ""
+            ).trim()
+            return ActionCommand(
+                action = ActionType.LAUNCH_APP,
+                target = "com.google.android.youtube",
+                args = buildJsonObject {
+                    put("query", JsonPrimitive(query))
+                },
+                platform = Platform.ANDROID,
+                confidence = 0.95
+            )
+        }
+
         val action = when {
             lower == "ارجع" || lower == "back" -> ActionType.UI_BACK
             lower == "الرئيسية" || lower == "الشاشة الرئيسية" || lower == "home" -> ActionType.UI_HOME

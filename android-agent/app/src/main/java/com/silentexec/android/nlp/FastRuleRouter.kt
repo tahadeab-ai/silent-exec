@@ -3,11 +3,15 @@ package com.silentexec.android.nlp
 import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ActionType
 import com.silentexec.android.core.Platform
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 
 object FastRuleRouter {
 
     private val RE_SET_VOLUME_AR = Regex("""(?:ارفع|خفض|اضبط|عدل|غير)\s+(?:مستوى\s+)?الصوت\s+(?:الى\s+|إلى\s+)?(\d{1,3})""", RegexOption.IGNORE_CASE)
     private val RE_SET_VOLUME_EN = Regex("""(?:set|change|adjust)\s+volume\s+(?:to\s+)?(\d{1,3})""", RegexOption.IGNORE_CASE)
+    private val RE_MUTE_AR = Regex("""^(?:اطفئ|اطفي|اكتم|كتم|الغي|الغاء|اسكت)\s+(?:مستوى\s+)?(?:الصوت)?$""", RegexOption.IGNORE_CASE)
+    private val RE_MUTE_EN = Regex("""^(?:mute|silence)(?:\s+volume)?$""", RegexOption.IGNORE_CASE)
 
     private val RE_CLICK_AR = Regex("""^(?:اضغط على|انقر على|دوس على|اضغط|انقر|دوس)\s+(?:على\s+)?(.+)$""", RegexOption.IGNORE_CASE)
     private val RE_CLICK_EN = Regex("""^(?:click\s+on|tap\s+on|click|tap|press)\s+(?:on\s+)?(.+)$""", RegexOption.IGNORE_CASE)
@@ -137,13 +141,36 @@ object FastRuleRouter {
             )
         }
 
-        // 4. set_volume
+        // 4. mute / silence rules
+        val muteTokensAr = setOf(
+            "اطفئ الصوت", "اطفي الصوت", "اكتم الصوت", "كتم الصوت", "صامت",
+            "كتم", "اكتم", "اسكت الصوت", "بدون صوت", "صوت 0", "الصوت 0",
+            "الغي الصوت", "الغاء الصوت"
+        )
+        val muteTokensEn = setOf(
+            "mute", "mute volume", "silence volume", "silence",
+            "volume 0", "set volume 0", "set volume to 0",
+            "turn off sound", "turn off volume"
+        )
+
+        if (norm in muteTokensAr || norm in muteTokensEn || RE_MUTE_AR.matches(norm) || RE_MUTE_EN.matches(norm)) {
+            return ActionCommand(
+                action = ActionType.SET_VOLUME,
+                target = "0",
+                args = buildJsonObject { put("level", JsonPrimitive(0)) },
+                platform = Platform.ANDROID,
+                confidence = 1.0
+            )
+        }
+
+        // 5. set_volume
         RE_SET_VOLUME_AR.find(norm)?.let { match ->
             val level = match.groupValues[1].toIntOrNull()
             if (level != null && level in 0..100) {
                 return ActionCommand(
                     action = ActionType.SET_VOLUME,
                     target = level.toString(),
+                    args = buildJsonObject { put("level", JsonPrimitive(level)) },
                     platform = Platform.ANDROID,
                     confidence = 1.0
                 )
@@ -155,13 +182,14 @@ object FastRuleRouter {
                 return ActionCommand(
                     action = ActionType.SET_VOLUME,
                     target = level.toString(),
+                    args = buildJsonObject { put("level", JsonPrimitive(level)) },
                     platform = Platform.ANDROID,
                     confidence = 1.0
                 )
             }
         }
 
-        // 5. ui_click
+        // 6. ui_click
         RE_CLICK_AR.find(trimmed)?.let { match ->
             val target = match.groupValues[1].trim()
             if (target.isNotBlank()) {
@@ -185,7 +213,7 @@ object FastRuleRouter {
             }
         }
 
-        // 6. open_url
+        // 7. open_url
         if (norm.startsWith("open ") || norm.startsWith("افتح ") || norm.startsWith("شغل ")) {
             val rest = trimmed.replace(Regex("^(open|افتح|شغل|launch)\\s+", RegexOption.IGNORE_CASE), "").trim()
             if (rest.startsWith("http://", ignoreCase = true) || rest.startsWith("https://", ignoreCase = true)) {
@@ -198,7 +226,7 @@ object FastRuleRouter {
             }
         }
 
-        // 7. open_android_app
+        // 8. open_android_app
         RE_LAUNCH_AR.find(trimmed)?.let { match ->
             val appTarget = match.groupValues[1].trim()
             if (appTarget.isNotBlank() && !appTarget.startsWith("http", ignoreCase = true)) {

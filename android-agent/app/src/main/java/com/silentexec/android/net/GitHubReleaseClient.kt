@@ -13,7 +13,8 @@ data class ModelReleaseItem(
     val filename: String,
     val sizeBytes: Long,
     val downloadUrl: String,
-    val checksumsUrl: String?
+    val checksumsUrl: String?,
+    val description: String? = null
 ) {
     val sizeMb: Double
         get() = sizeBytes / (1024.0 * 1024.0)
@@ -93,6 +94,13 @@ class GitHubReleaseClient(
             }
         }
 
+        // Append curated edge models (e.g. LiquidAI LFM3 & Qwen3)
+        for (curated in CURATED_EDGE_MODELS) {
+            if (models.none { it.filename.equals(curated.filename, ignoreCase = true) }) {
+                models.add(curated)
+            }
+        }
+
         return models
     }
 
@@ -142,6 +150,25 @@ class GitHubReleaseClient(
     }
 
     companion object {
+        val CURATED_EDGE_MODELS = listOf(
+            ModelReleaseItem(
+                tag = "curated-edge",
+                filename = "LFM-1.7B-Q4_K_M.gguf",
+                sizeBytes = 1_120_000_000L,
+                downloadUrl = "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM-1.7B-Q4_K_M.gguf",
+                checksumsUrl = null,
+                description = "LiquidAI/LFM3-1.7B (Fast Edge Agent)"
+            ),
+            ModelReleaseItem(
+                tag = "curated-edge",
+                filename = "qwen3-1.7b-instruct-q4_k_m.gguf",
+                sizeBytes = 1_180_000_000L,
+                downloadUrl = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/qwen3-1.7b-instruct-q4_k_m.gguf",
+                checksumsUrl = null,
+                description = "Qwen/Qwen3-1.7B-GGUF (Strong Arabic & Reasoning)"
+            )
+        )
+
         fun parseSemVer(versionStr: String): Triple<Int, Int, Int> {
             val clean = versionStr.trim().removePrefix("v").substringBefore("-")
             val parts = clean.split(".")

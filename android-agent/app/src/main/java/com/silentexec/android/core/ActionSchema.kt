@@ -1,9 +1,15 @@
 package com.silentexec.android.core
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -70,7 +76,19 @@ enum class ActionType {
     UI_HOME,
 
     @SerialName("done")
-    DONE;
+    DONE,
+
+    @SerialName("reply")
+    REPLY,
+
+    @SerialName("read_file")
+    READ_FILE,
+
+    @SerialName("write_file")
+    WRITE_FILE,
+
+    @SerialName("memory_save")
+    MEMORY_SAVE;
 
     val tier: SafetyTier
         get() = when (this) {
@@ -78,7 +96,8 @@ enum class ActionType {
             MOVE_FILE,
             SYSTEM_POWER,
             TOGGLE_SETTING,
-            SEND_MESSAGE -> SafetyTier.TIER_2_CONFIRM
+            SEND_MESSAGE,
+            WRITE_FILE -> SafetyTier.TIER_2_CONFIRM
             else -> SafetyTier.TIER_1_SILENT
         }
 
@@ -105,10 +124,39 @@ enum class ActionType {
             UI_BACK -> "ui_back"
             UI_HOME -> "ui_home"
             DONE -> "done"
+            REPLY -> "reply"
+            READ_FILE -> "read_file"
+            WRITE_FILE -> "write_file"
+            MEMORY_SAVE -> "memory_save"
         }
 }
 
-@Serializable
+object PlatformSerializer : KSerializer<Platform> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("Platform", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Platform) {
+        val str = when (value) {
+            Platform.PC -> "pc"
+            Platform.ANDROID -> "android"
+            Platform.ANY -> "any"
+        }
+        encoder.encodeString(str)
+    }
+
+    override fun deserialize(decoder: Decoder): Platform {
+        val str = decoder.decodeString().trim().lowercase()
+        return when (str) {
+            "pc" -> Platform.PC
+            "android", "mobile" -> Platform.ANDROID
+            "any" -> Platform.ANY
+            "windows", "linux", "macos" -> Platform.PC
+            else -> Platform.ANY
+        }
+    }
+}
+
+@Serializable(with = PlatformSerializer::class)
 enum class Platform {
     @SerialName("pc")
     PC,
@@ -131,8 +179,8 @@ data class ActionCommand(
     val target: String? = null,
     val folder: String? = null,
     val args: JsonElement? = null,
-    val platform: Platform,
-    val confidence: Double
+    val platform: Platform = Platform.ANDROID,
+    val confidence: Double = 0.85
 ) {
     init {
         require(confidence in 0.0..1.0) {

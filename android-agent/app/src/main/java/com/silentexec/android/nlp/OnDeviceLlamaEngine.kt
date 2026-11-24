@@ -17,6 +17,7 @@ class OnDeviceLlamaEngine {
         } catch (_: Throwable) {
             false
         }
+        private const val MIN_MODEL_SIZE_BYTES = 1_000_000L
     }
 
     external fun nativeLoadModel(modelPath: String, threads: Int): Boolean
@@ -26,12 +27,21 @@ class OnDeviceLlamaEngine {
 
     /**
      * Loads a quantized GGUF model into memory for fast inference.
+     * Guarded with file checks and JNI exception safety.
      */
+    @Synchronized
     fun loadModel(modelFile: File, threads: Int = 4): Boolean {
-        if (!isNativeLoaded || !modelFile.exists()) {
+        if (!isNativeLoaded) {
             return false
         }
-        return nativeLoadModel(modelFile.absolutePath, threads)
+        if (!modelFile.exists() || modelFile.length() < MIN_MODEL_SIZE_BYTES) {
+            return false
+        }
+        return try {
+            nativeLoadModel(modelFile.absolutePath, threads)
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /**
@@ -39,15 +49,22 @@ class OnDeviceLlamaEngine {
      */
     fun isLoaded(): Boolean {
         if (!isNativeLoaded) return false
-        return nativeIsLoaded()
+        return try {
+            nativeIsLoaded()
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /**
-     * Releases model and context memory.
+     * Releases model and context memory safely.
      */
+    @Synchronized
     fun unload() {
         if (isNativeLoaded) {
-            nativeUnload()
+            try {
+                nativeUnload()
+            } catch (_: Throwable) {}
         }
     }
 
@@ -62,10 +79,14 @@ class OnDeviceLlamaEngine {
     ): Result<ActionCommand> {
         return runCatching {
             if (!isLoaded()) {
-                throw IllegalStateException("llama.cpp model is not loaded in memory")
+                throw IllegalStateException("يرجى تحميل نموذج من تبويب النماذج أو اختيار Cloud API من الإعدادات")
             }
             val prompt = PromptFormatter.formatPrompt(userQuery)
-            val rawOutput = nativeGenerateJson(prompt, grammarText, maxTokens)
+            val rawOutput = try {
+                nativeGenerateJson(prompt, grammarText, maxTokens)
+            } catch (t: Throwable) {
+                throw IllegalStateException("فشل تشغيل النموذج المحلي: ${t.message ?: "Unknown error"}", t)
+            }
             val cleanJson = PromptFormatter.extractActionJson(rawOutput)
             ActionJson.fromJson(cleanJson)
         }

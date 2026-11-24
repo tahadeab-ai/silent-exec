@@ -13,8 +13,14 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityNodeInfo
 import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ActionType
+import com.silentexec.android.core.MemoryStore
 import com.silentexec.android.core.SafetyDecision
 import com.silentexec.android.core.SafetyGate
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 
 sealed class AndroidExecutionResult {
     data class Success(
@@ -42,6 +48,12 @@ sealed class AndroidExecutionResult {
 }
 
 class AndroidActionExecutor(private val context: Context? = null) {
+
+    companion object {
+        fun calculateVolumeIndex(pct: Int, maxVolume: Int = 15): Int {
+            return Math.round((pct.coerceIn(0, 100) / 100.0) * maxVolume).toInt()
+        }
+    }
 
     fun execute(cmd: ActionCommand, confirmed: Boolean = false): AndroidExecutionResult {
         val actionName = cmd.action.wireName
@@ -73,13 +85,13 @@ class AndroidActionExecutor(private val context: Context? = null) {
         return try {
             when (cmd.action) {
                 ActionType.OPEN_ANDROID_APP, ActionType.LAUNCH_APP -> {
-                    handleOpenApp(cmd.target ?: "")
+                    handleOpenApp(cmd.target ?: "", cmd.args)
                 }
                 ActionType.OPEN_URL -> {
                     handleOpenUrl(cmd.target ?: "")
                 }
                 ActionType.SET_VOLUME -> {
-                    handleSetVolume(cmd.target)
+                    handleSetVolume(cmd.target, cmd.args)
                 }
                 ActionType.COPY_TO_CLIPBOARD -> {
                     handleCopyToClipboard(cmd.target ?: "")
@@ -111,6 +123,34 @@ class AndroidActionExecutor(private val context: Context? = null) {
                 ActionType.UI_TYPE -> {
                     handleUiType(cmd.target ?: "")
                 }
+                ActionType.REPLY -> {
+                    val replyText = when {
+                        cmd.args is JsonObject && (cmd.args as JsonObject)["text"] != null -> {
+                            (cmd.args as JsonObject)["text"]?.jsonPrimitive?.content ?: ""
+                        }
+                        else -> cmd.target ?: ""
+                    }
+                    AndroidExecutionResult.Success(
+                        action = "reply",
+                        details = replyText,
+                        targetResolved = replyText
+                    )
+                }
+                ActionType.READ_FILE -> {
+                    handleReadFile(cmd.target ?: "")
+                }
+                ActionType.WRITE_FILE -> {
+                    val content = when {
+                        cmd.args is JsonObject && (cmd.args as JsonObject)["content"] != null -> {
+                            (cmd.args as JsonObject)["content"]?.jsonPrimitive?.content ?: ""
+                        }
+                        else -> ""
+                    }
+                    handleWriteFile(cmd.target ?: "", content)
+                }
+                ActionType.MEMORY_SAVE -> {
+                    handleMemorySave(cmd.target, cmd.args)
+                }
                 ActionType.DONE -> {
                     AndroidExecutionResult.Success(
                         action = "done",
@@ -134,9 +174,60 @@ class AndroidActionExecutor(private val context: Context? = null) {
         }
     }
 
-    private fun handleOpenApp(target: String): AndroidExecutionResult {
+    private fun launchYouTubeSearch(query: String): AndroidExecutionResult {
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "launch_app",
+            details = "Simulated YouTube search for '$query'",
+            targetResolved = query
+        )
+
+        return try {
+            val intent = Intent(Intent.ACTION_SEARCH).apply {
+                setPackage("com.google.android.youtube")
+                putExtra("query", query)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(intent)
+            AndroidExecutionResult.Success(
+                action = "launch_app",
+                details = "Launched YouTube search for '$query'",
+                targetResolved = query
+            )
+        } catch (_: Exception) {
+            val webIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(webIntent)
+            AndroidExecutionResult.Success(
+                action = "open_url",
+                details = "Launched YouTube web search for '$query'",
+                targetResolved = query
+            )
+        }
+    }
+
+    private fun handleOpenApp(target: String, args: JsonElement? = null): AndroidExecutionResult {
         if (target.isBlank()) {
             return AndroidExecutionResult.Error("open_android_app", "Target application name is empty")
+        }
+
+        val targetNorm = target.trim().lowercase()
+
+        // Support native YouTube search intent if query present in args or target
+        val searchParam = if (args is JsonObject) {
+            args["query"]?.jsonPrimitive?.content ?: args["search"]?.jsonPrimitive?.content
+        } else null
+
+        if (!searchParam.isNullOrBlank() && (targetNorm.contains("youtube") || targetNorm.contains("يوتيوب"))) {
+            return launchYouTubeSearch(searchParam)
+        }
+
+        if (targetNorm.startsWith("youtube:") || targetNorm.startsWith("youtube search:")) {
+            val q = target.substringAfter(":").trim()
+            if (q.isNotBlank()) return launchYouTubeSearch(q)
         }
 
         val ctx = context ?: return AndroidExecutionResult.Success(
@@ -151,7 +242,6 @@ class AndroidActionExecutor(private val context: Context? = null) {
         }
 
         val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-        val targetNorm = target.trim().lowercase()
 
         // 1. Try exact package name
         var launchIntent = pm.getLaunchIntentForPackage(target.trim())
@@ -212,24 +302,114 @@ class AndroidActionExecutor(private val context: Context? = null) {
         )
     }
 
-    private fun handleSetVolume(target: String?): AndroidExecutionResult {
-        val ctx = context ?: return AndroidExecutionResult.Success(
-            action = "set_volume",
-            details = "Simulated volume set: $target",
-            targetResolved = target
-        )
+    private fun handleSetVolume(target: String?, args: JsonElement? = null): AndroidExecutionResult {
+        val pct: Int = when {
+            target?.equals("mute", ignoreCase = true) == true || target == "0" -> 0
+            args is JsonObject && args["level"] != null -> {
+                args["level"]?.jsonPrimitive?.intOrNull ?: 0
+            }
+            else -> {
+                target?.filter { it.isDigit() }?.toIntOrNull() ?: 50
+            }
+        }
 
-        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val ctx = context
+        val maxVolume = if (ctx != null) {
+            val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        } else {
+            15 // Standard Android default stream max volume for tests and simulation
+        }
 
-        val targetLevel = target?.filter { it.isDigit() }?.toIntOrNull() ?: (maxVolume / 2)
-        val clamped = targetLevel.coerceIn(0, maxVolume)
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, clamped, AudioManager.FLAG_SHOW_UI)
+        val targetIndex = calculateVolumeIndex(pct, maxVolume)
+
+        if (ctx != null) {
+            val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetIndex, AudioManager.FLAG_SHOW_UI)
+        }
 
         return AndroidExecutionResult.Success(
             action = "set_volume",
-            details = "Volume set to $clamped/$maxVolume",
-            targetResolved = clamped.toString()
+            details = "Volume set to $targetIndex/$maxVolume (pct=$pct%)",
+            targetResolved = targetIndex.toString()
+        )
+    }
+
+    private fun handleReadFile(filePath: String): AndroidExecutionResult {
+        if (filePath.isBlank()) {
+            return AndroidExecutionResult.Error("read_file", "File path is empty")
+        }
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "read_file",
+            details = "Simulated read file: $filePath",
+            targetResolved = filePath
+        )
+        val file = File(filePath)
+        if (!file.exists()) {
+            return AndroidExecutionResult.Error("read_file", "File not found: $filePath")
+        }
+        return try {
+            val text = file.readText().take(32768)
+            AndroidExecutionResult.Success(
+                action = "read_file",
+                details = text,
+                targetResolved = filePath
+            )
+        } catch (e: Exception) {
+            AndroidExecutionResult.Error("read_file", "Failed to read file: ${e.message}")
+        }
+    }
+
+    private fun handleWriteFile(filePath: String, content: String): AndroidExecutionResult {
+        if (filePath.isBlank()) {
+            return AndroidExecutionResult.Error("write_file", "File path is empty")
+        }
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "write_file",
+            details = "Simulated write file to: $filePath (${content.length} chars)",
+            targetResolved = filePath
+        )
+        return try {
+            val file = File(filePath)
+            file.parentFile?.mkdirs()
+            file.writeText(content)
+            AndroidExecutionResult.Success(
+                action = "write_file",
+                details = "Wrote ${content.length} characters to $filePath",
+                targetResolved = filePath
+            )
+        } catch (e: Exception) {
+            AndroidExecutionResult.Error("write_file", "Failed to write file: ${e.message}")
+        }
+    }
+
+    private fun handleMemorySave(target: String?, args: JsonElement?): AndroidExecutionResult {
+        val key = when {
+            args is JsonObject && args["key"] != null -> {
+                args["key"]?.jsonPrimitive?.content ?: "preference"
+            }
+            target != null && target.contains(":") -> {
+                target.substringBefore(":").trim()
+            }
+            else -> target ?: "preference"
+        }
+        val content = when {
+            args is JsonObject && args["content"] != null -> {
+                args["content"]?.jsonPrimitive?.content ?: ""
+            }
+            args is JsonObject && args["value"] != null -> {
+                args["value"]?.jsonPrimitive?.content ?: ""
+            }
+            target != null && target.contains(":") -> {
+                target.substringAfter(":").trim()
+            }
+            else -> target ?: ""
+        }
+        val saved = MemoryStore.saveMemory(key, content)
+        return AndroidExecutionResult.Success(
+            action = "memory_save",
+            details = "Saved memory '${saved.key}': ${saved.content}",
+            targetResolved = saved.key
         )
     }
 
