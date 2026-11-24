@@ -68,7 +68,7 @@ class AgentLoopAndThemeTest {
             "open downloads" to ActionType.OPEN_FOLDER
         )
 
-        for ((text, expectedAction) to simpleCommands) {
+        for ((text, expectedAction) in simpleCommands) {
             val start = System.nanoTime()
             val routed = FastRuleRouter.route(text)
             val elapsedMs = (System.nanoTime() - start) / 1_000_000.0
