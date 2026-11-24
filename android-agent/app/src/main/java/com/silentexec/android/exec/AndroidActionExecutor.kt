@@ -363,7 +363,7 @@ class AndroidActionExecutor(private val context: Context? = null) {
                 addCategory(Intent.CATEGORY_HOME)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(homeIntent)
+            context?.startActivity(homeIntent)
         }
         return AndroidExecutionResult.Success(
             action = "ui_home",

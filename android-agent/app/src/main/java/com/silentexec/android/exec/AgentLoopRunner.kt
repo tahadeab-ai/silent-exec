@@ -1,6 +1,7 @@
 package com.silentexec.android.exec
 
 import com.silentexec.android.core.ActionCommand
+import com.silentexec.android.core.ActionJson
 import com.silentexec.android.core.ActionType
 import com.silentexec.android.core.AppSettings
 import com.silentexec.android.core.ExecutionMode
