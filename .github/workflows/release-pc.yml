@@ -38,8 +38,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p release_assets
-          cp core-rust/target/release/silent-exec-pc.exe release_assets/
-          cp desktop-app/src-tauri/target/release/silent-exec-desktop.exe release_assets/SilentExec-Desktop-x64.exe
+          if [ -f "core-rust/target/release/silent-exec-pc.exe" ]; then
+            cp core-rust/target/release/silent-exec-pc.exe release_assets/
+          else
+            cp $(find core-rust -name "silent-exec-pc.exe" | head -n 1) release_assets/
+          fi
+          
+          if [ -f "desktop-app/src-tauri/target/release/silent-exec-desktop.exe" ]; then
+            cp desktop-app/src-tauri/target/release/silent-exec-desktop.exe release_assets/SilentExec-Desktop-x64.exe
+          else
+            cp $(find desktop-app -name "silent-exec-desktop.exe" | head -n 1) release_assets/SilentExec-Desktop-x64.exe
+          fi
           cd release_assets
           sha256sum silent-exec-pc.exe SilentExec-Desktop-x64.exe > SHA256SUMS.txt
           cat SHA256SUMS.txt

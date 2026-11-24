@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.3.0-android)'
+        description: 'Release Tag (e.g. v0.4.0-android)'
         required: true
-        default: 'v0.3.0-android'
+        default: 'v0.4.0-android'
 
 jobs:
   build-and-release-android:
@@ -86,12 +86,16 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "SilentExec Android Agent ${{ env.RELEASE_TAG }}"
           body: |
-            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) v0.3.0.
+            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) v0.4.0.
 
             - **Platform**: Android (`arm64-v8a`)
+            - **Observe-Think-Act Closed Loop**: Full multi-step screen-aware agent loop (max 6 steps) with GBNF grammar constrained generation
             - **GUI Agent**: Full multi-step GUI Automation via AccessibilityService (`ui_click`, `ui_type`, `ui_scroll`, `ui_back`, `ui_home`)
-            - **Live Floating Status Pill**: Compact overlay showing live execution stage with 1-tap instant stop (`⏹`)
-            - **Fast Rule Router**: Deterministic <15ms Arabic (Yemeni + MSA) & English pattern matcher
+            - **Interactive Mode**: Explicit step confirmation card (`[Run | Skip | Stop]`) for every resolved step
+            - **Dry-Run Mode**: Full NLP & SafetyGate evaluation without executing OS mutations
+            - **Live Floating Status Pill**: Compact interactive overlay showing live execution stage with 1-tap instant stop (`⏹`)
+            - **Fast Rule Router**: Deterministic <15ms Arabic (Yemeni + MSA) & English pattern matcher with compound-command guard
+            - **Material 3 Day/Night Theme**: Seamless Dark and Light theme with custom geometric launcher icon
             - **KV-Cache Prompt Caching**: Static ChatML prefix KV-cache reuse in `libllama_jni.so` for accelerated repeat on-device execution
             - **Dynamic Model Hub & Self-Updater**: In-app download, activation, and management of GGUF models and APK updates
             - **Quick Settings Tile**: 1-tap voice & text execution from any screen

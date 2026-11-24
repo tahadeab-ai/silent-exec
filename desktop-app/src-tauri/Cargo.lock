@@ -3098,7 +3098,6 @@ dependencies = [
 name = "silent-exec-pc"
 version = "0.3.0"
 dependencies = [
- "hex",
  "serde",
  "serde_json",
  "sha2 0.10.9",
