@@ -417,7 +417,7 @@ class AgentLoopRunner(
             }
         }
 
-        if (settings.inferenceSource == InferenceSource.LOCAL_ON_DEVICE) {
+        if (settings.inferenceSource == InferenceSource.OFFLINE) {
             if (llamaEngine == null || !llamaEngine.isLoaded()) {
                 throw IllegalStateException("يرجى تحميل نموذج من تبويب النماذج أو اختيار Cloud API من الإعدادات")
             }
