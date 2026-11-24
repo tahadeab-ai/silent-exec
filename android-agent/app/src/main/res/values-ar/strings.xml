@@ -19,10 +19,18 @@
     <string name="mic_error">خطأ صوتي: %s</string>
     <string name="live_feed_title">سجل التنفيذ المباشر</string>
     <string name="live_feed_empty">لم يتم تنفيذ أي إجراءات بعد</string>
+    <string name="live_timeline_title">مخطط سير الخطوات المباشر</string>
+    <string name="live_timeline_empty">جاهز لتنفيذ الخطوات والأوامر</string>
     <string name="history_title">الأوامر السابقة</string>
     <string name="stage_understanding">جارٍ فهم الأمر...</string>
     <string name="stage_routing_fast">تم التوجيه السريع: %s</string>
     <string name="stage_sending_bridge">جارٍ الإرسال إلى الكمبيوتر عبر الشبكة...</string>
+    <string name="stage_planned">تم تخطيط %d خطوات</string>
+    <string name="stage_step_running">جارٍ تنفيذ الخطوة %1$d/%2$d: %3$s</string>
+    <string name="stage_step_done">اكتملت الخطوة %1$d/%2$d: %3$s</string>
+    <string name="stage_step_skipped">تم تخطي الخطوة %1$d/%2$d</string>
+    <string name="stage_step_failed">فشلت الخطوة %1$d/%2$d: %3$s</string>
+    <string name="stage_all_done">تم إنجاز جميع خطوات الخطة بنجاح</string>
     <string name="stage_completed">تم التنفيذ: %s</string>
     <string name="stage_blocked">محظور: %s</string>
     <string name="stage_error">خطأ: %s</string>
@@ -30,6 +38,13 @@
     <string name="confirm_title">تأكيد الإجراء (المستوى الثاني)</string>
     <string name="confirm">تأكيد</string>
     <string name="cancel">إلغاء</string>
+
+    <!-- Interactive Step Confirmation -->
+    <string name="step_confirm_title">تأكيد الخطوة (%1$d/%2$d)</string>
+    <string name="confirm_step_msg">الإجراء المخطط: %1$s\nالهدف: %2$s\nمستوى الأمان: %3$s</string>
+    <string name="step_run">تنفيذ الخطوة</string>
+    <string name="step_skip">تخطي</string>
+    <string name="step_stop">إيقاف</string>
 
     <!-- Tab 2: Models -->
     <string name="models_title">مستودع النماذج</string>
@@ -48,13 +63,21 @@
 
     <!-- Tab 3: Settings -->
     <string name="settings_title">الإعدادات</string>
+    <string name="settings_theme_title">المظهر والسمة</string>
+    <string name="theme_system">حسب النظام</string>
+    <string name="theme_dark">الوضع الداكن</string>
+    <string name="theme_light">الوضع الفاتح</string>
+    <string name="settings_bubble_title">الفقاعة المساعدة العائمة</string>
+    <string name="bubble_enable_title">تفعيل الفقاعة العائمة</string>
+    <string name="bubble_enable_desc">فقاعة مساعدة قابلة للسحب تطفو فوق أي تطبيق</string>
+    <string name="bubble_permission_required">يلزم منح إذن الظهور فوق التطبيقات الأخرى</string>
     <string name="settings_language_title">اللغة</string>
     <string name="lang_arabic">العربية</string>
     <string name="lang_english">الإنجليزية (English)</string>
     <string name="settings_mode_title">وضع التنفيذ</string>
     <string name="mode_silent">صامت (بدون مقاطعة)</string>
-    <string name="mode_interactive">تفاعلي (تأكيد المستوى الثاني)</string>
-    <string name="mode_dry_run">تجريبي (تحقق بدون تعديل)</string>
+    <string name="mode_interactive">تفاعلي (تأكيد كل خطوة)</string>
+    <string name="mode_dry_run">تجريبي (تحقق بدون تنفيذ)</string>
     <string name="settings_engine_title">محرك الاستنتاج</string>
     <string name="engine_offline">محلي (على الجهاز دون إنترنت)</string>
     <string name="engine_bridge">جسر الشبكة المحلية (الكمبيوتر)</string>

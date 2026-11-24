@@ -19,10 +19,18 @@
     <string name="mic_error">Voice error: %s</string>
     <string name="live_feed_title">Live Execution Feed</string>
     <string name="live_feed_empty">No actions executed yet</string>
+    <string name="live_timeline_title">Step Execution Timeline</string>
+    <string name="live_timeline_empty">Ready for multi-step or single actions</string>
     <string name="history_title">Recent Commands</string>
     <string name="stage_understanding">Understanding command...</string>
     <string name="stage_routing_fast">Fast rule matched: %s</string>
     <string name="stage_sending_bridge">Dispatching to PC LAN bridge...</string>
+    <string name="stage_planned">Plan resolved: %d steps</string>
+    <string name="stage_step_running">Executing step %1$d/%2$d: %3$s</string>
+    <string name="stage_step_done">Step %1$d/%2$d completed: %3$s</string>
+    <string name="stage_step_skipped">Step %1$d/%2$d skipped</string>
+    <string name="stage_step_failed">Step %1$d/%2$d failed: %3$s</string>
+    <string name="stage_all_done">Multi-step plan completed successfully</string>
     <string name="stage_completed">Completed: %s</string>
     <string name="stage_blocked">Blocked: %s</string>
     <string name="stage_error">Error: %s</string>
@@ -30,6 +38,13 @@
     <string name="confirm_title">Confirm Action (Tier 2)</string>
     <string name="confirm">Confirm</string>
     <string name="cancel">Cancel</string>
+
+    <!-- Interactive Step Confirmation -->
+    <string name="step_confirm_title">Step Confirmation (%1$d/%2$d)</string>
+    <string name="confirm_step_msg">Planned Action: %1$s\nTarget: %2$s\nSafety Tier: %3$s</string>
+    <string name="step_run">Execute Step</string>
+    <string name="step_skip">Skip</string>
+    <string name="step_stop">Stop</string>
 
     <!-- Tab 2: Models -->
     <string name="models_title">Model Hub</string>
@@ -48,6 +63,14 @@
 
     <!-- Tab 3: Settings -->
     <string name="settings_title">Settings</string>
+    <string name="settings_theme_title">Appearance / Theme</string>
+    <string name="theme_system">Follow System</string>
+    <string name="theme_dark">Dark Mode</string>
+    <string name="theme_light">Light Mode</string>
+    <string name="settings_bubble_title">Floating Assistant Bubble</string>
+    <string name="bubble_enable_title">Enable Floating Bubble</string>
+    <string name="bubble_enable_desc">Draggable assistant bubble over any app</string>
+    <string name="bubble_permission_required">Display over other apps permission is required</string>
     <string name="settings_language_title">Language</string>
     <string name="lang_arabic">العربية (Arabic)</string>
     <string name="lang_english">English</string>

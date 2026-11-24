@@ -16,6 +16,17 @@ enum class ExecutionMode {
     }
 }
 
+enum class ThemeMode {
+    SYSTEM,
+    DARK,
+    LIGHT;
+
+    companion object {
+        fun fromString(value: String): ThemeMode =
+            runCatching { valueOf(value.trim().uppercase()) }.getOrDefault(SYSTEM)
+    }
+}
+
 enum class InferenceSource {
     OFFLINE,
     LAN_BRIDGE;
@@ -35,6 +46,13 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
+    var themeMode: ThemeMode
+        get() = ThemeMode.fromString(prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name)
+        set(value) {
+            prefs.edit().putString(KEY_THEME_MODE, value.name).apply()
+            applyTheme()
+        }
+
     var executionMode: ExecutionMode
         get() = ExecutionMode.fromString(prefs.getString(KEY_EXECUTION_MODE, ExecutionMode.SILENT.name) ?: ExecutionMode.SILENT.name)
         set(value) = prefs.edit().putString(KEY_EXECUTION_MODE, value.name).apply()
@@ -50,6 +68,10 @@ class AppSettings(context: Context) {
     var fastRouterEnabled: Boolean
         get() = prefs.getBoolean(KEY_FAST_ROUTER, true)
         set(value) = prefs.edit().putBoolean(KEY_FAST_ROUTER, value).apply()
+
+    var floatingBubbleEnabled: Boolean
+        get() = prefs.getBoolean(KEY_FLOATING_BUBBLE, false)
+        set(value) = prefs.edit().putBoolean(KEY_FLOATING_BUBBLE, value).apply()
 
     var bridgeHost: String
         get() = prefs.getString(KEY_BRIDGE_HOST, "") ?: ""
@@ -68,6 +90,15 @@ class AppSettings(context: Context) {
         AppCompatDelegate.setApplicationLocales(appLocale)
     }
 
+    fun applyTheme() {
+        val nightMode = when (themeMode) {
+            ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+            ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode)
+    }
+
     fun setLanguageAndApply(lang: String) {
         val validLang = if (lang.equals("en", ignoreCase = true)) "en" else "ar"
         this.language = validLang
@@ -77,10 +108,12 @@ class AppSettings(context: Context) {
     companion object {
         const val PREFS_NAME = "silent_exec_settings"
         const val KEY_LANGUAGE = "setting_language"
+        const val KEY_THEME_MODE = "setting_theme_mode"
         const val KEY_EXECUTION_MODE = "setting_execution_mode"
         const val KEY_INFERENCE_SOURCE = "setting_inference_source"
         const val KEY_ACTIVE_MODEL_FILE = "setting_active_model_file"
         const val KEY_FAST_ROUTER = "setting_fast_router"
+        const val KEY_FLOATING_BUBBLE = "setting_floating_bubble"
         const val KEY_BRIDGE_HOST = "setting_bridge_host"
         const val KEY_BRIDGE_PORT = "setting_bridge_port"
         const val KEY_BRIDGE_TOKEN = "setting_bridge_token"

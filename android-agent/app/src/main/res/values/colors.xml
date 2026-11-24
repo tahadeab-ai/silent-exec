@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#121212</color>
-    <color name="surface_dark">#1E1E1E</color>
-    <color name="surface_variant">#2A2A2A</color>
-    <color name="accent_green">#00E676</color>
-    <color name="accent_blue">#00B0FF</color>
-    <color name="danger_red">#FF5252</color>
-    <color name="warning_yellow">#FFD600</color>
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#AAAAAA</color>
+    <!-- Light Theme Colors -->
+    <color name="bg_dark">#F8FAFC</color>
+    <color name="surface_dark">#FFFFFF</color>
+    <color name="surface_variant">#E2E8F0</color>
+    <color name="surface_elevated">#F1F5F9</color>
+    <color name="accent_green">#10B981</color>
+    <color name="accent_green_light">#059669</color>
+    <color name="accent_blue">#6366F1</color>
+    <color name="danger_red">#EF4444</color>
+    <color name="warning_yellow">#F59E0B</color>
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#475569</color>
+    <color name="text_muted">#94A3B8</color>
 </resources>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Terminal window container (safe zone: center 66x66 is 21 to 87) -->
+    <path
+        android:fillColor="#1E293B"
+        android:strokeColor="#10B981"
+        android:strokeWidth="1.5"
+        android:pathData="M27,27 h54 a8,8 0 0 1 8,8 v38 a8,8 0 0 1 -8,8 h-54 a8,8 0 0 1 -8,-8 v-38 a8,8 0 0 1 8,-8 z" />
+
+    <!-- Terminal header divider -->
+    <path
+        android:strokeColor="#334155"
+        android:strokeWidth="1"
+        android:pathData="M19,39 h70" />
+
+    <!-- Window control dots -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M27,33 a2,2 0 1,0 0.001,0 z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M33,33 a2,2 0 1,0 0.001,0 z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M39,33 a2,2 0 1,0 0.001,0 z" />
+
+    <!-- Indigo Command Prompt '>' -->
+    <path
+        android:strokeColor="#818CF8"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M28,50 L36,56 L28,62" />
+
+    <!-- Emerald Geometric Lightning Bolt -->
+    <path
+        android:fillColor="#059669"
+        android:pathData="M60,42 L48,58 L57,58 L52,72 L68,54 L59,54 Z" />
+    <path
+        android:fillColor="#10B981"
+        android:strokeColor="#34D399"
+        android:strokeWidth="0.8"
+        android:pathData="M59,43 L49,57 L57,57 L53,70 L67,55 L59,55 Z" />
+</vector>
