@@ -3,13 +3,13 @@
 
 use serde::{Deserialize, Serialize};
 use silent_exec_core::{
-    ActionCommand, ActionType, ExecutionMode, MultiStepPlan, Platform, SafetyDecision, SafetyGate,
+    ActionCommand, ExecutionMode, MultiStepPlan, SafetyDecision, SafetyGate,
 };
 use silent_exec_pc::{
     action_type_to_str, parse_plan, resolve_clause, split_compound_prompt, start_bridge_server,
-    AiBackend, AppConfig, BridgeConfig, DownloadProgress, DownloadStatus, ExecutionResult,
-    FastRuleRouter, FileIndexer, McpClient, McpServerConfig, McpTool, ModelDownloadInfo,
-    ModelManager, ModelReleaseInfo, PcExecutor, SelfUpdater, SetupResult,
+    AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter, FileIndexer, McpClient,
+    McpServerConfig, McpTool, ModelDownloadInfo, ModelManager, ModelReleaseInfo, PcExecutor,
+    SelfUpdater, SetupResult,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -1010,7 +1010,6 @@ fn main() {
             execute_query,
             confirm_step,
             list_models,
-            download_model,
             start_model_download,
             pause_model_download,
             resume_model_download,
