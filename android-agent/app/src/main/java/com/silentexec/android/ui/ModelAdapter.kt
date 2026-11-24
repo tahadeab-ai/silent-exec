@@ -8,6 +8,8 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.silentexec.android.R
+import com.silentexec.android.net.DownloadState
+import com.silentexec.android.net.DownloadStatus
 import com.silentexec.android.net.ModelDownloader
 import com.silentexec.android.net.ModelReleaseItem
 import java.util.Locale
@@ -16,7 +18,10 @@ class ModelAdapter(
     private var items: List<ModelReleaseItem>,
     private var activeModelFilename: String,
     private val modelDownloader: ModelDownloader,
-    private val onDownloadClick: (ModelReleaseItem, (Int) -> Unit, (Result<Unit>) -> Unit) -> Unit,
+    private val onDownloadClick: (ModelReleaseItem, (DownloadState) -> Unit, (Result<Unit>) -> Unit) -> Unit,
+    private val onPauseClick: ((ModelReleaseItem) -> Unit)? = null,
+    private val onResumeClick: ((ModelReleaseItem, (DownloadState) -> Unit, (Result<Unit>) -> Unit) -> Unit)? = null,
+    private val onCancelClick: ((ModelReleaseItem) -> Unit)? = null,
     private val onActivateClick: (ModelReleaseItem) -> Unit,
     private val onDeleteClick: (ModelReleaseItem) -> Unit
 ) : RecyclerView.Adapter<ModelAdapter.ModelViewHolder>() {
@@ -44,8 +49,14 @@ class ModelAdapter(
         private val tvModelDetails: TextView = itemView.findViewById(R.id.tvModelDetails)
         private val tvModelActiveBadge: TextView = itemView.findViewById(R.id.tvModelActiveBadge)
         private val pbModelDownload: ProgressBar = itemView.findViewById(R.id.pbModelDownload)
+        private val layoutDownloadMetrics: View = itemView.findViewById(R.id.layoutDownloadMetrics)
+        private val tvModelMetrics: TextView = itemView.findViewById(R.id.tvModelMetrics)
+        private val tvModelSpeedEta: TextView = itemView.findViewById(R.id.tvModelSpeedEta)
         private val tvModelDownloadStatus: TextView = itemView.findViewById(R.id.tvModelDownloadStatus)
         private val btnModelDownload: Button = itemView.findViewById(R.id.btnModelDownload)
+        private val btnModelPause: Button = itemView.findViewById(R.id.btnModelPause)
+        private val btnModelResume: Button = itemView.findViewById(R.id.btnModelResume)
+        private val btnModelCancel: Button = itemView.findViewById(R.id.btnModelCancel)
         private val btnModelActivate: Button = itemView.findViewById(R.id.btnModelActivate)
         private val btnModelDelete: Button = itemView.findViewById(R.id.btnModelDelete)
 
@@ -60,6 +71,14 @@ class ModelAdapter(
 
             val isDownloaded = modelDownloader.isModelDownloaded(item.filename)
             val isActive = item.filename.equals(currentActive, ignoreCase = true)
+
+            // Hide download metrics by default
+            pbModelDownload.visibility = View.GONE
+            layoutDownloadMetrics.visibility = View.GONE
+            tvModelDownloadStatus.visibility = View.GONE
+            btnModelPause.visibility = View.GONE
+            btnModelResume.visibility = View.GONE
+            btnModelCancel.visibility = View.GONE
 
             if (isDownloaded) {
                 btnModelDownload.visibility = View.GONE
@@ -81,35 +100,122 @@ class ModelAdapter(
                 tvModelActiveBadge.visibility = View.GONE
             }
 
+            val stateCallback: (DownloadState) -> Unit = { state ->
+                itemView.post {
+                    when (state.status) {
+                        DownloadStatus.DOWNLOADING -> {
+                            pbModelDownload.visibility = View.VISIBLE
+                            layoutDownloadMetrics.visibility = View.VISIBLE
+                            tvModelDownloadStatus.visibility = View.VISIBLE
+
+                            val percent = if (state.totalBytes > 0) {
+                                ((state.downloadedBytes * 100) / state.totalBytes).toInt().coerceIn(0, 100)
+                            } else 0
+                            pbModelDownload.progress = percent
+
+                            val downloadedMb = state.downloadedBytes / (1024.0 * 1024.0)
+                            val totalMb = state.totalBytes / (1024.0 * 1024.0)
+                            tvModelMetrics.text = String.format(Locale.US, "%.1f / %.1f MB", downloadedMb, totalMb)
+
+                            val etaStr = if (state.etaSeconds > 0) {
+                                val mins = state.etaSeconds / 60
+                                val secs = state.etaSeconds % 60
+                                if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+                            } else "--"
+                            tvModelSpeedEta.text = String.format(Locale.US, "%.2f MB/s • ETA: %s", state.speedMBps, etaStr)
+                            tvModelDownloadStatus.text = itemView.context.getString(R.string.model_downloading, percent)
+
+                            btnModelDownload.visibility = View.GONE
+                            btnModelPause.visibility = View.VISIBLE
+                            btnModelResume.visibility = View.GONE
+                            btnModelCancel.visibility = View.VISIBLE
+                        }
+                        DownloadStatus.PAUSED -> {
+                            tvModelDownloadStatus.text = itemView.context.getString(R.string.model_paused)
+                            btnModelPause.visibility = View.GONE
+                            btnModelResume.visibility = View.VISIBLE
+                            btnModelCancel.visibility = View.VISIBLE
+                        }
+                        DownloadStatus.VERIFYING -> {
+                            tvModelDownloadStatus.text = itemView.context.getString(R.string.model_verifying)
+                            btnModelPause.visibility = View.GONE
+                            btnModelResume.visibility = View.GONE
+                            btnModelCancel.visibility = View.GONE
+                        }
+                        DownloadStatus.COMPLETED -> {
+                            pbModelDownload.visibility = View.GONE
+                            layoutDownloadMetrics.visibility = View.GONE
+                            tvModelDownloadStatus.visibility = View.GONE
+                            btnModelPause.visibility = View.GONE
+                            btnModelResume.visibility = View.GONE
+                            btnModelCancel.visibility = View.GONE
+                            notifyItemChanged(bindingAdapterPosition)
+                        }
+                        DownloadStatus.ERROR -> {
+                            tvModelDownloadStatus.text = itemView.context.getString(R.string.model_download_failed, "")
+                            btnModelDownload.visibility = View.VISIBLE
+                            btnModelDownload.isEnabled = true
+                            btnModelPause.visibility = View.GONE
+                            btnModelResume.visibility = View.GONE
+                            btnModelCancel.visibility = View.GONE
+                        }
+                    }
+                }
+            }
+
+            val doneCallback: (Result<Unit>) -> Unit = { result ->
+                itemView.post {
+                    result.onSuccess {
+                        notifyItemChanged(bindingAdapterPosition)
+                    }.onFailure { err ->
+                        btnModelDownload.visibility = View.VISIBLE
+                        btnModelDownload.isEnabled = true
+                        btnModelPause.visibility = View.GONE
+                        btnModelResume.visibility = View.GONE
+                        btnModelCancel.visibility = View.GONE
+                        tvModelDownloadStatus.visibility = View.VISIBLE
+                        tvModelDownloadStatus.text = itemView.context.getString(R.string.model_download_failed, err.message ?: "")
+                    }
+                }
+            }
+
             btnModelDownload.setOnClickListener {
                 btnModelDownload.isEnabled = false
                 pbModelDownload.visibility = View.VISIBLE
                 pbModelDownload.progress = 0
+                layoutDownloadMetrics.visibility = View.VISIBLE
                 tvModelDownloadStatus.visibility = View.VISIBLE
                 tvModelDownloadStatus.text = itemView.context.getString(R.string.model_downloading, 0)
+                btnModelPause.visibility = View.VISIBLE
+                btnModelCancel.visibility = View.VISIBLE
+                btnModelDownload.visibility = View.GONE
 
-                onDownloadClick(
-                    item,
-                    { percent ->
-                        itemView.post {
-                            pbModelDownload.progress = percent
-                            tvModelDownloadStatus.text = itemView.context.getString(R.string.model_downloading, percent)
-                        }
-                    },
-                    { result ->
-                        itemView.post {
-                            pbModelDownload.visibility = View.GONE
-                            tvModelDownloadStatus.visibility = View.GONE
-                            result.onSuccess {
-                                notifyItemChanged(adapterPosition)
-                            }.onFailure { err ->
-                                btnModelDownload.isEnabled = true
-                                tvModelDownloadStatus.visibility = View.VISIBLE
-                                tvModelDownloadStatus.text = itemView.context.getString(R.string.model_download_failed, err.message ?: "")
-                            }
-                        }
-                    }
-                )
+                onDownloadClick(item, stateCallback, doneCallback)
+            }
+
+            btnModelPause.setOnClickListener {
+                onPauseClick?.invoke(item)
+                tvModelDownloadStatus.text = itemView.context.getString(R.string.model_paused)
+                btnModelPause.visibility = View.GONE
+                btnModelResume.visibility = View.VISIBLE
+            }
+
+            btnModelResume.setOnClickListener {
+                btnModelResume.visibility = View.GONE
+                btnModelPause.visibility = View.VISIBLE
+                onResumeClick?.invoke(item, stateCallback, doneCallback)
+            }
+
+            btnModelCancel.setOnClickListener {
+                onCancelClick?.invoke(item)
+                pbModelDownload.visibility = View.GONE
+                layoutDownloadMetrics.visibility = View.GONE
+                tvModelDownloadStatus.visibility = View.GONE
+                btnModelPause.visibility = View.GONE
+                btnModelResume.visibility = View.GONE
+                btnModelCancel.visibility = View.GONE
+                btnModelDownload.visibility = View.VISIBLE
+                btnModelDownload.isEnabled = true
             }
 
             btnModelActivate.setOnClickListener {

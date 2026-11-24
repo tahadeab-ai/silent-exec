@@ -134,12 +134,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etBridgeHost: EditText
     private lateinit var etBridgePort: EditText
     private lateinit var etBridgeToken: EditText
+    private lateinit var btnTestBridge: Button
     private lateinit var btnSaveBridge: Button
+    private lateinit var tvBridgeTestStatus: TextView
     private lateinit var cardCloudConfig: View
     private lateinit var etCloudApiBase: EditText
     private lateinit var etCloudApiModel: EditText
     private lateinit var etCloudApiKey: EditText
+    private lateinit var btnTestCloud: Button
     private lateinit var btnSaveCloud: Button
+    private lateinit var tvCloudTestStatus: TextView
     private lateinit var tvPermAccessibilityStatus: TextView
     private lateinit var btnOpenAccessibilitySettings: Button
     private lateinit var tvAppVersion: TextView
@@ -294,12 +298,16 @@ class MainActivity : AppCompatActivity() {
         etBridgeHost = findViewById(R.id.etBridgeHost)
         etBridgePort = findViewById(R.id.etBridgePort)
         etBridgeToken = findViewById(R.id.etBridgeToken)
+        btnTestBridge = findViewById(R.id.btnTestBridge)
         btnSaveBridge = findViewById(R.id.btnSaveBridge)
+        tvBridgeTestStatus = findViewById(R.id.tvBridgeTestStatus)
         cardCloudConfig = findViewById(R.id.cardCloudConfig)
         etCloudApiBase = findViewById(R.id.etCloudApiBase)
         etCloudApiModel = findViewById(R.id.etCloudApiModel)
         etCloudApiKey = findViewById(R.id.etCloudApiKey)
+        btnTestCloud = findViewById(R.id.btnTestCloud)
         btnSaveCloud = findViewById(R.id.btnSaveCloud)
+        tvCloudTestStatus = findViewById(R.id.tvCloudTestStatus)
         tvPermAccessibilityStatus = findViewById(R.id.tvPermAccessibilityStatus)
         btnOpenAccessibilitySettings = findViewById(R.id.btnOpenAccessibilitySettings)
         tvAppVersion = findViewById(R.id.tvAppVersion)
@@ -690,9 +698,9 @@ class MainActivity : AppCompatActivity() {
             items = modelItems,
             activeModelFilename = settings.activeModelFile,
             modelDownloader = modelDownloader,
-            onDownloadClick = { item, onProgress, onDone ->
+            onDownloadClick = { item, onStateUpdate, onDone ->
                 thread {
-                    val res = modelDownloader.downloadModelItem(item, onProgress)
+                    val res = modelDownloader.downloadModelItemWithState(item, onStateUpdate)
                     mainHandler.post {
                         res.onSuccess {
                             Toast.makeText(this, R.string.model_download_success, Toast.LENGTH_SHORT).show()
@@ -703,6 +711,27 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+            },
+            onPauseClick = { item ->
+                modelDownloader.pause(item.filename)
+            },
+            onResumeClick = { item, onStateUpdate, onDone ->
+                modelDownloader.resume(item.filename)
+                thread {
+                    val res = modelDownloader.downloadModelItemWithState(item, onStateUpdate)
+                    mainHandler.post {
+                        res.onSuccess {
+                            Toast.makeText(this, R.string.model_download_success, Toast.LENGTH_SHORT).show()
+                            onDone(Result.success(Unit))
+                        }.onFailure { err ->
+                            Toast.makeText(this, getString(R.string.model_download_failed, err.message ?: ""), Toast.LENGTH_LONG).show()
+                            onDone(Result.failure(err))
+                        }
+                    }
+                }
+            },
+            onCancelClick = { item ->
+                modelDownloader.cancel(item.filename)
             },
             onActivateClick = { item ->
                 settings.activeModelFile = item.filename
@@ -894,6 +923,34 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.bridge_saved, Toast.LENGTH_SHORT).show()
         }
 
+        btnTestBridge.setOnClickListener {
+            val host = etBridgeHost.text.toString().trim()
+            val port = etBridgePort.text.toString().toIntOrNull() ?: 8765
+            tvBridgeTestStatus.visibility = View.VISIBLE
+            tvBridgeTestStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
+            tvBridgeTestStatus.text = getString(R.string.test_connection_testing)
+            btnTestBridge.isEnabled = false
+
+            thread {
+                val res = bridgeClient.checkHealth(host, port)
+                mainHandler.post {
+                    btnTestBridge.isEnabled = true
+                    res.onSuccess { isHealthy ->
+                        if (isHealthy) {
+                            tvBridgeTestStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+                            tvBridgeTestStatus.text = getString(R.string.test_connection_success)
+                        } else {
+                            tvBridgeTestStatus.setTextColor(ContextCompat.getColor(this, R.color.danger_red))
+                            tvBridgeTestStatus.text = getString(R.string.test_connection_failed, "Health check failed")
+                        }
+                    }.onFailure { err ->
+                        tvBridgeTestStatus.setTextColor(ContextCompat.getColor(this, R.color.danger_red))
+                        tvBridgeTestStatus.text = getString(R.string.test_connection_failed, err.message ?: "")
+                    }
+                }
+            }
+        }
+
         // 6b. Cloud API Config
         etCloudApiBase.setText(settings.openAiApiBase)
         etCloudApiModel.setText(settings.openAiApiModel)
@@ -905,6 +962,39 @@ class MainActivity : AppCompatActivity() {
             settings.openAiApiKey = etCloudApiKey.text.toString().trim()
             updateHeaderStatus()
             Toast.makeText(this, R.string.cloud_saved, Toast.LENGTH_SHORT).show()
+        }
+
+        btnTestCloud.setOnClickListener {
+            val base = etCloudApiBase.text.toString().trim()
+            val model = etCloudApiModel.text.toString().trim()
+            val key = etCloudApiKey.text.toString().trim()
+
+            tvCloudTestStatus.visibility = View.VISIBLE
+            tvCloudTestStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_blue))
+            tvCloudTestStatus.text = getString(R.string.test_connection_testing)
+            btnTestCloud.isEnabled = false
+
+            thread {
+                val client = com.silentexec.android.nlp.CloudApiClient(
+                    baseUrl = base,
+                    model = model,
+                    apiKey = key
+                )
+                val res = client.generateCompletion(
+                    systemPrompt = com.silentexec.android.nlp.PromptFormatter.DEFAULT_SYSTEM_PROMPT,
+                    userPrompt = "ping"
+                )
+                mainHandler.post {
+                    btnTestCloud.isEnabled = true
+                    res.onSuccess {
+                        tvCloudTestStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+                        tvCloudTestStatus.text = getString(R.string.test_connection_success)
+                    }.onFailure { err ->
+                        tvCloudTestStatus.setTextColor(ContextCompat.getColor(this, R.color.danger_red))
+                        tvCloudTestStatus.text = getString(R.string.test_connection_failed, err.message ?: "")
+                    }
+                }
+            }
         }
 
         // 7. Accessibility Permission Card

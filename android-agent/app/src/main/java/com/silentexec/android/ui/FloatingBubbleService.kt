@@ -35,6 +35,7 @@ class FloatingBubbleService : Service() {
     private var tvFloatingPillStatus: TextView? = null
     private var btnFloatingPillStop: Button? = null
     private var etFloatingCommand: EditText? = null
+    private var tvFloatingModeBadge: TextView? = null
     private var windowParams: WindowManager.LayoutParams? = null
 
     private var onStopCallback: (() -> Unit)? = null
@@ -100,6 +101,7 @@ class FloatingBubbleService : Service() {
         tvFloatingPillStatus = view.findViewById(R.id.tvFloatingPillStatus)
         btnFloatingPillStop = view.findViewById(R.id.btnFloatingPillStop)
         etFloatingCommand = view.findViewById(R.id.etFloatingCommand)
+        tvFloatingModeBadge = view.findViewById(R.id.tvFloatingModeBadge)
 
         val btnClose = view.findViewById<TextView>(R.id.btnFloatingClose)
         val btnExecute = view.findViewById<Button>(R.id.btnFloatingExecute)
@@ -199,6 +201,23 @@ class FloatingBubbleService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (isClick) {
                         showConsole()
+                    } else {
+                        val screenWidth = resources.displayMetrics.widthPixels
+                        val bubbleWidth = flBubbleIcon?.width?.takeIf { it > 0 } ?: 150
+                        val targetX = if (params.x + bubbleWidth / 2 > screenWidth / 2) {
+                            screenWidth - bubbleWidth - 16
+                        } else {
+                            16
+                        }
+                        val animator = android.animation.ValueAnimator.ofInt(params.x, targetX)
+                        animator.duration = 200
+                        animator.addUpdateListener { anim ->
+                            params.x = anim.animatedValue as Int
+                            try {
+                                windowManager.updateViewLayout(rootView, params)
+                            } catch (_: Exception) {}
+                        }
+                        animator.start()
                     }
                     true
                 }
@@ -218,6 +237,8 @@ class FloatingBubbleService : Service() {
 
     private fun showConsole() {
         mainHandler.post {
+            val settings = com.silentexec.android.core.AppSettings(this)
+            tvFloatingModeBadge?.text = "${settings.executionMode.name} • ${settings.inferenceSource.name}"
             flBubbleIcon?.visibility = View.GONE
             cardMiniConsole?.visibility = View.VISIBLE
             llFloatingPill?.visibility = View.GONE

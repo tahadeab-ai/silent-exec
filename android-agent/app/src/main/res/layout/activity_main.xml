@@ -32,7 +32,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="14dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="2dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -116,7 +116,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="14dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="2dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -210,7 +210,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -255,7 +255,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -371,7 +371,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -422,7 +422,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -481,7 +481,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -529,7 +529,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -584,7 +584,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -650,7 +650,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -702,15 +702,38 @@
                             android:textColorHint="@color/text_secondary"
                             android:textSize="13sp" />
 
-                        <Button
-                            android:id="@+id/btnSaveBridge"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_gravity="end"
                             android:layout_marginTop="10dp"
-                            android:text="@string/save_bridge"
-                            android:textSize="12sp" />
+                            android:gravity="end|center_vertical"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btnTestBridge"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/test_connection"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btnSaveBridge"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/save_bridge"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvBridgeTestStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="12sp"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -722,7 +745,7 @@
                     android:layout_marginTop="12dp"
                     android:visibility="gone"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -774,15 +797,38 @@
                             android:textColorHint="@color/text_secondary"
                             android:textSize="13sp" />
 
-                        <Button
-                            android:id="@+id/btnSaveCloud"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_gravity="end"
                             android:layout_marginTop="10dp"
-                            android:text="@string/save_cloud"
-                            android:textSize="12sp" />
+                            android:gravity="end|center_vertical"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btnTestCloud"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/test_connection"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btnSaveCloud"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/save_cloud"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvCloudTestStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="12sp"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -792,7 +838,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">
@@ -853,7 +899,7 @@
                     android:layout_marginTop="12dp"
                     android:layout_marginBottom="24dp"
                     app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="12dp"
+                    app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
                     app:strokeColor="@color/surface_variant"
                     app:strokeWidth="1dp">

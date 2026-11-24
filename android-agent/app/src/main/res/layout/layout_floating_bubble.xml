@@ -52,6 +52,19 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/tvFloatingModeBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/badge_active"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:text="SILENT"
+                android:textColor="@color/bg_dark"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/btnFloatingClose"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
