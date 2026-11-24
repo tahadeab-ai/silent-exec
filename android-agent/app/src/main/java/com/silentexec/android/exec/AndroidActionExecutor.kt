@@ -41,7 +41,7 @@ sealed class AndroidExecutionResult {
     ) : AndroidExecutionResult()
 }
 
-class AndroidActionExecutor(private val context: Context) {
+class AndroidActionExecutor(private val context: Context? = null) {
 
     fun execute(cmd: ActionCommand, confirmed: Boolean = false): AndroidExecutionResult {
         val actionName = cmd.action.wireName
@@ -139,7 +139,13 @@ class AndroidActionExecutor(private val context: Context) {
             return AndroidExecutionResult.Error("open_android_app", "Target application name is empty")
         }
 
-        val pm = context.packageManager
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "open_android_app",
+            details = "Simulated application launch: $target",
+            targetResolved = target
+        )
+
+        val pm = ctx.packageManager
         val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
@@ -167,7 +173,7 @@ class AndroidActionExecutor(private val context: Context) {
 
         return if (launchIntent != null) {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(launchIntent)
+            ctx.startActivity(launchIntent)
             AndroidExecutionResult.Success(
                 action = "open_android_app",
                 details = "Launched application successfully",
@@ -188,10 +194,16 @@ class AndroidActionExecutor(private val context: Context) {
             target
         }
 
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "open_url",
+            details = "Simulated browser URI: $uriString",
+            targetResolved = uriString
+        )
+
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
+        ctx.startActivity(intent)
 
         return AndroidExecutionResult.Success(
             action = "open_url",
@@ -201,7 +213,13 @@ class AndroidActionExecutor(private val context: Context) {
     }
 
     private fun handleSetVolume(target: String?): AndroidExecutionResult {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "set_volume",
+            details = "Simulated volume set: $target",
+            targetResolved = target
+        )
+
+        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
 
         val targetLevel = target?.filter { it.isDigit() }?.toIntOrNull() ?: (maxVolume / 2)
@@ -216,7 +234,13 @@ class AndroidActionExecutor(private val context: Context) {
     }
 
     private fun handleCopyToClipboard(target: String): AndroidExecutionResult {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "copy_to_clipboard",
+            details = "Simulated clipboard copy: $target",
+            targetResolved = target
+        )
+
+        val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("SilentExec", target)
         clipboard.setPrimaryClip(clip)
 
@@ -228,6 +252,12 @@ class AndroidActionExecutor(private val context: Context) {
     }
 
     private fun handleToggleSetting(target: String): AndroidExecutionResult {
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "toggle_setting",
+            details = "Simulated setting toggle: $target",
+            targetResolved = target
+        )
+
         val action = when (target.lowercase().trim()) {
             "wifi", "واي فاي", "الواي فاي" -> Settings.ACTION_WIFI_SETTINGS
             "bluetooth", "بلوتوث", "البلوتوث" -> Settings.ACTION_BLUETOOTH_SETTINGS
@@ -239,7 +269,7 @@ class AndroidActionExecutor(private val context: Context) {
         val intent = Intent(action).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
+        ctx.startActivity(intent)
 
         return AndroidExecutionResult.Success(
             action = "toggle_setting",
@@ -249,11 +279,17 @@ class AndroidActionExecutor(private val context: Context) {
     }
 
     private fun handleSendMessage(target: String): AndroidExecutionResult {
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "send_message",
+            details = "Simulated send message: $target",
+            targetResolved = target
+        )
+
         val intent = Intent(Intent.ACTION_SENDTO).apply {
             data = Uri.parse("smsto:$target")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
+        ctx.startActivity(intent)
 
         return AndroidExecutionResult.Success(
             action = "send_message",
@@ -263,12 +299,18 @@ class AndroidActionExecutor(private val context: Context) {
     }
 
     private fun handleOpenFileOrFolder(target: String): AndroidExecutionResult {
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "open_file",
+            details = "Simulated storage view: $target",
+            targetResolved = target
+        )
+
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(Uri.parse("content://"), "*/*")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
-            context.startActivity(intent)
+            ctx.startActivity(intent)
         } catch (_: Exception) {
             // Document explorer fallback
         }
@@ -281,12 +323,18 @@ class AndroidActionExecutor(private val context: Context) {
     }
 
     private fun handleCreateNote(target: String): AndroidExecutionResult {
+        val ctx = context ?: return AndroidExecutionResult.Success(
+            action = "create_note",
+            details = "Simulated note creation: $target",
+            targetResolved = target
+        )
+
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, target)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(Intent.createChooser(intent, "Save Note").apply {
+        ctx.startActivity(Intent.createChooser(intent, "Save Note").apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         })
 

@@ -41,9 +41,12 @@ import com.silentexec.android.core.SafetyDecision
 import com.silentexec.android.core.SafetyGate
 import com.silentexec.android.core.SafetyTier
 import com.silentexec.android.core.ThemeMode
+import com.silentexec.android.exec.AgentLoopRunner
+import com.silentexec.android.exec.AgentStepUpdate
 import com.silentexec.android.exec.AndroidActionExecutor
 import com.silentexec.android.exec.AndroidExecutionResult
 import com.silentexec.android.exec.SilentExecAccessibilityService
+import com.silentexec.android.exec.StepDecision
 import com.silentexec.android.net.AppReleaseItem
 import com.silentexec.android.net.AppUpdater
 import com.silentexec.android.net.GitHubReleaseClient
@@ -74,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private val releaseClient = GitHubReleaseClient()
     private lateinit var appUpdater: AppUpdater
     private lateinit var overlayController: LiveOverlayController
+    private lateinit var agentLoopRunner: AgentLoopRunner
 
     private var voiceInputHelper: VoiceInputHelper? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -165,6 +169,14 @@ class MainActivity : AppCompatActivity() {
         modelDownloader = ModelDownloader(this)
         appUpdater = AppUpdater(this, releaseClient)
         overlayController = LiveOverlayController(this)
+        agentLoopRunner = AgentLoopRunner(
+            executor = executor,
+            settings = settings,
+            llamaEngine = llamaEngine,
+            bridgeClient = bridgeClient,
+            grammarText = grammarText,
+            stepDelayMs = 600L
+        )
 
         bindViews()
         loadGrammarAsset()
@@ -423,272 +435,109 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleCommand(rawInput: String) {
         recordHistory(rawInput)
-        isExecutionCancelled = false
 
         overlayController.show(
             initialText = rawInput,
             onCancel = {
-                isExecutionCancelled = true
+                agentLoopRunner.cancel()
                 addFeedItem("⏹ Cancelled", R.color.warning_yellow)
             }
         )
 
-        // 1. Raw JSON MultiStepPlan?
-        val plan = runCatching { ActionJson.planFromJson(rawInput) }.getOrNull()
-        if (plan != null) {
-            dispatchPlan(plan.steps)
-            return
-        }
-
-        // 2. Raw JSON single ActionCommand?
-        val jsonCmd = runCatching { ActionJson.fromJson(rawInput) }.getOrNull()
-        if (jsonCmd != null) {
-            dispatchPlan(listOf(jsonCmd))
-            return
-        }
-
-        // 3. Fast Rule Router (<15ms)
-        if (settings.fastRouterEnabled) {
-            val fastAction = FastRuleRouter.route(rawInput)
-            if (fastAction != null) {
-                addFeedItem(getString(R.string.stage_routing_fast, fastAction.action.wireName), R.color.accent_blue)
-                dispatchPlan(listOf(fastAction))
-                return
-            }
-        }
-
-        // 4. Routing by InferenceSource
-        if (settings.inferenceSource == InferenceSource.LAN_BRIDGE) {
-            handleBridgeExecution(rawInput)
-        } else {
-            handleOfflineExecution(rawInput)
-        }
-    }
-
-    private fun handleOfflineExecution(rawInput: String) {
-        addFeedItem(getString(R.string.stage_understanding), R.color.text_secondary)
-
-        if (llamaEngine.isLoaded()) {
-            thread {
-                val inferred = llamaEngine.inferActionCommand(
-                    userQuery = rawInput,
-                    grammarText = grammarText,
-                    maxTokens = 160
-                )
-                mainHandler.post {
-                    inferred.onSuccess { cmd ->
-                        dispatchPlan(listOf(cmd))
-                    }.onFailure {
-                        val fallback = parseLocalIntent(rawInput)
-                        dispatchPlan(listOf(fallback))
-                    }
-                }
-            }
-        } else {
-            val fallback = parseLocalIntent(rawInput)
-            dispatchPlan(listOf(fallback))
-        }
-    }
-
-    private fun handleBridgeExecution(rawInput: String) {
-        val host = settings.bridgeHost
-        val port = settings.bridgePort
-        val token = settings.bridgeToken
-
-        if (host.isBlank()) {
-            addFeedItem(getString(R.string.stage_error, "PC IP not configured in Settings"), R.color.danger_red)
-            bottomNav.selectedItemId = R.id.nav_settings
-            return
-        }
-
-        addFeedItem(getString(R.string.stage_sending_bridge), R.color.accent_blue)
-
         thread {
-            val result = bridgeClient.executeRemote(
-                host = host,
-                port = port,
-                token = token,
-                prompt = rawInput,
-                confirm = settings.executionMode == ExecutionMode.SILENT,
-                dryRun = settings.executionMode == ExecutionMode.DRY_RUN
-            )
-
-            mainHandler.post {
-                result.onSuccess { resp ->
-                    // Attempt to parse response as MultiStepPlan or ActionCommand JSON
-                    val remotePlan = runCatching { ActionJson.planFromJson(resp) }.getOrNull()
-                    if (remotePlan != null) {
-                        dispatchPlan(remotePlan.steps)
-                    } else {
-                        val remoteCmd = runCatching { ActionJson.fromJson(resp) }.getOrNull()
-                        if (remoteCmd != null) {
-                            dispatchPlan(listOf(remoteCmd))
-                        } else {
-                            addFeedItem(getString(R.string.stage_completed, resp), R.color.accent_green)
-                            etCommand.text.clear()
-                        }
+            agentLoopRunner.run(
+                userGoal = rawInput,
+                onUpdate = { update ->
+                    mainHandler.post {
+                        handleAgentStepUpdate(update)
                     }
-                }.onFailure { err ->
-                    addFeedItem(getString(R.string.stage_error, err.message ?: ""), R.color.danger_red)
-                }
-            }
-        }
-    }
-
-    /**
-     * Executes a list of action steps sequentially, honoring:
-     * - SILENT: auto-executes Tier 1 steps, pauses only for Tier 2 confirmation.
-     * - INTERACTIVE: displays step confirmation preview before EVERY step with [Run | Skip | Stop].
-     * - DRY_RUN: verifies entire plan with SafetyGate and displays [DRY-RUN] badges without modifying anything.
-     */
-    private fun dispatchPlan(steps: List<ActionCommand>) {
-        if (steps.isEmpty()) return
-
-        val isDryRun = settings.executionMode == ExecutionMode.DRY_RUN
-        val isInteractive = settings.executionMode == ExecutionMode.INTERACTIVE
-
-        val timelineItems = steps.mapIndexed { i, cmd ->
-            TimelineStep(
-                stepIndex = i + 1,
-                totalSteps = steps.size,
-                actionName = cmd.action.wireName,
-                target = cmd.target,
-                tierName = cmd.action.tier.name.replace("TIER_", "Tier "),
-                status = if (isDryRun) StepStatus.DRY_RUN else StepStatus.PENDING,
-                isDryRun = isDryRun
-            )
-        }
-
-        tvTimelineEmpty.visibility = View.GONE
-        rvStepTimeline.visibility = View.VISIBLE
-        stepTimelineAdapter.setItems(timelineItems)
-
-        addFeedItem(getString(R.string.stage_planned, steps.size), R.color.accent_blue)
-
-        // DRY-RUN MODE: immediate validation without execution
-        if (isDryRun) {
-            steps.forEachIndexed { i, cmd ->
-                when (val decision = SafetyGate.evaluate(cmd)) {
-                    is SafetyDecision.Block -> {
-                        stepTimelineAdapter.updateStep(i, StepStatus.FAILED, "Blocked: ${decision.reason}")
-                        addFeedItem(getString(R.string.stage_blocked, decision.reason), R.color.danger_red)
-                    }
-                    is SafetyDecision.RequireConfirm -> {
-                        stepTimelineAdapter.updateStep(i, StepStatus.DRY_RUN, "Valid (Tier 2 Confirm required)")
-                        addFeedItem(getString(R.string.stage_dry_run, "${cmd.action.wireName} -> Requires Confirmation"), R.color.warning_yellow)
-                    }
-                    is SafetyDecision.AllowSilent -> {
-                        stepTimelineAdapter.updateStep(i, StepStatus.DRY_RUN, "Valid (Tier 1 Silent)")
-                        addFeedItem(getString(R.string.stage_dry_run, "${cmd.action.wireName} -> target=${cmd.target}"), R.color.accent_green)
-                    }
-                }
-            }
-            etCommand.text.clear()
-            FloatingBubbleService.updateProgress("✓ Dry Run (${steps.size} steps valid)")
-            mainHandler.postDelayed({ FloatingBubbleService.resetToBubble() }, 2000)
-            return
-        }
-
-        // REAL EXECUTION (SILENT or INTERACTIVE)
-        executePlanStep(steps, 0, isInteractive)
-    }
-
-    private fun executePlanStep(steps: List<ActionCommand>, index: Int, isInteractive: Boolean) {
-        if (isExecutionCancelled) {
-            addFeedItem("⏹ Execution aborted", R.color.warning_yellow)
-            FloatingBubbleService.resetToBubble()
-            return
-        }
-
-        if (index >= steps.size) {
-            addFeedItem(getString(R.string.stage_all_done), R.color.accent_green)
-            etCommand.text.clear()
-            FloatingBubbleService.updateProgress("✓ All steps completed")
-            mainHandler.postDelayed({ FloatingBubbleService.resetToBubble() }, 2500)
-            return
-        }
-
-        val cmd = steps[index]
-        val stepNum = index + 1
-        val total = steps.size
-
-        // Handle ReAct DONE action
-        if (cmd.action == ActionType.DONE) {
-            stepTimelineAdapter.updateStep(index, StepStatus.COMPLETED, "Done")
-            executePlanStep(steps, index + 1, isInteractive)
-            return
-        }
-
-        val stepProgressText = "⚡ $stepNum/$total ${cmd.action.wireName}"
-        FloatingBubbleService.updateProgress(stepProgressText) {
-            isExecutionCancelled = true
-        }
-
-        if (isInteractive) {
-            // Interactive Mode: preview card / confirmation dialog before EVERY step
-            stepTimelineAdapter.updateStep(index, StepStatus.AWAITING_CONFIRM, "Awaiting approval")
-            showInteractiveStepDialog(cmd, stepNum, total,
-                onRun = {
-                    executeStepDirectly(cmd, steps, index, isInteractive)
                 },
-                onSkip = {
-                    stepTimelineAdapter.updateStep(index, StepStatus.SKIPPED, getString(R.string.stage_step_skipped, stepNum, total))
-                    addFeedItem(getString(R.string.stage_step_skipped, stepNum, total), R.color.text_secondary)
-                    executePlanStep(steps, index + 1, isInteractive)
-                },
-                onStop = {
-                    isExecutionCancelled = true
-                    addFeedItem("⏹ Stopped at step $stepNum/$total", R.color.danger_red)
-                    FloatingBubbleService.resetToBubble()
+                onConfirmStep = { step, index, total, callback ->
+                    mainHandler.post {
+                        showInteractiveStepDialog(
+                            cmd = step,
+                            stepIndex = index,
+                            totalSteps = total,
+                            onRun = { callback(StepDecision.RUN) },
+                            onSkip = { callback(StepDecision.SKIP) },
+                            onStop = { callback(StepDecision.STOP) }
+                        )
+                    }
                 }
             )
-        } else {
-            // Silent Mode: execute Tier 1 directly, pause only for Tier 2 confirmation
-            val isTier2 = cmd.action.tier == SafetyTier.TIER_2_CONFIRM
-            if (isTier2) {
-                stepTimelineAdapter.updateStep(index, StepStatus.AWAITING_CONFIRM, "Requires Confirmation (Tier 2)")
-                showConfirmationDialog("Confirm Tier-2 Action: ${cmd.action.wireName} on ${cmd.target}") {
-                    executeStepDirectly(cmd, steps, index, isInteractive)
-                }
-            } else {
-                executeStepDirectly(cmd, steps, index, isInteractive)
-            }
         }
     }
 
-    private fun executeStepDirectly(
-        cmd: ActionCommand,
-        steps: List<ActionCommand>,
-        index: Int,
-        isInteractive: Boolean
-    ) {
-        val stepNum = index + 1
-        val total = steps.size
-
-        stepTimelineAdapter.updateStep(index, StepStatus.RUNNING, getString(R.string.status_running))
-        addFeedItem(getString(R.string.stage_step_running, stepNum, total, cmd.action.wireName), R.color.accent_blue)
-
-        when (val res = executor.execute(cmd, confirmed = true)) {
-            is AndroidExecutionResult.Success -> {
-                stepTimelineAdapter.updateStep(index, StepStatus.COMPLETED, res.details)
-                addFeedItem(getString(R.string.stage_step_done, stepNum, total, res.details), R.color.accent_green)
-                mainHandler.postDelayed({
-                    executePlanStep(steps, index + 1, isInteractive)
-                }, 200)
+    private fun handleAgentStepUpdate(update: AgentStepUpdate) {
+        when (update) {
+            is AgentStepUpdate.Understanding -> {
+                addFeedItem(getString(R.string.stage_understanding), R.color.text_secondary)
             }
-            is AndroidExecutionResult.ConfirmationRequired -> {
-                showConfirmationDialog(res.prompt) {
-                    executeStepDirectly(cmd, steps, index, isInteractive)
+            is AgentStepUpdate.FastRuleMatched -> {
+                addFeedItem(getString(R.string.stage_routing_fast, update.command.action.wireName), R.color.accent_blue)
+            }
+            is AgentStepUpdate.PlanResolved -> {
+                tvTimelineEmpty.visibility = View.GONE
+                rvStepTimeline.visibility = View.VISIBLE
+                val items = update.steps.mapIndexed { i, cmd ->
+                    TimelineStep(
+                        stepIndex = i + 1,
+                        totalSteps = update.totalSteps,
+                        actionName = cmd.action.wireName,
+                        target = cmd.target,
+                        tierName = cmd.action.tier.name.replace("TIER_", "Tier "),
+                        status = if (settings.executionMode == ExecutionMode.DRY_RUN) StepStatus.DRY_RUN else StepStatus.PENDING,
+                        isDryRun = settings.executionMode == ExecutionMode.DRY_RUN
+                    )
+                }
+                stepTimelineAdapter.setItems(items)
+                addFeedItem(getString(R.string.stage_planned, update.totalSteps), R.color.accent_blue)
+                FloatingBubbleService.updateProgress("⚡ 1/${update.totalSteps} ${update.steps[0].action.wireName}") {
+                    agentLoopRunner.cancel()
                 }
             }
-            is AndroidExecutionResult.Blocked -> {
-                stepTimelineAdapter.updateStep(index, StepStatus.FAILED, "Blocked: ${res.reason}")
-                addFeedItem(getString(R.string.stage_blocked, res.reason), R.color.danger_red)
+            is AgentStepUpdate.StepStarted -> {
+                val stepNum = update.stepIndex
+                val total = update.totalSteps
+                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.RUNNING, getString(R.string.status_running))
+                addFeedItem(getString(R.string.stage_step_running, stepNum, total, update.command.action.wireName), R.color.accent_blue)
+                FloatingBubbleService.updateProgress("⚡ $stepNum/$total ${update.command.action.wireName}") {
+                    agentLoopRunner.cancel()
+                }
+            }
+            is AgentStepUpdate.AwaitingConfirmation -> {
+                val stepNum = update.stepIndex
+                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.AWAITING_CONFIRM, update.reason)
+            }
+            is AgentStepUpdate.StepCompleted -> {
+                val stepNum = update.stepIndex
+                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.COMPLETED, update.details)
+                addFeedItem(getString(R.string.stage_step_done, stepNum, update.totalSteps, update.details), R.color.accent_green)
+            }
+            is AgentStepUpdate.StepSkipped -> {
+                val stepNum = update.stepIndex
+                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.SKIPPED, getString(R.string.stage_step_skipped, stepNum, update.totalSteps))
+                addFeedItem(getString(R.string.stage_step_skipped, stepNum, update.totalSteps), R.color.text_secondary)
+            }
+            is AgentStepUpdate.StepFailed -> {
+                val stepNum = update.stepIndex
+                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.FAILED, update.error)
+                addFeedItem(getString(R.string.stage_step_failed, stepNum, update.totalSteps, update.error), R.color.danger_red)
                 FloatingBubbleService.resetToBubble()
             }
-            is AndroidExecutionResult.Error -> {
-                stepTimelineAdapter.updateStep(index, StepStatus.FAILED, res.message)
-                addFeedItem(getString(R.string.stage_step_failed, stepNum, total, res.message), R.color.danger_red)
+            is AgentStepUpdate.DryRunValidated -> {
+                val stepNum = update.stepIndex
+                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.DRY_RUN, update.note)
+                addFeedItem(getString(R.string.stage_dry_run, "${update.command.action.wireName} -> ${update.note}"), R.color.warning_yellow)
+            }
+            is AgentStepUpdate.AllCompleted -> {
+                addFeedItem(getString(R.string.stage_all_done), R.color.accent_green)
+                etCommand.text.clear()
+                FloatingBubbleService.updateProgress("✓ All steps completed")
+                mainHandler.postDelayed({ FloatingBubbleService.resetToBubble() }, 2000)
+            }
+            is AgentStepUpdate.Aborted -> {
+                addFeedItem("⏹ ${update.reason}", R.color.warning_yellow)
                 FloatingBubbleService.resetToBubble()
             }
         }
@@ -714,6 +563,10 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton(R.string.step_stop) { _, _ -> onStop() }
             .setCancelable(false)
             .show()
+    }
+
+    fun cancelAgentLoop() {
+        agentLoopRunner.cancel()
     }
 
     private fun showConfirmationDialog(prompt: String, onConfirm: () -> Unit) {

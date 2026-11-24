@@ -129,6 +129,7 @@ class FloatingBubbleService : Service() {
 
         btnFloatingPillStop?.setOnClickListener {
             onStopCallback?.invoke()
+            MainActivity.activeInstance?.cancelAgentLoop()
             showBubble()
         }
 

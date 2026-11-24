@@ -18,7 +18,23 @@ data class UiElementInfo(
     val isEditable: Boolean,
     val isScrollable: Boolean,
     val bounds: Rect
-)
+) {
+    fun formatForPrompt(): String {
+        val label = when {
+            text.isNotBlank() && contentDescription.isNotBlank() && text != contentDescription -> "$text ($contentDescription)"
+            text.isNotBlank() -> text
+            contentDescription.isNotBlank() -> contentDescription
+            isEditable -> "input field"
+            else -> className.substringAfterLast('.')
+        }
+        val types = mutableListOf<String>()
+        if (isEditable) types.add("editable")
+        if (isClickable) types.add("clickable")
+        if (isScrollable) types.add("scrollable")
+        val typeStr = if (types.isNotEmpty()) types.joinToString(", ") else "view"
+        return "[$index] $label ($typeStr)"
+    }
+}
 
 class SilentExecAccessibilityService : AccessibilityService() {
 
@@ -66,7 +82,7 @@ class SilentExecAccessibilityService : AccessibilityService() {
                 if (bounds.width() > 0 && bounds.height() > 0) {
                     elements.add(
                         UiElementInfo(
-                            index = ++counter,
+                            index = counter++,
                             text = text,
                             contentDescription = desc,
                             className = node.className?.toString() ?: "",
@@ -89,10 +105,47 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Executes `ui_click` by matching target label with Arabic/English normalization,
+     * Returns the pruned screen elements formatted for prompt inclusion.
+     */
+    fun extractPrunedUiStrings(): List<String> {
+        return extractPrunedUiTree().map { it.formatForPrompt() }
+    }
+
+    /**
+     * Executes `ui_click` by index (`#0`, `1`) OR matching target label with Arabic/English normalization,
      * clicking the node (or clickable parent), or falling back to a dispatchGesture tap at the center bounds.
+     * If element is not found, scrolls smoothly and attempts re-resolution once.
      */
     fun performUiClick(target: String): Boolean {
+        val trimmed = target.trim()
+        if (trimmed.isEmpty()) return false
+
+        // 1. Direct Index Click: "#0", "#1", "0", "1"
+        val indexMatch = Regex("""^#?(\d+)$""").matchEntire(trimmed)
+        if (indexMatch != null) {
+            val targetIndex = indexMatch.groupValues[1].toInt()
+            val elements = extractPrunedUiTree()
+            val matched = elements.find { it.index == targetIndex }
+            if (matched != null) {
+                val cx = matched.bounds.centerX().toFloat()
+                val cy = matched.bounds.centerY().toFloat()
+                return dispatchTapGesture(cx, cy)
+            }
+        }
+
+        // 2. Text Search
+        var clicked = clickByText(trimmed)
+        if (!clicked) {
+            // Scroll down smoothly once and try again
+            performUiScroll("down")
+            try { Thread.sleep(350) } catch (_: InterruptedException) {}
+            clicked = clickByText(trimmed)
+        }
+
+        return clicked
+    }
+
+    private fun clickByText(target: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val normTarget = normalizeText(target)
         if (normTarget.isEmpty()) return false
@@ -125,12 +178,12 @@ class SilentExecAccessibilityService : AccessibilityService() {
         findMatchingNode(root)
         val candidate = targetNode ?: fallbackNode ?: return false
 
-        // 1. Try ACTION_CLICK directly on candidate
+        // Try ACTION_CLICK directly on candidate
         if (candidate.isClickable && candidate.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
             return true
         }
 
-        // 2. Try climbing parent chain to find clickable container
+        // Try climbing parent chain to find clickable container
         var parent = candidate.parent
         while (parent != null) {
             if (parent.isClickable && parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
@@ -139,7 +192,7 @@ class SilentExecAccessibilityService : AccessibilityService() {
             parent = parent.parent
         }
 
-        // 3. Fallback to physical gesture tap at center of bounds
+        // Fallback to physical gesture tap at center of bounds
         val bounds = Rect()
         candidate.getBoundsInScreen(bounds)
         if (bounds.width() > 0 && bounds.height() > 0) {
@@ -151,14 +204,30 @@ class SilentExecAccessibilityService : AccessibilityService() {
 
     /**
      * Executes `ui_type` by locating focused or target input field and setting text via ACTION_SET_TEXT.
+     * Optionally triggers search/IME action if requested.
      */
-    fun performUiType(text: String, targetField: String? = null): Boolean {
+    fun performUiType(text: String, targetField: String? = null, pressEnter: Boolean = false): Boolean {
         val root = rootInActiveWindow ?: return false
 
         var targetNode: AccessibilityNodeInfo? = null
 
-        // 1. If targetField label provided, search for matching editable field
+        // 1. If targetField index provided ("#0")
         if (!targetField.isNullOrBlank()) {
+            val indexMatch = Regex("""^#?(\d+)$""").matchEntire(targetField.trim())
+            if (indexMatch != null) {
+                val targetIndex = indexMatch.groupValues[1].toInt()
+                val elements = extractPrunedUiTree()
+                val matched = elements.find { it.index == targetIndex }
+                if (matched != null) {
+                    dispatchTapGesture(matched.bounds.centerX().toFloat(), matched.bounds.centerY().toFloat())
+                    try { Thread.sleep(200) } catch (_: InterruptedException) {}
+                    targetNode = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                }
+            }
+        }
+
+        // 2. If targetField label provided, search for matching editable field
+        if (targetNode == null && !targetField.isNullOrBlank()) {
             val normField = normalizeText(targetField)
             fun findEditableByLabel(node: AccessibilityNodeInfo?) {
                 if (node == null || targetNode != null) return
@@ -178,12 +247,12 @@ class SilentExecAccessibilityService : AccessibilityService() {
             findEditableByLabel(root)
         }
 
-        // 2. If no target found, locate currently focused input
+        // 3. If no target found, locate currently focused input
         if (targetNode == null) {
             targetNode = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         }
 
-        // 3. If still null, pick first editable node
+        // 4. If still null, pick first editable node
         if (targetNode == null) {
             fun findFirstEditable(node: AccessibilityNodeInfo?) {
                 if (node == null || targetNode != null) return
@@ -203,7 +272,30 @@ class SilentExecAccessibilityService : AccessibilityService() {
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        val typed = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+
+        if (typed && pressEnter) {
+            // Attempt to trigger search/send button if visible
+            fun tryClickSendOrSearch(n: AccessibilityNodeInfo?) {
+                if (n == null) return
+                val desc = normalizeText(n.contentDescription?.toString() ?: "")
+                val txt = normalizeText(n.text?.toString() ?: "")
+                if (desc.contains("send") || desc.contains("search") || desc.contains("ارسال") || desc.contains("بحث") ||
+                    txt.contains("send") || txt.contains("search") || txt.contains("ارسال") || txt.contains("بحث")
+                ) {
+                    if (n.isClickable) {
+                        n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        return
+                    }
+                }
+                for (i in 0 until n.childCount) {
+                    tryClickSendOrSearch(n.getChild(i))
+                }
+            }
+            tryClickSendOrSearch(rootInActiveWindow)
+        }
+
+        return typed
     }
 
     /**
@@ -256,28 +348,24 @@ class SilentExecAccessibilityService : AccessibilityService() {
 
         when {
             isUp -> {
-                // Swipe downward to scroll up
                 startX = bounds.centerX().toFloat()
                 startY = bounds.top + bounds.height() * 0.25f
                 endX = startX
                 endY = bounds.top + bounds.height() * 0.75f
             }
             isLeft -> {
-                // Swipe right to scroll left
                 startX = bounds.left + bounds.width() * 0.25f
                 startY = bounds.centerY().toFloat()
                 endX = bounds.left + bounds.width() * 0.75f
                 endY = startY
             }
             isRight -> {
-                // Swipe left to scroll right
                 startX = bounds.left + bounds.width() * 0.75f
                 startY = bounds.centerY().toFloat()
                 endX = bounds.left + bounds.width() * 0.25f
                 endY = startY
             }
             else -> {
-                // Swipe upward to scroll down
                 startX = bounds.centerX().toFloat()
                 startY = bounds.top + bounds.height() * 0.75f
                 endX = startX

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import java.util.concurrent.ConcurrentHashMap
 
 enum class ExecutionMode {
     SILENT,
@@ -37,10 +38,109 @@ enum class InferenceSource {
     }
 }
 
-class AppSettings(context: Context) {
+class InMemorySharedPreferences : SharedPreferences {
+    private val data = ConcurrentHashMap<String, Any>()
+
+    override fun getAll(): MutableMap<String, *> = HashMap(data)
+
+    override fun getString(key: String?, defValue: String?): String? =
+        (data[key] as? String) ?: defValue
+
+    @Suppress("UNCHECKED_CAST")
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+        (data[key] as? MutableSet<String>) ?: defValues
+
+    override fun getInt(key: String?, defValue: Int): Int =
+        (data[key] as? Int) ?: defValue
+
+    override fun getLong(key: String?, defValue: Long): Long =
+        (data[key] as? Long) ?: defValue
+
+    override fun getFloat(key: String?, defValue: Float): Float =
+        (data[key] as? Float) ?: defValue
+
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean =
+        (data[key] as? Boolean) ?: defValue
+
+    override fun contains(key: String?): Boolean = data.containsKey(key)
+
+    override fun edit(): SharedPreferences.Editor = Editor(this)
+
+    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+
+    class Editor(private val parent: InMemorySharedPreferences) : SharedPreferences.Editor {
+        private val pending = HashMap<String, Any?>()
+        private var clear = false
+
+        override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+            if (key != null) pending[key] = value
+            return this
+        }
+
+        override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
+            if (key != null) pending[key] = values
+            return this
+        }
+
+        override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
+            if (key != null) pending[key] = value
+            return this
+        }
+
+        override fun putLong(key: String?, value: Long): SharedPreferences.Editor {
+            if (key != null) pending[key] = value
+            return this
+        }
+
+        override fun putFloat(key: String?, value: Float): SharedPreferences.Editor {
+            if (key != null) pending[key] = value
+            return this
+        }
+
+        override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor {
+            if (key != null) pending[key] = value
+            return this
+        }
+
+        override fun remove(key: String?): SharedPreferences.Editor {
+            if (key != null) pending[key] = this
+            return this
+        }
+
+        override fun clear(): SharedPreferences.Editor {
+            clear = true
+            return this
+        }
+
+        override fun commit(): Boolean {
+            apply()
+            return true
+        }
+
+        override fun apply() {
+            if (clear) parent.data.clear()
+            for ((k, v) in pending) {
+                if (v === this) {
+                    parent.data.remove(k)
+                } else if (v != null) {
+                    parent.data[k] = v
+                } else {
+                    parent.data.remove(k)
+                }
+            }
+        }
+    }
+}
+
+class AppSettings(
+    context: Context? = null,
+    injectedPrefs: SharedPreferences? = null
+) {
 
     private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        injectedPrefs ?: context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        ?: InMemorySharedPreferences()
 
     var language: String
         get() = prefs.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
@@ -62,7 +162,7 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putString(KEY_INFERENCE_SOURCE, value.name).apply()
 
     var activeModelFile: String
-        get() = prefs.getString(KEY_ACTIVE_MODEL_FILE, DEFAULT_MODEL_FILE) ?: DEFAULT_MODEL_FILE
+        get() = prefs.getString(KEY_ACTIVE_MODEL_FILE, "") ?: ""
         set(value) = prefs.edit().putString(KEY_ACTIVE_MODEL_FILE, value).apply()
 
     var fastRouterEnabled: Boolean
@@ -82,21 +182,25 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putInt(KEY_BRIDGE_PORT, value).apply()
 
     var bridgeToken: String
-        get() = prefs.getString(KEY_BRIDGE_TOKEN, "silent-exec-secret") ?: "silent-exec-secret"
+        get() = prefs.getString(KEY_BRIDGE_TOKEN, "") ?: ""
         set(value) = prefs.edit().putString(KEY_BRIDGE_TOKEN, value).apply()
 
     fun applyLocale() {
-        val appLocale = LocaleListCompat.forLanguageTags(language)
-        AppCompatDelegate.setApplicationLocales(appLocale)
+        runCatching {
+            val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(language)
+            AppCompatDelegate.setApplicationLocales(appLocale)
+        }
     }
 
     fun applyTheme() {
-        val nightMode = when (themeMode) {
-            ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
-            ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-            ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        runCatching {
+            val nightMode = when (themeMode) {
+                ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+                ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+                ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+            AppCompatDelegate.setDefaultNightMode(nightMode)
         }
-        AppCompatDelegate.setDefaultNightMode(nightMode)
     }
 
     fun setLanguageAndApply(lang: String) {
@@ -119,6 +223,5 @@ class AppSettings(context: Context) {
         const val KEY_BRIDGE_TOKEN = "setting_bridge_token"
 
         const val DEFAULT_LANGUAGE = "ar"
-        const val DEFAULT_MODEL_FILE = "Qwen2.5-0.5B-Instruct.Q4_K_M.gguf"
     }
 }
