@@ -10,9 +10,10 @@
   // --- Complete Localization Dictionaries ---
   const I18N = {
     ar: {
-      app_title: 'SilentExec Desktop v0.5.0',
+      app_title: 'SilentExec Desktop v1.0.0',
       nav_agent: 'الوكيل الذكي',
       nav_models: 'النماذج والبيئة',
+      nav_memory: 'الذاكرة والمهارات',
       nav_tools: 'الأدوات و MCP',
       nav_settings: 'الإعدادات',
       composer_title: 'موجه الأوامر والأهداف',
@@ -23,41 +24,63 @@
       btn_stop: 'إيقاف',
       hint_run: 'للتشغيل',
       hint_newline: 'سطر جديد',
-      prompt_placeholder: 'اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح المتصفح وابحث عن كود رست أو شغل الحاسبة)...',
+      prompt_placeholder: 'اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح المتصفح وابحث عن كود رست أو اكتب ملفاً)...',
       quick_examples_label: 'أمثلة سريعة:',
       confirm_required_title: 'تأكيد تنفيذ الخطوة',
       btn_execute_step: 'تنفيذ الخطوة',
       btn_skip_step: 'تخطي',
-      btn_cancel: 'إلغاء الخطة',
+      btn_cancel: 'إلغاء',
       timeline_title: 'مخطط التنفيذ المباشر (Step Inspector)',
       timeline_desc: 'فحص تسلسل الخطوات المصنفة، بوابات الأمان، ونتائج التنفيذ الحية.',
       status_idle: 'جاهز للأوامر',
-      empty_timeline_title: 'لا توجد مهام نشطة',
-      empty_timeline_hint: 'أدخل أمراً أو اختر من الأمثلة السريعة أعلاه لمشاهدة تفكيك الخطة وتنفيذها.',
+      agent_stream_title: 'جلسة الوكيل الذكي',
+      agent_welcome_title: 'وكيل المهام والتنفيذ الذكي جاهز',
+      agent_welcome_desc: 'أدخل أي طلب لتنفيذ مهام النظام، قراءة وكتابة الملفات، أو صياغة الردود والأكواد.',
+      agent_thinking: 'جارٍ التفكير وتفكيك الخطة...',
+      agent_steps_title: 'خطوات التنفيذ',
+      btn_clear_session: 'جلسة جديدة',
+      copy_code: 'نسخ المحتوى',
+      code_copied: 'تم النسخ بنجاح!',
       runtime_title: 'محرك التشغيل المحلي (llama-server)',
       runtime_desc: 'يعمل محلياً بدون سحابة خارجية مع دعم كامل لقواعد GBNF وحفظ ذاكرة KV Cache.',
       runtime_ready: 'جاهز ومفعل',
       runtime_not_ready: 'غير مثبت',
       btn_setup_runtime: 'إعداد / فحص البيئة',
       models_catalog_title: 'مستودع نماذج الذكاء الاصطناعي (GGUF)',
-      models_catalog_desc: 'نماذج Qwen2.5 خفيفة ومحسّنة لأداء الاستجابة الفورية والأوامر ثنائية اللغة.',
+      models_catalog_desc: 'نماذج Qwen2.5 و Edge خفيفة ومحسّنة للاستجابة الفورية والأوامر ثنائية اللغة.',
       btn_refresh_models: 'تحديث القائمة',
-      loading_models: 'جارٍ استعلام مستودع GitHub Releases...',
+      loading_models: 'جارٍ استعلام مستودع النماذج...',
       no_models_found: 'لم يتم العثور على نماذج متوفرة حالياً.',
       model_cached: 'محمل محلياً',
       model_remote: 'متاح للتحميل',
-      model_active: 'النموذج النشط',
+      model_active: 'النشط',
       btn_download: 'تحميل',
       btn_pause: 'إيقاف مؤقت',
       btn_resume: 'استئناف',
       btn_activate: 'تفعيل',
       btn_delete: 'حذف',
-      tools_title: 'أدوات النظام المدمجة (21 أداة)',
+      memory_title: 'الذاكرة والمهارات الدائمة (Hermes Memory)',
+      memory_desc: 'معلومات وتفضيلات يحفظها الوكيل تلقائياً في memory.json ويحقنها في السياق لتخصيص الأوامر.',
+      btn_add_memory: 'إضافة معلومة للذاكرة',
+      memory_form_title: 'تسجيل معلومة جديدة في الذاكرة',
+      memory_key_label: 'المفتاح / العنوان',
+      memory_content_label: 'المحتوى / القيمة',
+      memory_category_label: 'التصنيف',
+      category_preference: 'تفضيل شخصي',
+      category_fact: 'حقيقة / مسار',
+      category_skill: 'مهارة / روتين',
+      saved_memories_title: 'المعلومات والمهارات المحفوظة',
+      saved_memories_desc: 'قائمة الذواكر المخزنة محلياً التي يستند إليها الوكيل في كل محادثة.',
+      btn_refresh_memories: 'تحديث القائمة',
+      loading_memories: 'جارٍ تحميل الذاكرة المحلية...',
+      no_memories_found: 'لا توجد معلومات محفوظة في الذاكرة بعد. أضف تفضيلاً أو اطلب من الوكيل حفظه.',
+      memory_saved_chip: 'تم حفظ في الذاكرة:',
+      tools_title: 'أدوات النظام المدمجة (25 أداة)',
       tools_desc: 'مصنفة حسب بوابات الأمان الصارمة (SafetyGate Tiers).',
       tier1_title: 'تنفيذ صامت مباشر',
-      tier1_desc: 'إجراءات قراءة وتصفح آمنة لا تشكل خطراً على بيانات المستخدم (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Done).',
+      tier1_desc: 'إجراءات قراءة وتصفح آمنة (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Reply, ReadFile, MemorySave, Done).',
       tier2_title: 'تأكيد صريح إلزامي',
-      tier2_desc: 'إجراءات حساسة تتطلب تأكيد المستخدم قبل التنفيذ الفعلي (DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).',
+      tier2_desc: 'إجراءات حساسة تتطلب تأكيد المستخدم (WriteFile, DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).',
       tier3_title: 'حظر تلقائي صارم',
       tier3_desc: 'محاولات حقن الأوامر، مسارات النظام الحساسة، والتعديلات العشوائية غير المصرح بها.',
       mcp_title: 'خوادم أدوات Model Context Protocol (MCP)',
@@ -113,9 +136,10 @@
       quick_ex_5: 'ارجع'
     },
     en: {
-      app_title: 'SilentExec Desktop v0.5.0',
+      app_title: 'SilentExec Desktop v1.0.0',
       nav_agent: 'Smart Agent',
       nav_models: 'Models & Runtime',
+      nav_memory: 'Memory & Skills',
       nav_tools: 'Tools & MCP',
       nav_settings: 'Settings',
       composer_title: 'Command & Goal Composer',
@@ -126,41 +150,63 @@
       btn_stop: 'Stop',
       hint_run: 'to run',
       hint_newline: 'new line',
-      prompt_placeholder: 'Type a command or multi-step goal (e.g. Open browser and search for Rust, or launch Calculator)...',
+      prompt_placeholder: 'Type a command or multi-step goal (e.g. Open browser and search for Rust, or write a file)...',
       quick_examples_label: 'Quick Examples:',
       confirm_required_title: 'Confirm Step Execution',
       btn_execute_step: 'Execute Step',
       btn_skip_step: 'Skip',
-      btn_cancel: 'Cancel Plan',
+      btn_cancel: 'Cancel',
       timeline_title: 'Live Execution Inspector (Step Inspector)',
       timeline_desc: 'Inspect classified steps, safety gates, and live execution outcomes.',
       status_idle: 'Ready for Commands',
-      empty_timeline_title: 'No Active Tasks',
-      empty_timeline_hint: 'Type a command or choose a quick example above to watch plan decomposition and execution.',
+      agent_stream_title: 'Smart Agent Session',
+      agent_welcome_title: 'Hermes Smart Agent Ready',
+      agent_welcome_desc: 'Execute OS actions, read/write files, summarize, and automate workflows.',
+      agent_thinking: 'Formulating execution plan...',
+      agent_steps_title: 'Execution Steps',
+      btn_clear_session: 'New Session',
+      copy_code: 'Copy Content',
+      code_copied: 'Copied!',
       runtime_title: 'Local Runtime Engine (llama-server)',
       runtime_desc: 'Runs locally with zero external cloud dependencies, full GBNF grammar constraints, and KV cache reuse.',
       runtime_ready: 'Ready & Active',
       runtime_not_ready: 'Not Installed',
       btn_setup_runtime: 'Setup / Verify Runtime',
       models_catalog_title: 'AI Models Repository (GGUF)',
-      models_catalog_desc: 'Compact Qwen2.5 models fine-tuned for ultra-low latency bilingual desktop navigation.',
+      models_catalog_desc: 'Compact Qwen2.5 & edge models fine-tuned for ultra-low latency desktop navigation.',
       btn_refresh_models: 'Refresh List',
-      loading_models: 'Querying GitHub Releases repository...',
+      loading_models: 'Querying model repository...',
       no_models_found: 'No models available currently.',
       model_cached: 'Locally Cached',
       model_remote: 'Available for Download',
-      model_active: 'Active Model',
+      model_active: 'Active',
       btn_download: 'Download',
       btn_pause: 'Pause',
       btn_resume: 'Resume',
       btn_activate: 'Activate',
       btn_delete: 'Delete',
-      tools_title: 'Built-in System Tools (21 Tools)',
+      memory_title: 'Persistent Memories & Skills (Hermes Memory)',
+      memory_desc: 'Facts and preferences automatically saved in memory.json and injected into context.',
+      btn_add_memory: 'Add Memory',
+      memory_form_title: 'Save New Memory Entry',
+      memory_key_label: 'Key / Identifier',
+      memory_content_label: 'Content / Value',
+      memory_category_label: 'Category',
+      category_preference: 'Preference',
+      category_fact: 'Fact',
+      category_skill: 'Skill',
+      saved_memories_title: 'Saved Memories & Skills',
+      saved_memories_desc: 'List of locally stored memories referenced by the agent on every run.',
+      btn_refresh_memories: 'Refresh List',
+      loading_memories: 'Loading local memory store...',
+      no_memories_found: 'No persistent memories found yet. Add a preference or ask the agent to remember.',
+      memory_saved_chip: 'Saved in memory:',
+      tools_title: 'Built-in System Tools (25 Tools)',
       tools_desc: 'Classified under strict SafetyGate Tiers.',
       tier1_title: 'Direct Silent Execution',
-      tier1_desc: 'Safe read and navigation actions posing zero risk to user data (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Done).',
+      tier1_desc: 'Safe actions (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Reply, ReadFile, MemorySave, Done).',
       tier2_title: 'Mandatory User Confirmation',
-      tier2_desc: 'Sensitive actions requiring explicit user confirmation before execution (DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).',
+      tier2_desc: 'Sensitive actions requiring explicit user confirmation (WriteFile, DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).',
       tier3_title: 'Strict Automated Blocking',
       tier3_desc: 'Command injection attempts, protected system paths, and unauthorized actions.',
       mcp_title: 'Model Context Protocol (MCP) Tool Servers',
@@ -252,6 +298,16 @@
     return () => {};
   }
 
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   function mockInvoke(cmd, args) {
     if (cmd === 'get_app_config') {
       return {
@@ -289,6 +345,63 @@
           is_active: false
         }
       ];
+    }
+    if (cmd === 'list_memories') {
+      return [
+        {
+          id: 'mem_1',
+          key: 'projects_dir',
+          content: 'D:\\Projects',
+          category: 'preference',
+          updated_at: new Date().toISOString()
+        },
+        {
+          id: 'mem_2',
+          key: 'preferred_editor',
+          content: 'VS Code',
+          category: 'preference',
+          updated_at: new Date().toISOString()
+        }
+      ];
+    }
+    if (cmd === 'save_memory') {
+      return {
+        id: 'mem_' + Date.now(),
+        key: args.key,
+        content: args.content,
+        category: args.category,
+        updated_at: new Date().toISOString()
+      };
+    }
+    if (cmd === 'delete_memory') {
+      return true;
+    }
+    if (cmd === 'run_agent_plan') {
+      return {
+        success: true,
+        query: args.query,
+        steps: [
+          {
+            step_index: 1,
+            total_steps: 2,
+            stage: 'completed',
+            description: 'Read file context',
+            action: 'read_file',
+            details: 'Contents of src/main.rs (240 lines)'
+          },
+          {
+            step_index: 2,
+            total_steps: 2,
+            stage: 'completed',
+            description: 'Generated helpful reply',
+            action: 'reply',
+            details: 'Here is the summary of your task and results.'
+          }
+        ],
+        message: 'Plan executed successfully',
+        requires_confirm: false,
+        pending_step_index: null
+      };
     }
     if (cmd === 'list_mcp_servers') {
       return [
@@ -371,6 +484,7 @@
     const viewNames = {
       agent: t.nav_agent,
       models: t.nav_models,
+      memory: t.nav_memory,
       tools: t.nav_tools,
       settings: t.nav_settings
     };
@@ -388,6 +502,7 @@
     updateViewBreadcrumb();
 
     if (viewName === 'models') loadModels();
+    if (viewName === 'memory') loadMemories();
     if (viewName === 'tools') loadMcpServers();
   }
 
@@ -413,7 +528,7 @@
     });
   }
 
-  // --- Agent Execution & Step Inspector ---
+  // --- Fluid Hermes / Codex Agent Session Stream ---
   async function runAgent() {
     const promptInput = document.getElementById('promptInput');
     const query = promptInput ? promptInput.value.trim() : '';
@@ -421,7 +536,9 @@
 
     const runBtn = document.getElementById('runBtn');
     const stopBtn = document.getElementById('stopBtn');
-    const timelineContainer = document.getElementById('timelineContainer');
+    const streamContainer = document.getElementById('agentStream');
+    const streamMessages = document.getElementById('streamMessages');
+    const welcomeCard = document.getElementById('streamWelcomeCard');
     const counterLabel = document.getElementById('stepCounterLabel');
     const t = I18N[AppState.lang] || I18N.ar;
 
@@ -429,15 +546,40 @@
     if (stopBtn) stopBtn.disabled = false;
     AppState.isExecuting = true;
 
-    if (counterLabel) counterLabel.textContent = t.stage_running;
-    if (timelineContainer) {
-      timelineContainer.innerHTML = `
-        <div class="empty-state-box">
-          <div class="spinner"></div>
-          <p style="margin-top: 10px; color: var(--text-muted);">${t.stage_understanding}...</p>
+    // Clear input
+    if (promptInput) promptInput.value = '';
+
+    // Hide welcome card
+    if (welcomeCard) welcomeCard.style.display = 'none';
+
+    // Append User Message to Stream
+    if (streamMessages) {
+      const userMsgEl = document.createElement('div');
+      userMsgEl.className = 'stream-turn';
+      userMsgEl.innerHTML = `
+        <div class="stream-user-msg">
+          <div class="stream-user-avatar">👤</div>
+          <div>
+            <div class="stream-user-text">${escapeHtml(query)}</div>
+            <div class="stream-user-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
         </div>
       `;
+      streamMessages.appendChild(userMsgEl);
+
+      // Append Thinking Skeleton Card
+      const thinkingEl = document.createElement('div');
+      thinkingEl.id = 'agentThinkingCard';
+      thinkingEl.className = 'stream-thinking-card';
+      thinkingEl.innerHTML = `
+        <div class="thinking-pulse"></div>
+        <span>${t.agent_thinking}</span>
+      `;
+      streamMessages.appendChild(thinkingEl);
+      if (streamContainer) streamContainer.scrollTop = streamContainer.scrollHeight;
     }
+
+    if (counterLabel) counterLabel.textContent = t.agent_thinking;
 
     try {
       const report = await invokeTauri('run_agent_plan', {
@@ -445,62 +587,158 @@
         mode: AppState.mode
       });
 
-      renderExecutionReport(report);
+      // Remove thinking skeleton
+      const thinkingEl = document.getElementById('agentThinkingCard');
+      if (thinkingEl) thinkingEl.remove();
+
+      renderExecutionTurn(report);
     } catch (err) {
-      if (timelineContainer) {
-        timelineContainer.innerHTML = `
-          <div class="step-card" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.05);">
-            <div class="step-card-header">
-              <span class="step-badge-num">!</span>
-              <span class="step-action-tag" style="color: var(--accent-red);">${t.stage_failed}</span>
+      const thinkingEl = document.getElementById('agentThinkingCard');
+      if (thinkingEl) thinkingEl.remove();
+
+      if (streamMessages) {
+        const errorTurnEl = document.createElement('div');
+        errorTurnEl.className = 'stream-turn';
+        errorTurnEl.innerHTML = `
+          <div class="stream-agent-block" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.05);">
+            <div class="stream-agent-header">
+              <span class="agent-identity" style="color: var(--accent-red);">! خطأ في المعالجة</span>
             </div>
-            <p class="step-details-text">${err}</p>
+            <p class="step-details-text" style="color: var(--accent-red); margin-top: 8px;">${escapeHtml(String(err))}</p>
           </div>
         `;
+        streamMessages.appendChild(errorTurnEl);
       }
-      if (counterLabel) counterLabel.textContent = t.stage_failed;
+      if (counterLabel) counterLabel.textContent = 'خطأ / Error';
     } finally {
       if (runBtn) runBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;
       AppState.isExecuting = false;
+      if (streamContainer) streamContainer.scrollTop = streamContainer.scrollHeight;
     }
   }
 
-  function renderExecutionReport(report) {
-    const timelineContainer = document.getElementById('timelineContainer');
+  function renderExecutionTurn(report) {
+    const streamMessages = document.getElementById('streamMessages');
+    const streamContainer = document.getElementById('agentStream');
     const confirmBar = document.getElementById('confirmBar');
     const counterLabel = document.getElementById('stepCounterLabel');
     const t = I18N[AppState.lang] || I18N.ar;
 
-    if (!timelineContainer) return;
-    timelineContainer.innerHTML = '';
+    if (!streamMessages) return;
 
-    if (!report.steps || report.steps.length === 0) {
-      timelineContainer.innerHTML = `<div class="empty-state-box"><p>${report.message || 'Done'}</p></div>`;
-      return;
+    const turnEl = document.createElement('div');
+    turnEl.className = 'stream-turn';
+
+    const agentBlock = document.createElement('div');
+    agentBlock.className = 'stream-agent-block';
+
+    const totalSteps = report.steps ? report.steps.length : 0;
+    const statusText = report.success ? `${totalSteps} ${t.agent_steps_title}` : 'Failed / Blocked';
+
+    const turnId = 'turn_' + Date.now();
+    let headerHtml = `
+      <div class="stream-agent-header">
+        <div class="agent-identity">
+          <span>⚡</span>
+          <span>Hermes Agent</span>
+          <span class="mode-pill-top" style="font-size: 10.5px; padding: 1px 7px;">${AppState.mode}</span>
+        </div>
+        <span class="status-badge-live ${report.success ? 'ready' : 'blocked'}">${statusText}</span>
+      </div>
+    `;
+
+    let stepsPillsHtml = '';
+    let drawerItemsHtml = '';
+    let contentCardsHtml = '';
+
+    if (report.steps && report.steps.length > 0) {
+      report.steps.forEach((step, idx) => {
+        const isDone = step.stage === 'completed';
+        const isBlocked = step.stage === 'blocked';
+        const isConfirm = step.stage === 'awaiting_confirm';
+        let pillClass = 'completed';
+        let statusIcon = '✓';
+        if (isBlocked) { pillClass = 'blocked'; statusIcon = '!'; }
+        if (isConfirm) { pillClass = 'awaiting_confirm'; statusIcon = '?'; }
+
+        const actionName = step.action || step.stage;
+        stepsPillsHtml += `
+          <button class="step-pill-btn ${pillClass}" onclick="window.silentExec.toggleInspector('${turnId}')" title="فحص تفاصيل الخطوة">
+            <span>⚡</span>
+            <span>${idx + 1}/${totalSteps} ${actionName}</span>
+            <span>${statusIcon}</span>
+          </button>
+        `;
+
+        drawerItemsHtml += `
+          <div class="step-inspector-item">
+            <div>
+              <strong style="color: var(--text-main); font-family: var(--font-mono);">${idx + 1}. ${actionName}</strong>
+              <div style="font-size: 11.5px; margin-top: 2px;">${escapeHtml(step.description)}</div>
+            </div>
+            <div style="text-align: end;">
+              <span class="step-badge-num">${step.stage}</span>
+              ${step.details ? `<div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">${escapeHtml(step.details)}</div>` : ''}
+            </div>
+          </div>
+        `;
+
+        // Rich Content Card detection
+        const actLower = (step.action || '').toLowerCase();
+        if (actLower === 'reply' && step.details) {
+          contentCardsHtml += `
+            <div class="stream-reply-card">
+              ${escapeHtml(step.details)}
+            </div>
+          `;
+        } else if (actLower === 'write_file' && step.details) {
+          const codeId = 'code_' + Math.random().toString(36).substring(2, 9);
+          contentCardsHtml += `
+            <div class="stream-code-card">
+              <div class="code-card-header">
+                <span class="code-card-path">📄 ${escapeHtml(step.description)}</span>
+                <button class="btn btn-secondary btn-xs" onclick="window.silentExec.copySnippet('${codeId}')">
+                  <span class="btn-icon">📋</span>
+                  <span>${t.copy_code}</span>
+                </button>
+              </div>
+              <div class="code-card-body" id="${codeId}">${escapeHtml(step.details)}</div>
+            </div>
+          `;
+        } else if (actLower === 'read_file' && step.details) {
+          contentCardsHtml += `
+            <div class="stream-reply-card" style="border-inline-start-color: var(--accent-cyan);">
+              <div style="font-size: 11.5px; font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px;">📖 ${escapeHtml(step.description)}</div>
+              ${escapeHtml(step.details)}
+            </div>
+          `;
+        } else if (actLower === 'memory_save') {
+          contentCardsHtml += `
+            <div class="stream-memory-chip">
+              <span>🧠</span>
+              <span>${t.memory_saved_chip} ${escapeHtml(step.details || step.description)}</span>
+            </div>
+          `;
+        }
+      });
+    } else {
+      contentCardsHtml = `<p class="step-details-text">${escapeHtml(report.message || 'Done')}</p>`;
     }
 
-    report.steps.forEach((step, idx) => {
-      const card = document.createElement('div');
-      card.className = 'step-card';
+    agentBlock.innerHTML = `
+      ${headerHtml}
+      <div class="stream-steps-pill-row">
+        ${stepsPillsHtml}
+      </div>
+      <div class="step-inspector-drawer" id="${turnId}_drawer" style="display: none;">
+        ${drawerItemsHtml}
+      </div>
+      ${contentCardsHtml}
+    `;
 
-      let stageColor = 'var(--accent-cyan)';
-      if (step.stage === 'completed') stageColor = 'var(--accent-emerald)';
-      if (step.stage === 'blocked') stageColor = 'var(--accent-red)';
-      if (step.stage === 'awaiting_confirm') stageColor = 'var(--accent-amber)';
-
-      card.innerHTML = `
-        <div class="step-card-header">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="step-badge-num">${idx + 1}</span>
-            <span class="step-action-tag" style="color: ${stageColor};">${step.action || step.stage}</span>
-          </div>
-          <span style="font-size: 11.5px; font-weight: 600; color: ${stageColor};">${step.stage}</span>
-        </div>
-        <p class="step-details-text">${step.details || step.description}</p>
-      `;
-      timelineContainer.appendChild(card);
-    });
+    turnEl.appendChild(agentBlock);
+    streamMessages.appendChild(turnEl);
 
     if (report.requires_confirm && confirmBar) {
       confirmBar.style.display = 'flex';
@@ -512,8 +750,24 @@
     }
 
     if (counterLabel) {
-      counterLabel.textContent = report.success ? `${report.steps.length} Steps Done` : 'Failed / Blocked';
+      counterLabel.textContent = report.success ? `${totalSteps} خطوات مكتملة` : 'محظور / معلق';
     }
+
+    if (streamContainer) {
+      streamContainer.scrollTop = streamContainer.scrollHeight;
+    }
+  }
+
+  function clearStream() {
+    const streamMessages = document.getElementById('streamMessages');
+    const welcomeCard = document.getElementById('streamWelcomeCard');
+    const confirmBar = document.getElementById('confirmBar');
+    if (streamMessages) streamMessages.innerHTML = '';
+    if (welcomeCard) welcomeCard.style.display = 'flex';
+    if (confirmBar) confirmBar.style.display = 'none';
+    const counterLabel = document.getElementById('stepCounterLabel');
+    const t = I18N[AppState.lang] || I18N.ar;
+    if (counterLabel) counterLabel.textContent = t.status_idle;
   }
 
   async function handleConfirmStep(proceed) {
@@ -524,13 +778,13 @@
         stepIndex: AppState.pendingStepIndex || 1,
         proceed
       });
-      renderExecutionReport(report);
+      renderExecutionTurn(report);
     } catch (e) {
       showToast(e);
     }
   }
 
-  // --- Models Catalog & Resumable Downloads ---
+  // --- Models Catalog & Strict State Machine ---
   async function loadModels() {
     const grid = document.getElementById('modelsGrid');
     if (!grid) return;
@@ -549,47 +803,154 @@
         card.className = 'model-card';
 
         const sizeMB = (m.size_bytes / (1024 * 1024)).toFixed(0);
-        const isDownloading = AppState.downloadState[m.tag] && AppState.downloadState[m.tag].status === 'Downloading';
-        const prog = AppState.downloadState[m.tag] || { percent: 0, speed: '0 MB/s', eta: '0s' };
+        const dl = AppState.downloadState[m.tag];
+
+        // State Machine strictly:
+        // 1. active: m.is_active
+        // 2. downloaded: m.is_cached && !m.is_active
+        // 3. downloading: dl && dl.status === 'downloading'
+        // 4. paused: dl && dl.status === 'paused'
+        // 5. not_downloaded: otherwise
+        let cardState = 'not_downloaded';
+        if (m.is_active) {
+          cardState = 'active';
+        } else if (m.is_cached) {
+          cardState = 'downloaded';
+        } else if (dl && dl.status === 'downloading') {
+          cardState = 'downloading';
+        } else if (dl && dl.status === 'paused') {
+          cardState = 'paused';
+        }
+
+        const prog = dl || { percent: 0, speed: '0 MB/s', eta: '--', downloaded_mb: '0', total_mb: sizeMB };
+        const showProgress = cardState === 'downloading' || cardState === 'paused';
+
+        let actionsHtml = '';
+        if (cardState === 'not_downloaded') {
+          actionsHtml = `
+            <button class="btn btn-primary btn-xs" onclick="window.silentExec.startDownload('${m.tag}')">
+              <span class="btn-icon">⬇</span>
+              <span>${t.btn_download}</span>
+            </button>
+          `;
+        } else if (cardState === 'downloading') {
+          actionsHtml = `
+            <button class="btn btn-secondary btn-xs" onclick="window.silentExec.pauseDownload('${m.tag}')">
+              <span class="btn-icon">⏸</span>
+              <span>${t.btn_pause}</span>
+            </button>
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.cancelDownload('${m.tag}')">
+              <span class="btn-icon">✕</span>
+              <span>${t.btn_cancel}</span>
+            </button>
+          `;
+        } else if (cardState === 'paused') {
+          actionsHtml = `
+            <button class="btn btn-primary btn-xs" onclick="window.silentExec.resumeDownload('${m.tag}')">
+              <span class="btn-icon">▶</span>
+              <span>${t.btn_resume}</span>
+            </button>
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.cancelDownload('${m.tag}')">
+              <span class="btn-icon">✕</span>
+              <span>${t.btn_cancel}</span>
+            </button>
+          `;
+        } else if (cardState === 'downloaded') {
+          actionsHtml = `
+            <button class="btn btn-primary btn-xs" onclick="window.silentExec.activateModel('${m.tag}')">
+              <span class="btn-icon">⚡</span>
+              <span>${t.btn_activate}</span>
+            </button>
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteModel('${m.tag}')">
+              <span class="btn-icon">🗑</span>
+              <span>${t.btn_delete}</span>
+            </button>
+          `;
+        } else if (cardState === 'active') {
+          actionsHtml = `
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteModel('${m.tag}')">
+              <span class="btn-icon">🗑</span>
+              <span>${t.btn_delete}</span>
+            </button>
+          `;
+        }
 
         card.innerHTML = `
           <div class="model-card-header">
             <div>
-              <h4 class="model-name">${m.name || m.filename}</h4>
+              <h4 class="model-name">${escapeHtml(m.name || m.filename)}</h4>
               <div class="model-meta-row" style="margin-top: 4px;">
                 <span class="model-size-badge">${sizeMB} MB</span>
-                <span>${m.tag}</span>
+                <span>${escapeHtml(m.tag)}</span>
               </div>
             </div>
-            ${m.is_active ? `<span class="status-pill ready">${t.model_active}</span>` : ''}
+            ${cardState === 'active' ? `<span class="status-pill ready active-badge">${t.model_active}</span>` : ''}
           </div>
 
-          <div class="download-progress-wrap" id="progWrap_${m.tag}" style="${isDownloading ? '' : 'display: none;'}">
+          <div class="download-progress-wrap" id="progWrap_${m.tag}" style="${showProgress ? '' : 'display: none;'}">
             <div class="progress-bar-track">
               <div class="progress-bar-fill" id="progFill_${m.tag}" style="width: ${prog.percent}%"></div>
             </div>
             <div class="progress-stats-row">
-              <span id="progSpeed_${m.tag}">${prog.speed}</span>
-              <span id="progEta_${m.tag}">ETA: ${prog.eta}</span>
+              <span id="progSpeed_${m.tag}">${prog.downloaded_mb || '0'} / ${prog.total_mb || sizeMB} MB (${prog.speed || '0 MB/s'})</span>
+              <span id="progEta_${m.tag}">ETA: ${prog.eta || '--'}</span>
             </div>
           </div>
 
           <div class="model-card-actions">
-            ${!m.is_cached ? `
-              <button class="btn btn-primary btn-xs" onclick="window.silentExec.startDownload('${m.tag}')">${t.btn_download}</button>
-              <button class="btn btn-secondary btn-xs" onclick="window.silentExec.pauseDownload('${m.tag}')">${t.btn_pause}</button>
-              <button class="btn btn-secondary btn-xs" onclick="window.silentExec.resumeDownload('${m.tag}')">${t.btn_resume}</button>
-              <button class="btn btn-danger btn-xs" onclick="window.silentExec.cancelDownload('${m.tag}')">${t.btn_cancel}</button>
-            ` : `
-              <button class="btn btn-secondary btn-xs" onclick="window.silentExec.activateModel('${m.tag}')">${t.btn_activate}</button>
-              <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteModel('${m.tag}')">${t.btn_delete}</button>
-            `}
+            ${actionsHtml}
           </div>
         `;
         grid.appendChild(card);
       });
     } catch (e) {
-      grid.innerHTML = `<div class="empty-state-box"><p>${e}</p></div>`;
+      grid.innerHTML = `<div class="empty-state-box"><p>${escapeHtml(String(e))}</p></div>`;
+    }
+  }
+
+  // --- Persistent Memories & Skills Management ---
+  async function loadMemories() {
+    const grid = document.getElementById('memoriesGrid');
+    if (!grid) return;
+    const t = I18N[AppState.lang] || I18N.ar;
+
+    try {
+      const memories = await invokeTauri('list_memories');
+      grid.innerHTML = '';
+      if (!memories || memories.length === 0) {
+        grid.innerHTML = `<div class="empty-state-box"><p>${t.no_memories_found}</p></div>`;
+        return;
+      }
+
+      memories.forEach(mem => {
+        const card = document.createElement('div');
+        card.className = 'memory-card';
+        const cat = mem.category || 'preference';
+        const dateStr = mem.updated_at
+          ? new Date(mem.updated_at).toLocaleDateString([], {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          : '';
+
+        card.innerHTML = `
+          <div class="memory-card-header">
+            <span class="memory-cat-badge ${cat}">${t['category_' + cat] || cat}</span>
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteMemory('${mem.id}')">${t.btn_delete}</button>
+          </div>
+          <div class="memory-key-text">${escapeHtml(mem.key)}</div>
+          <div class="memory-content-text">${escapeHtml(mem.content)}</div>
+          <div class="memory-footer-row">
+            <span>ID: ${escapeHtml(mem.id.slice(0, 8))}</span>
+            <span>${dateStr}</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      grid.innerHTML = `<div class="empty-state-box"><p>${escapeHtml(String(e))}</p></div>`;
     }
   }
 
@@ -755,6 +1116,56 @@
     if (confirmProceedBtn) confirmProceedBtn.addEventListener('click', () => handleConfirmStep(true));
     const confirmSkipBtn = document.getElementById('confirmSkipBtn');
     if (confirmSkipBtn) confirmSkipBtn.addEventListener('click', () => handleConfirmStep(false));
+    const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+    if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', () => handleConfirmStep(false));
+
+    // Clear Stream Action
+    const clearStreamBtn = document.getElementById('clearStreamBtn');
+    if (clearStreamBtn) clearStreamBtn.addEventListener('click', clearStream);
+
+    // Memory Add / Save Form & Refresh
+    const addMemoryBtn = document.getElementById('addMemoryBtn');
+    const memoryFormBox = document.getElementById('memoryFormBox');
+    if (addMemoryBtn && memoryFormBox) {
+      addMemoryBtn.addEventListener('click', () => {
+        memoryFormBox.style.display = memoryFormBox.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+
+    const cancelMemoryBtn = document.getElementById('cancelMemoryBtn');
+    if (cancelMemoryBtn && memoryFormBox) {
+      cancelMemoryBtn.addEventListener('click', () => {
+        memoryFormBox.style.display = 'none';
+      });
+    }
+
+    const saveMemoryBtn = document.getElementById('saveMemoryBtn');
+    if (saveMemoryBtn) {
+      saveMemoryBtn.addEventListener('click', async () => {
+        const key = document.getElementById('memoryKeyInput').value.trim();
+        const content = document.getElementById('memoryContentInput').value.trim();
+        const category = document.getElementById('memoryCategoryInput').value;
+
+        if (!key || !content) {
+          showToast('Key and content are required');
+          return;
+        }
+
+        try {
+          await invokeTauri('save_memory', { key, content, category });
+          showToast(`Memory '${key}' saved`);
+          document.getElementById('memoryKeyInput').value = '';
+          document.getElementById('memoryContentInput').value = '';
+          if (memoryFormBox) memoryFormBox.style.display = 'none';
+          loadMemories();
+        } catch (e) {
+          showToast(`Failed: ${e}`);
+        }
+      });
+    }
+
+    const refreshMemoriesBtn = document.getElementById('refreshMemoriesBtn');
+    if (refreshMemoriesBtn) refreshMemoriesBtn.addEventListener('click', loadMemories);
 
     // Backend Selection in Settings
     document.querySelectorAll('.backend-card').forEach(card => {
@@ -894,42 +1305,76 @@
   window.silentExec = {
     startDownload: async (tag) => {
       showToast(`Starting download for ${tag}...`);
-      const wrap = document.getElementById(`progWrap_${tag}`);
-      if (wrap) wrap.style.display = 'flex';
+      AppState.downloadState[tag] = {
+        status: 'downloading',
+        percent: 0,
+        speed: '0 MB/s',
+        eta: '--',
+        downloaded_mb: '0',
+        total_mb: '0'
+      };
+      loadModels();
 
       listenTauri(`download-progress:${tag}`, (event) => {
         const p = event.payload;
-        const fill = document.getElementById(`progFill_${tag}`);
-        const speed = document.getElementById(`progSpeed_${tag}`);
-        const eta = document.getElementById(`progEta_${tag}`);
+        const totalMb = (p.total_bytes / (1024 * 1024)).toFixed(1);
+        const dlMb = (p.downloaded_bytes / (1024 * 1024)).toFixed(1);
         const percent = p.total_bytes > 0 ? ((p.downloaded_bytes / p.total_bytes) * 100).toFixed(1) : 0;
+        const speed = `${p.speed_mbps.toFixed(2)} MB/s`;
+        const eta = `${p.eta_seconds}s`;
+
+        AppState.downloadState[tag] = {
+          status: 'downloading',
+          percent,
+          speed,
+          eta,
+          downloaded_mb: dlMb,
+          total_mb: totalMb
+        };
+
+        const fill = document.getElementById(`progFill_${tag}`);
+        const speedEl = document.getElementById(`progSpeed_${tag}`);
+        const etaEl = document.getElementById(`progEta_${tag}`);
         if (fill) fill.style.width = `${percent}%`;
-        if (speed) speed.textContent = `${p.speed_mbps.toFixed(2)} MB/s`;
-        if (eta) eta.textContent = `ETA: ${p.eta_seconds}s`;
+        if (speedEl) speedEl.textContent = `${dlMb} / ${totalMb} MB (${speed})`;
+        if (etaEl) etaEl.textContent = `ETA: ${eta}`;
       });
 
       try {
         await invokeTauri('start_model_download', { tag });
+        delete AppState.downloadState[tag];
         showToast(`Model ${tag} downloaded successfully`);
         loadModels();
       } catch (e) {
-        showToast(`Download failed or paused: ${e}`);
+        if (AppState.downloadState[tag] && AppState.downloadState[tag].status !== 'paused') {
+          delete AppState.downloadState[tag];
+        }
+        showToast(`Download event: ${e}`);
+        loadModels();
       }
     },
     pauseDownload: async (tag) => {
       try {
         await invokeTauri('pause_model_download', { tag });
+        if (AppState.downloadState[tag]) {
+          AppState.downloadState[tag].status = 'paused';
+        }
         showToast(`Paused download ${tag}`);
+        loadModels();
       } catch (e) {
         showToast(e);
       }
     },
     resumeDownload: async (tag) => {
+      if (AppState.downloadState[tag]) {
+        AppState.downloadState[tag].status = 'downloading';
+      }
       window.silentExec.startDownload(tag);
     },
     cancelDownload: async (tag) => {
       try {
         await invokeTauri('cancel_model_download', { tag });
+        delete AppState.downloadState[tag];
         showToast(`Cancelled download ${tag}`);
         loadModels();
       } catch (e) {
@@ -949,10 +1394,34 @@
     deleteModel: async (tag) => {
       try {
         await invokeTauri('delete_model', { tag });
+        delete AppState.downloadState[tag];
         showToast(`Model ${tag} deleted`);
         loadModels();
       } catch (e) {
         showToast(e);
+      }
+    },
+    deleteMemory: async (id) => {
+      try {
+        await invokeTauri('delete_memory', { idOrKey: id });
+        showToast('Memory entry deleted');
+        loadMemories();
+      } catch (e) {
+        showToast(`Delete failed: ${e}`);
+      }
+    },
+    copySnippet: (elementId) => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        navigator.clipboard.writeText(el.textContent || '');
+        const t = I18N[AppState.lang] || I18N.ar;
+        showToast(t.code_copied);
+      }
+    },
+    toggleInspector: (turnId) => {
+      const drawer = document.getElementById(`${turnId}_drawer`);
+      if (drawer) {
+        drawer.style.display = drawer.style.display === 'none' ? 'flex' : 'none';
       }
     },
     testMcp: async (name) => {

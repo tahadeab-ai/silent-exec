@@ -635,10 +635,8 @@ async fn check_runtime_status() -> Result<RuntimeStatusDto, String> {
             .find_llama_server_binary()
             .map(|p| p.to_string_lossy().to_string());
         let health_url = "http://127.0.0.1:8080/health";
-        let is_running = silent_exec_pc::check_health_http(
-            health_url,
-            std::time::Duration::from_millis(500),
-        );
+        let is_running =
+            silent_exec_pc::check_health_http(health_url, std::time::Duration::from_millis(500));
         Ok(RuntimeStatusDto {
             is_running,
             endpoint: "http://127.0.0.1:8080".to_string(),
@@ -734,8 +732,8 @@ async fn start_model_download(
             &sha256_val,
             cancel_clone,
             move |progress| {
-                let _ = window_clone
-                    .emit(&format!("download-progress:{}", tag_for_event), progress);
+                let _ =
+                    window_clone.emit(&format!("download-progress:{}", tag_for_event), progress);
             },
         )?;
 

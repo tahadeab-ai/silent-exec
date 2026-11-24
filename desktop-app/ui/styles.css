@@ -1219,3 +1219,456 @@ html, body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* =========================================================
+   Ultra-Smooth Hermes/Codex Agent Session Stream Styles
+   ========================================================= */
+
+.stream-header-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.stream-header-title-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stream-header-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--accent-emerald);
+  box-shadow: 0 0 8px var(--accent-emerald);
+}
+
+.stream-header-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.stream-header-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+}
+
+.stream-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Agent Stream Container */
+.agent-stream-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 240px;
+  max-height: calc(100vh - 290px);
+  overflow-y: auto;
+  padding: 4px;
+  scroll-behavior: smooth;
+}
+
+.agent-stream-container::-webkit-scrollbar {
+  width: 6px;
+}
+.agent-stream-container::-webkit-scrollbar-thumb {
+  background: var(--border-card);
+  border-radius: var(--radius-full);
+}
+
+.stream-welcome-card {
+  padding: 32px 24px;
+  background: linear-gradient(180deg, var(--bg-card-elevated) 0%, var(--bg-card) 100%);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.welcome-icon {
+  font-size: 32px;
+  margin-bottom: 4px;
+}
+
+.welcome-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.welcome-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+/* Session Turn */
+.stream-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeInTurn 0.25s ease-out;
+}
+
+@keyframes fadeInTurn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* User Message Card */
+.stream-user-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  align-self: flex-start;
+  max-width: 85%;
+  background: var(--bg-card-elevated);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+}
+
+[dir="rtl"] .stream-user-msg {
+  align-self: flex-start;
+}
+
+.stream-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--accent-indigo-dim);
+  color: var(--accent-indigo);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.stream-user-text {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-main);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.stream-user-time {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* Agent Response Block */
+.stream-agent-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.stream-agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+}
+
+.agent-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent-emerald);
+}
+
+/* Collapsible Execution Pills Row */
+.stream-steps-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+}
+
+.step-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 600;
+  background-color: var(--bg-card-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.step-pill-btn:hover {
+  border-color: var(--accent-emerald-border);
+  color: var(--text-main);
+}
+
+.step-pill-btn.completed {
+  border-color: var(--accent-emerald-border);
+  background-color: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+}
+
+.step-pill-btn.blocked {
+  border-color: rgba(239, 68, 68, 0.4);
+  background-color: var(--accent-red-dim);
+  color: var(--accent-red);
+}
+
+.step-pill-btn.awaiting_confirm {
+  border-color: rgba(245, 158, 11, 0.4);
+  background-color: var(--accent-amber-dim);
+  color: var(--accent-amber);
+}
+
+.step-inspector-drawer {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-inspector-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 4px 0;
+}
+
+.step-inspector-item:last-child {
+  border-bottom: none;
+}
+
+/* Rich Content Cards */
+.stream-reply-card {
+  padding: 14px 16px;
+  background: var(--bg-card-elevated);
+  border-inline-start: 3px solid var(--accent-emerald);
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-main);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.stream-code-card {
+  border-radius: var(--radius-md);
+  background: #060911;
+  border: 1px solid var(--border-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.code-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.code-card-path {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent-cyan);
+}
+
+.code-card-body {
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #E2E8F0;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.stream-memory-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-indigo-dim);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #A5B4FC;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.stream-thinking-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--bg-card-elevated);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.thinking-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--accent-emerald);
+  animation: pulseGlow 1.2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 10px var(--accent-emerald); }
+}
+
+/* Docked Composer */
+.composer-card.bottom-docked {
+  margin-top: auto;
+  flex-shrink: 0;
+  padding: 12px 16px;
+}
+
+/* =========================================================
+   Memory & Skills Hub Styles
+   ========================================================= */
+
+.memories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.memory-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-card-elevated);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: var(--transition);
+}
+
+.memory-card:hover {
+  border-color: var(--accent-emerald-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.memory-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memory-cat-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.memory-cat-badge.preference {
+  background-color: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald-border);
+}
+
+.memory-cat-badge.skill {
+  background-color: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.memory-cat-badge.fact {
+  background-color: var(--accent-indigo-dim);
+  color: var(--accent-indigo);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.memory-key-text {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-all;
+}
+
+.memory-content-text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  word-break: break-word;
+  background: var(--bg-input);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.memory-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* Active Model Card Badge */
+.status-pill.ready.active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald-border);
+  font-weight: 700;
+}
+
