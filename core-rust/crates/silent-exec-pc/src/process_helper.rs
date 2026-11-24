@@ -6,6 +6,7 @@ use std::os::windows::process::CommandExt;
 /// Creates a `std::process::Command` configured with `CREATE_NO_WINDOW` (0x08000000)
 /// on Windows so no black console window ever flashes.
 pub fn hidden_command(program: &str) -> std::process::Command {
+    #[allow(unused_mut)]
     let mut cmd = std::process::Command::new(program);
     #[cfg(windows)]
     {
