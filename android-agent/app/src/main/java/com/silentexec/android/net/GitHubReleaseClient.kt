@@ -51,7 +51,7 @@ class GitHubReleaseClient(
         connection.inputStream.bufferedReader().use { it.readText() }
     }
 
-    fun parseModelReleases(jsonText: String): List<ModelReleaseItem> {
+    fun parseModelReleases(jsonText: String, includeCurated: Boolean = false): List<ModelReleaseItem> {
         val root = json.parseToJsonElement(jsonText).jsonArray
         val models = mutableListOf<ModelReleaseItem>()
 
@@ -94,14 +94,28 @@ class GitHubReleaseClient(
             }
         }
 
-        // Append curated edge models (e.g. LiquidAI LFM3 & Qwen3)
-        for (curated in CURATED_EDGE_MODELS) {
-            if (models.none { it.filename.equals(curated.filename, ignoreCase = true) }) {
-                models.add(curated)
+        if (includeCurated) {
+            for (curated in CURATED_EDGE_MODELS) {
+                if (models.none { it.filename.equals(curated.filename, ignoreCase = true) }) {
+                    models.add(curated)
+                }
             }
         }
 
         return models
+    }
+
+    fun getAllCatalogModels(jsonText: String? = null): List<ModelReleaseItem> {
+        val releases = if (!jsonText.isNullOrBlank()) {
+            parseModelReleases(jsonText, includeCurated = false)
+        } else emptyList()
+        val result = releases.toMutableList()
+        for (curated in CURATED_EDGE_MODELS) {
+            if (result.none { it.filename.equals(curated.filename, ignoreCase = true) }) {
+                result.add(curated)
+            }
+        }
+        return result
     }
 
     fun parseLatestAppRelease(jsonText: String): AppReleaseItem? {

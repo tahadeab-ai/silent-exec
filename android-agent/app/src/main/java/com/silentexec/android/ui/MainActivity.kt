@@ -769,7 +769,7 @@ class MainActivity : AppCompatActivity() {
             mainHandler.post {
                 pbModelsLoading.visibility = View.GONE
                 jsonResult.onSuccess { jsonStr ->
-                    val parsed = releaseClient.parseModelReleases(jsonStr)
+                    val parsed = releaseClient.getAllCatalogModels(jsonStr)
                     modelItems.clear()
                     modelItems.addAll(parsed)
                     if (modelItems.isEmpty()) {
@@ -779,8 +779,17 @@ class MainActivity : AppCompatActivity() {
                         modelAdapter.updateData(modelItems, settings.activeModelFile)
                     }
                 }.onFailure { err ->
-                    tvModelsEmpty.visibility = View.VISIBLE
-                    tvModelsEmpty.text = getString(R.string.stage_error, err.message ?: "")
+                    // Fallback to offline curated models on network failure
+                    val curated = releaseClient.getAllCatalogModels(null)
+                    if (curated.isNotEmpty()) {
+                        modelItems.clear()
+                        modelItems.addAll(curated)
+                        tvModelsEmpty.visibility = View.GONE
+                        modelAdapter.updateData(modelItems, settings.activeModelFile)
+                    } else {
+                        tvModelsEmpty.visibility = View.VISIBLE
+                        tvModelsEmpty.text = getString(R.string.stage_error, err.message ?: "")
+                    }
                 }
             }
         }
