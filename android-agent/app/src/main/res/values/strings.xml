@@ -26,6 +26,7 @@
     <string name="stage_routing_fast">Fast rule matched: %s</string>
     <string name="stage_sending_bridge">Dispatching to PC LAN bridge...</string>
     <string name="stage_planned">Plan resolved: %d steps</string>
+    <string name="status_running">Executing...</string>
     <string name="stage_step_running">Executing step %1$d/%2$d: %3$s</string>
     <string name="stage_step_done">Step %1$d/%2$d completed: %3$s</string>
     <string name="stage_step_skipped">Step %1$d/%2$d skipped</string>

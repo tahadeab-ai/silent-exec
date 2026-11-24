@@ -26,6 +26,7 @@
     <string name="stage_routing_fast">تم التوجيه السريع: %s</string>
     <string name="stage_sending_bridge">جارٍ الإرسال إلى الكمبيوتر عبر الشبكة...</string>
     <string name="stage_planned">تم تخطيط %d خطوات</string>
+    <string name="status_running">جارٍ التنفيذ...</string>
     <string name="stage_step_running">جارٍ تنفيذ الخطوة %1$d/%2$d: %3$s</string>
     <string name="stage_step_done">اكتملت الخطوة %1$d/%2$d: %3$s</string>
     <string name="stage_step_skipped">تم تخطي الخطوة %1$d/%2$d</string>
