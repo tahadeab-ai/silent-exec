@@ -64,8 +64,8 @@ class AgentLoopAndThemeTest {
             "home" to ActionType.UI_HOME,
             "انزل" to ActionType.UI_SCROLL,
             "scroll down" to ActionType.UI_SCROLL,
-            "افتح التنزيلات" to ActionType.OPEN_FOLDER,
-            "open downloads" to ActionType.OPEN_FOLDER
+            "افتح واتساب" to ActionType.OPEN_ANDROID_APP,
+            "open Telegram" to ActionType.OPEN_ANDROID_APP
         )
 
         for ((text, expectedAction) in simpleCommands) {
