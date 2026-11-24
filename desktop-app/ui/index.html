@@ -3,111 +3,170 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SilentExec Desktop</title>
+  <title>SilentExec Desktop v0.5.0</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body class="theme-dark">
-  <div class="app-layout">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="header-brand">
-        <div class="brand-icon">
-          <svg viewBox="0 0 32 32" fill="none" class="icon-svg">
-            <rect width="32" height="32" rx="8" fill="#0f172a" stroke="#10b981" stroke-width="1.5"/>
-            <path d="M7 11h18M7 7h18" stroke="#334155" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M8 18l4 3-4 3" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <polygon points="20,13 14,21 18,21 15,27 24,19 19,19" fill="#10b981"/>
-          </svg>
+  <div class="app-shell">
+    <!-- Sleek 220px Collapsible Sidebar (Linear / Raycast Aesthetic) -->
+    <aside class="app-sidebar" id="appSidebar">
+      <!-- Brand & Version Header -->
+      <div class="sidebar-header">
+        <div class="brand-box">
+          <div class="brand-logo">
+            <svg viewBox="0 0 32 32" fill="none" class="brand-svg">
+              <rect width="32" height="32" rx="9" fill="#090D16" stroke="#10b981" stroke-width="1.5"/>
+              <path d="M7 10h18M7 6h18" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M8 17l4 3-4 3" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <polygon points="20,12 14,20 18,20 15,26 24,18 19,18" fill="#10b981"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-name">SilentExec</span>
+            <span class="brand-badge">v0.5.0</span>
+          </div>
         </div>
-        <div class="brand-info">
-          <h1 class="brand-title">SilentExec</h1>
-          <span class="brand-subtitle" id="labelSubtitle">وكيل سطح المكتب الذكي</span>
-        </div>
+        <button class="sidebar-toggle-btn" id="sidebarCollapseBtn" title="طي/توسيع القائمة">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
       </div>
 
-      <!-- Navigation Tabs -->
-      <nav class="header-nav">
-        <button class="nav-tab active" data-tab="agent" id="tabAgent">
-          <span class="tab-icon">⚡</span>
-          <span class="tab-text" data-i18n="tab_agent">الوكيل</span>
+      <!-- Navigation Links -->
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="agent" id="navAgent">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="nav_agent">الوكيل الذكي</span>
+          <span class="nav-pill"></span>
         </button>
-        <button class="nav-tab" data-tab="models" id="tabModels">
-          <span class="tab-icon">📦</span>
-          <span class="tab-text" data-i18n="tab_models">النماذج</span>
+
+        <button class="nav-item" data-view="models" id="navModels">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="nav_models">النماذج والبيئة</span>
+          <span class="nav-pill"></span>
         </button>
-        <button class="nav-tab" data-tab="settings" id="tabSettings">
-          <span class="tab-icon">⚙️</span>
-          <span class="tab-text" data-i18n="tab_settings">الإعدادات</span>
+
+        <button class="nav-item" data-view="tools" id="navTools">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="nav_tools">الأدوات و MCP</span>
+          <span class="nav-pill"></span>
+        </button>
+
+        <button class="nav-item" data-view="settings" id="navSettings">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span>
+          <span class="nav-label" data-i18n="nav_settings">الإعدادات</span>
+          <span class="nav-pill"></span>
         </button>
       </nav>
 
-      <!-- Quick Controls: Theme & Lang -->
-      <div class="header-actions">
-        <div class="status-indicator" id="modelStatusPill" title="النموذج النشط">
-          <span class="status-dot"></span>
-          <span class="status-label" id="activeModelName">Qwen 1.5B</span>
+      <!-- Live Backend & Status Dot at Sidebar Bottom -->
+      <div class="sidebar-footer">
+        <div class="status-card" id="sidebarStatusCard">
+          <span class="status-indicator-dot" id="sidebarStatusDot"></span>
+          <div class="status-meta">
+            <span class="status-title" id="sidebarBackendName">Local GGUF</span>
+            <span class="status-subtitle" id="sidebarBackendState">Ready</span>
+          </div>
         </div>
-        <button class="icon-btn" id="langToggleBtn" title="تغيير اللغة / Switch Language">
-          <span id="langBadge">EN</span>
-        </button>
-        <button class="icon-btn" id="themeToggleBtn" title="تبديل المظهر / Toggle Theme">
-          <span id="themeIcon">☀️</span>
-        </button>
+        <div class="sidebar-quick-toggles">
+          <button class="mini-btn" id="langToggleBtn" title="تغيير اللغة / Switch Language">
+            <span id="langBadge">EN</span>
+          </button>
+          <button class="mini-btn" id="themeToggleBtn" title="تبديل المظهر / Toggle Theme">
+            <span id="themeIcon">☀️</span>
+          </button>
+        </div>
       </div>
-    </header>
+    </aside>
 
-    <!-- Main Content Area -->
-    <main class="app-main">
-      <!-- TAB 1: AGENT CONSOLE -->
-      <section class="tab-content active" id="viewAgent">
-        <!-- Command Input Card -->
-        <div class="glass-card command-box-card">
-          <div class="card-meta">
-            <span class="section-tag" data-i18n="console_heading">موجه الأوامر الذكي</span>
-            <div class="mode-pill mode-silent" id="currentModeBadge">
-              <span class="mode-dot"></span>
-              <span id="currentModeLabel" data-i18n="mode_silent">صامت</span>
+    <!-- Main Workspace Canvas -->
+    <main class="app-workspace">
+      <!-- Top Workspace Bar -->
+      <header class="workspace-header">
+        <div class="view-breadcrumb">
+          <span class="breadcrumb-root">SilentExec</span>
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb-current" id="viewTitleBreadcrumb">الوكيل الذكي</span>
+        </div>
+        <div class="header-badges">
+          <div class="badge-pill backend-pill" id="activeBackendPill">
+            <span class="pill-dot"></span>
+            <span id="backendBadgeText">Local llama-server</span>
+          </div>
+          <div class="badge-pill mode-pill-top" id="topModeBadge">
+            <span id="topModeBadgeText">Silent</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEW 1: AGENT WORKSPACE -->
+      <section class="workspace-view active" id="viewAgent">
+        <!-- Command Composer Card -->
+        <div class="panel-card composer-card">
+          <div class="composer-toolbar">
+            <div class="composer-meta">
+              <span class="composer-tag" data-i18n="composer_title">موجه الأوامر والأهداف</span>
+            </div>
+            <!-- Mode Switcher in Composer -->
+            <div class="composer-mode-switcher">
+              <button class="mode-btn active" data-mode="silent" data-i18n="mode_silent">صامت</button>
+              <button class="mode-btn" data-mode="interactive" data-i18n="mode_interactive">تفاعلي</button>
+              <button class="mode-btn" data-mode="dry_run" data-i18n="mode_dry_run">محاكاة</button>
             </div>
           </div>
 
-          <div class="input-wrapper">
+          <div class="composer-input-area">
             <textarea 
               id="promptInput" 
-              class="command-textarea" 
-              placeholder="اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح واتساب وابحث عن أحمد وارسل له مرحبا)..."
+              class="composer-textarea" 
+              placeholder="اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح المتصفح وابحث عن كود رست أو شغل الحاسبة)..."
               rows="3"
             ></textarea>
-            <div class="input-actions">
-              <button class="btn btn-secondary" id="stopBtn" disabled>
-                <span class="btn-icon">⏹</span>
-                <span data-i18n="btn_stop">إيقاف</span>
-              </button>
-              <button class="btn btn-primary" id="runBtn">
-                <span class="btn-icon">⚡</span>
-                <span data-i18n="btn_run">تشغيل</span>
-              </button>
+            <div class="composer-bottom-bar">
+              <div class="composer-hints">
+                <span class="kbd-hint"><kbd>Enter</kbd> <span data-i18n="hint_run">للتشغيل</span></span>
+                <span class="kbd-hint"><kbd>Shift+Enter</kbd> <span data-i18n="hint_newline">سطر جديد</span></span>
+              </div>
+              <div class="composer-actions">
+                <button class="btn btn-secondary" id="stopBtn" disabled>
+                  <span class="btn-icon">⏹</span>
+                  <span data-i18n="btn_stop">إيقاف</span>
+                </button>
+                <button class="btn btn-primary" id="runBtn">
+                  <span class="btn-icon">⚡</span>
+                  <span data-i18n="btn_run">تنفيذ المهمة</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Quick Suggestions Chips -->
-          <div class="quick-examples">
-            <span class="examples-label" data-i18n="quick_examples_label">أمثلة سريعة:</span>
-            <div class="chips-container" id="quickChips">
-              <!-- Dynamically populated per language -->
-            </div>
+          <!-- Curated Quick Examples -->
+          <div class="curated-chips-row">
+            <span class="chips-label" data-i18n="quick_examples_label">أمثلة سريعة:</span>
+            <div class="chips-scroll" id="quickChips"></div>
           </div>
         </div>
 
-        <!-- Interactive Confirmation Bar (Shown in Interactive Mode) -->
-        <div class="glass-card confirmation-bar" id="confirmBar" style="display: none;">
-          <div class="confirm-content">
-            <div class="confirm-icon">⚠️</div>
-            <div class="confirm-text">
-              <h4 id="confirmTitle" data-i18n="confirm_required_title">تأكيد تنفيذ الخطوة</h4>
-              <p id="confirmDesc">هل تريد بالتأكيد تشغيل هذا الإجراء؟</p>
+        <!-- Interactive Confirmation Bar -->
+        <div class="panel-card confirm-panel" id="confirmBar" style="display: none;">
+          <div class="confirm-content-box">
+            <div class="confirm-icon-box">⚠️</div>
+            <div class="confirm-details">
+              <h4 class="confirm-heading" id="confirmTitle" data-i18n="confirm_required_title">تأكيد تنفيذ الخطوة</h4>
+              <p class="confirm-body" id="confirmDesc">هل توافق على تنفيذ هذا الإجراء من قبل الوكيل؟</p>
             </div>
           </div>
-          <div class="confirm-actions">
+          <div class="confirm-actions-bar">
             <button class="btn btn-sm btn-primary" id="confirmProceedBtn">
               <span data-i18n="btn_execute_step">تنفيذ الخطوة</span>
             </button>
@@ -115,58 +174,67 @@
               <span data-i18n="btn_skip_step">تخطي</span>
             </button>
             <button class="btn btn-sm btn-danger" id="confirmCancelBtn">
-              <span data-i18n="btn_cancel">إلغاء</span>
+              <span data-i18n="btn_cancel">إلغاء الخطة</span>
             </button>
           </div>
         </div>
 
-        <!-- Step-by-Step Execution Timeline Card -->
-        <div class="glass-card timeline-card">
-          <div class="timeline-header">
-            <h3 class="card-title" data-i18n="timeline_title">مخطط التنفيذ المباشر</h3>
-            <span class="step-counter" id="stepCounterLabel" data-i18n="status_idle">جاهز للأوامر</span>
+        <!-- Step Inspector / Live Timeline -->
+        <div class="panel-card inspector-card">
+          <div class="inspector-header">
+            <div>
+              <h3 class="panel-title" data-i18n="timeline_title">مخطط التنفيذ المباشر (Step Inspector)</h3>
+              <p class="panel-desc" data-i18n="timeline_desc">فحص تسلسل الخطوات المصنفة، بوابات الأمان، ونتائج التنفيذ الحية.</p>
+            </div>
+            <span class="status-badge-live" id="stepCounterLabel" data-i18n="status_idle">جاهز</span>
           </div>
 
-          <div class="timeline-body" id="timelineContainer">
-            <div class="empty-timeline-state">
-              <div class="empty-icon">🎯</div>
-              <p data-i18n="empty_timeline_hint">أدخل أمراً أعلاه لمشاهدة تحليل المهام وتنفيذ الخطوات ومراقبة الأمان في الوقت الفعلي.</p>
+          <div class="inspector-body" id="timelineContainer">
+            <div class="empty-state-box">
+              <div class="empty-icon-wrap">🎯</div>
+              <h4 class="empty-title" data-i18n="empty_timeline_title">لا توجد مهام نشطة</h4>
+              <p class="empty-desc" data-i18n="empty_timeline_hint">أدخل أمراً أو اختر من الأمثلة السريعة أعلاه لمشاهدة تفكيك الخطة وتنفيذها.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- TAB 2: MODELS HUB -->
-      <section class="tab-content" id="viewModels">
-        <div class="glass-card runtime-setup-card">
-          <div class="runtime-info">
-            <div class="runtime-icon">🚀</div>
+      <!-- VIEW 2: MODELS & RUNTIME HUB -->
+      <section class="workspace-view" id="viewModels">
+        <!-- Local Runtime Status Banner -->
+        <div class="panel-card runtime-banner">
+          <div class="runtime-banner-content">
+            <div class="runtime-badge-icon">🚀</div>
             <div>
-              <h3 class="card-title" data-i18n="runtime_title">بيئة التشغيل المحلية (llama-server)</h3>
-              <p class="card-desc" data-i18n="runtime_desc">تتيح معالجة الذكاء الاصطناعي محلياً وبسرعة فائقة دون اتصال بالإنترنت أو الاعتماد على سحابة خارجية.</p>
+              <div class="runtime-title-row">
+                <h3 class="panel-title" data-i18n="runtime_title">محرك التشغيل المحلي (llama-server)</h3>
+                <span class="status-pill ready" id="runtimeStatusPill" data-i18n="runtime_ready">جاهز</span>
+              </div>
+              <p class="panel-desc" data-i18n="runtime_desc">يعمل محلياً بدون سحابة خارجية مع دعم كامل لقواعد GBNF وحفظ ذاكرة KV Cache.</p>
             </div>
           </div>
           <button class="btn btn-primary" id="setupRuntimeBtn">
             <span class="btn-icon">⚡</span>
-            <span data-i18n="btn_setup_runtime">إعداد بيئة التشغيل تلقائياً</span>
+            <span data-i18n="btn_setup_runtime">إعداد / فحص البيئة</span>
           </button>
         </div>
 
-        <div class="glass-card models-list-card">
-          <div class="models-header">
+        <!-- Model Catalog Grid with Resumable Controls -->
+        <div class="panel-card catalog-card">
+          <div class="catalog-header">
             <div>
-              <h3 class="card-title" data-i18n="models_catalog_title">مستودع نماذج SilentExec</h3>
-              <p class="card-desc" data-i18n="models_catalog_desc">نماذج مخصصة تم تدريبها بأسلوب QLoRA للتحكم في سطح المكتب باللغتين العربية والإنجليزية.</p>
+              <h3 class="panel-title" data-i18n="models_catalog_title">مستودع نماذج الذكاء الاصطناعي (GGUF)</h3>
+              <p class="panel-desc" data-i18n="models_catalog_desc">نماذج Qwen2.5 خفيفة ومحسّنة لأداء الاستجابة الفورية والأوامر ثنائية اللغة.</p>
             </div>
             <button class="btn btn-secondary btn-sm" id="refreshModelsBtn">
               <span class="btn-icon">🔄</span>
-              <span data-i18n="btn_refresh_models">تحديث النماذج</span>
+              <span data-i18n="btn_refresh_models">تحديث القائمة</span>
             </button>
           </div>
 
           <div class="models-grid" id="modelsGrid">
-            <!-- Dynamically populated models cards -->
-            <div class="loading-state">
+            <!-- Dynamically populated model cards -->
+            <div class="loading-state-box">
               <div class="spinner"></div>
               <p data-i18n="loading_models">جارٍ استعلام مستودع GitHub Releases...</p>
             </div>
@@ -174,116 +242,239 @@
         </div>
       </section>
 
-      <!-- TAB 3: SETTINGS -->
-      <section class="tab-content" id="viewSettings">
-        <!-- Appearance & Language Card -->
-        <div class="glass-card settings-card">
-          <h3 class="settings-group-title" data-i18n="settings_general_group">الإعدادات العامة واللغة</h3>
-          
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label" data-i18n="setting_lang_label">لغة الواجهة</span>
-              <span class="setting-desc" data-i18n="setting_lang_desc">اختر اللغة المفضلة للواجهة والموجهات</span>
-            </div>
-            <div class="btn-group" id="langSelectorGroup">
-              <button class="btn-segment active" data-val="ar">العربية (RTL)</button>
-              <button class="btn-segment" data-val="en">English (LTR)</button>
+      <!-- VIEW 3: TOOLS & MCP HUB -->
+      <section class="workspace-view" id="viewTools">
+        <!-- Built-in Tools Grouped by Safety Tier -->
+        <div class="panel-card tools-summary-card">
+          <div class="tools-summary-header">
+            <div>
+              <h3 class="panel-title" data-i18n="tools_title">أدوات النظام المدمجة (21 أداة)</h3>
+              <p class="panel-desc" data-i18n="tools_desc">مصنفة حسب بوابات الأمان الصارمة (SafetyGate Tiers).</p>
             </div>
           </div>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label" data-i18n="setting_theme_label">المظهر المرئي</span>
-              <span class="setting-desc" data-i18n="setting_theme_desc">التبديل بين النمط الداكن والفاتح</span>
+          <div class="tiers-grid">
+            <div class="tier-card tier-1">
+              <div class="tier-header">
+                <span class="tier-badge t1">Tier 1</span>
+                <span class="tier-name" data-i18n="tier1_title">تنفيذ صامت مباشر</span>
+              </div>
+              <p class="tier-desc" data-i18n="tier1_desc">إجراءات قراءة وتصفح آمنة لا تشكل خطراً على بيانات المستخدم (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Done).</p>
             </div>
-            <div class="btn-group" id="themeSelectorGroup">
-              <button class="btn-segment active" data-val="dark" data-i18n="theme_dark">داكن</button>
-              <button class="btn-segment" data-val="light" data-i18n="theme_light">فاتح</button>
+
+            <div class="tier-card tier-2">
+              <div class="tier-header">
+                <span class="tier-badge t2">Tier 2</span>
+                <span class="tier-name" data-i18n="tier2_title">تأكيد صريح إلزامي</span>
+              </div>
+              <p class="tier-desc" data-i18n="tier2_desc">إجراءات حساسة تتطلب تأكيد المستخدم قبل التنفيذ الفعلي (DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).</p>
+            </div>
+
+            <div class="tier-card tier-3">
+              <div class="tier-header">
+                <span class="tier-badge t3">Tier 3</span>
+                <span class="tier-name" data-i18n="tier3_title">حظر تلقائي صارم</span>
+              </div>
+              <p class="tier-desc" data-i18n="tier3_desc">محاولات حقن الأوامر، مسارات النظام الحساسة، والتعديلات العشوائية غير المصرح بها.</p>
             </div>
           </div>
         </div>
 
-        <!-- Execution Mode & Fast Router Card -->
-        <div class="glass-card settings-card">
-          <h3 class="settings-group-title" data-i18n="settings_execution_group">وضع التنفيذ وبوابات الأمان</h3>
-          
-          <div class="mode-options-grid">
-            <div class="mode-option-card active" data-mode="silent">
-              <div class="mode-opt-header">
-                <span class="mode-badge silent" data-i18n="mode_silent">صامت</span>
-                <span class="mode-check">✓</span>
-              </div>
-              <h4 class="mode-opt-title" data-i18n="mode_silent_title">تنفيذ ذاتي صامت</h4>
-              <p class="mode-opt-desc" data-i18n="mode_silent_desc">تنفيذ الأوامر المصرح بها فوراً في الخلفية مع تسجيل الأحداث دون مقاطعة المستخدم.</p>
+        <!-- External MCP Servers Management -->
+        <div class="panel-card mcp-card">
+          <div class="mcp-header">
+            <div>
+              <h3 class="panel-title" data-i18n="mcp_title">خوادم أدوات Model Context Protocol (MCP)</h3>
+              <p class="panel-desc" data-i18n="mcp_desc">ربط وتوسيع قدرات الوكيل مع خوادم MCP عبر معيار JSON-RPC 2.0 stdio.</p>
             </div>
+            <button class="btn btn-primary btn-sm" id="addMcpServerBtn">
+              <span class="btn-icon">+</span>
+              <span data-i18n="btn_add_mcp">إضافة خادم MCP</span>
+            </button>
+          </div>
 
-            <div class="mode-option-card" data-mode="interactive">
-              <div class="mode-opt-header">
-                <span class="mode-badge interactive" data-i18n="mode_interactive">تفاعلي</span>
-                <span class="mode-check">✓</span>
+          <!-- Add / Edit MCP Form (Hidden by default) -->
+          <div class="mcp-form-box" id="mcpFormBox" style="display: none;">
+            <h4 class="form-title" id="mcpFormTitle" data-i18n="mcp_form_add_title">تسجيل خادم MCP جديد</h4>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" data-i18n="mcp_server_name">اسم الخادم</label>
+                <input type="text" id="mcpNameInput" class="form-input" placeholder="weather / filesystem / git">
               </div>
-              <h4 class="mode-opt-title" data-i18n="mode_interactive_title">تأكيد خطوة بخطوة</h4>
-              <p class="mode-opt-desc" data-i18n="mode_interactive_desc">طلب موافقة صريحة قبل أي إجراء مهم لتوفير أقصى درجات الأمان والرقابة.</p>
+              <div class="form-group">
+                <label class="form-label" data-i18n="mcp_server_command">الأمر التنفيذي</label>
+                <input type="text" id="mcpCommandInput" class="form-input" placeholder="node / python / npx">
+              </div>
+              <div class="form-group full-width">
+                <label class="form-label" data-i18n="mcp_server_args">الوسائط (مفصولة بمسافات)</label>
+                <input type="text" id="mcpArgsInput" class="form-input" placeholder="path/to/server.js --option">
+              </div>
             </div>
-
-            <div class="mode-option-card" data-mode="dry_run">
-              <div class="mode-opt-header">
-                <span class="mode-badge dry_run" data-i18n="mode_dry_run">تجريبي</span>
-                <span class="mode-check">✓</span>
-              </div>
-              <h4 class="mode-opt-title" data-i18n="mode_dry_run_title">محاكاة آمنة (Dry-Run)</h4>
-              <p class="mode-opt-desc" data-i18n="mode_dry_run_desc">فحص الخطة ومحاكاة التنفيذ واختبار الصلاحيات دون إجراء أي تعديل حقيقي على النظام.</p>
+            <div class="form-actions">
+              <button class="btn btn-secondary btn-sm" id="cancelMcpBtn" data-i18n="btn_cancel">إلغاء</button>
+              <button class="btn btn-primary btn-sm" id="saveMcpBtn" data-i18n="btn_save">حفظ الخادم</button>
             </div>
           </div>
 
-          <div class="setting-row" style="margin-top: 16px;">
-            <div class="setting-info">
-              <span class="setting-label" data-i18n="setting_fast_router_label">موجّه القواعد السريعة (Fast Rule Router)</span>
-              <span class="setting-desc" data-i18n="setting_fast_router_desc">استجابة فورية فائقة السرعة (&lt;15ms) للأوامر المباشرة مع استثناء الأوامر المركبة</span>
+          <div class="mcp-servers-list" id="mcpServersList">
+            <!-- Dynamically populated MCP servers -->
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: SETTINGS & UPDATES -->
+      <section class="workspace-view" id="viewSettings">
+        <!-- Appearance & Language Card -->
+        <div class="panel-card settings-card">
+          <h3 class="panel-title" data-i18n="settings_general_group">المظهر واللغة</h3>
+          
+          <div class="setting-item-row">
+            <div class="setting-text">
+              <span class="setting-title" data-i18n="setting_lang_label">لغة الواجهة</span>
+              <span class="setting-subtitle" data-i18n="setting_lang_desc">تغيير اتجاه ولغة العرض بين العربية (RTL) والإنجليزية (LTR)</span>
             </div>
-            <label class="switch">
+            <div class="segment-group" id="langSelectorGroup">
+              <button class="segment-btn active" data-val="ar">العربية (RTL)</button>
+              <button class="segment-btn" data-val="en">English (LTR)</button>
+            </div>
+          </div>
+
+          <div class="setting-item-row">
+            <div class="setting-text">
+              <span class="setting-title" data-i18n="setting_theme_label">النمط البصري</span>
+              <span class="setting-subtitle" data-i18n="setting_theme_desc">التبديل بين مظهر السواد الداكن المريح والنقاء الفاتح</span>
+            </div>
+            <div class="segment-group" id="themeSelectorGroup">
+              <button class="segment-btn active" data-val="dark" data-i18n="theme_dark">داكن (Obsidian)</button>
+              <button class="segment-btn" data-val="light" data-i18n="theme_light">فاتح (Crisp)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Engine & Brain Selection Card -->
+        <div class="panel-card settings-card">
+          <div class="card-header-with-action">
+            <div>
+              <h3 class="panel-title" data-i18n="settings_ai_backend_group">محرك الذكاء الاصطناعي (AI Engine)</h3>
+              <p class="panel-desc" data-i18n="settings_ai_backend_desc">حدد المحرك النشط لتحليل وتفكيك المهام الطبيعية.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="testBackendBtn">
+              <span class="btn-icon">⚡</span>
+              <span data-i18n="btn_test_connection">اختبار الاتصال</span>
+            </button>
+          </div>
+
+          <div class="backend-options-grid">
+            <div class="backend-card active" data-backend="local_llama">
+              <div class="backend-card-header">
+                <span class="backend-icon">🖥️</span>
+                <span class="backend-badge" data-i18n="backend_offline">محلي 100%</span>
+              </div>
+              <h4 class="backend-title">Local GGUF (llama.cpp)</h4>
+              <p class="backend-desc" data-i18n="backend_local_desc">تنفيذ محلي فائق السرعة عبر llama-server و GBNF grammar بدون أي اتصال خارجي.</p>
+            </div>
+
+            <div class="backend-card" data-backend="ollama">
+              <div class="backend-card-header">
+                <span class="backend-icon">🦙</span>
+                <span class="backend-badge" data-i18n="backend_local_daemon">خدمة محلية</span>
+              </div>
+              <h4 class="backend-title">Ollama API</h4>
+              <p class="backend-desc" data-i18n="backend_ollama_desc">اتصال بخدمة Ollama المحلية عبر http://127.0.0.1:11434 مع مخرجات JSON صارمة.</p>
+            </div>
+
+            <div class="backend-card" data-backend="openai_compat">
+              <div class="backend-card-header">
+                <span class="backend-icon">☁️</span>
+                <span class="backend-badge" data-i18n="backend_cloud">سحابي / مخصص</span>
+              </div>
+              <h4 class="backend-title">OpenAI-Compatible API</h4>
+              <p class="backend-desc" data-i18n="backend_openai_desc">دعم Gemini / OpenRouter / Groq / DeepSeek المتوافق مع واجهة OpenAI v1.</p>
+            </div>
+          </div>
+
+          <!-- Dynamic Configuration Fields for Selected Backend -->
+          <div class="backend-configs-box" id="backendConfigsBox">
+            <div class="config-row-group" id="ollamaConfigFields" style="display: none;">
+              <div class="form-group">
+                <label class="form-label" data-i18n="ollama_url_label">عنوان خادم Ollama</label>
+                <input type="text" id="ollamaUrlInput" class="form-input" value="http://127.0.0.1:11434">
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="ollama_model_label">اسم النموذج</label>
+                <input type="text" id="ollamaModelInput" class="form-input" value="qwen2.5:1.5b">
+              </div>
+            </div>
+
+            <div class="config-row-group" id="openaiConfigFields" style="display: none;">
+              <div class="form-group">
+                <label class="form-label" data-i18n="openai_url_label">Base URL</label>
+                <input type="text" id="openaiBaseUrlInput" class="form-input" value="https://api.openai.com/v1">
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="openai_model_label">Model Name</label>
+                <input type="text" id="openaiModelInput" class="form-input" value="gpt-4o-mini">
+              </div>
+              <div class="form-group full-width">
+                <label class="form-label" data-i18n="openai_key_label">API Key</label>
+                <input type="password" id="openaiKeyInput" class="form-input" placeholder="sk-...">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Execution Modes & Fast Router Card -->
+        <div class="panel-card settings-card">
+          <h3 class="panel-title" data-i18n="settings_execution_group">أوضاع التنفيذ وموجّه القواعد</h3>
+
+          <div class="setting-item-row">
+            <div class="setting-text">
+              <span class="setting-title" data-i18n="setting_fast_router_label">موجّه القواعد السريعة (Fast Rule Router)</span>
+              <span class="setting-subtitle" data-i18n="setting_fast_router_desc">استجابة فورية (&lt;15ms) للأوامر الشائعة وتصفح النظام</span>
+            </div>
+            <label class="toggle-switch">
               <input type="checkbox" id="fastRouterToggle" checked>
-              <span class="slider round"></span>
+              <span class="toggle-slider"></span>
             </label>
           </div>
         </div>
 
         <!-- LAN Bridge Server for Phone Pairing Card -->
-        <div class="glass-card settings-card">
-          <h3 class="settings-group-title" data-i18n="settings_bridge_group">خادم جسر الشبكة المحلية (LAN Bridge)</h3>
-          <p class="card-desc" data-i18n="settings_bridge_desc">ربط وتكامل تطبيق الهاتف (Android Agent) مع الحاسوب عبر الشبكة المحلية لتنفيذ الأوامر المشتركة.</p>
+        <div class="panel-card settings-card">
+          <h3 class="panel-title" data-i18n="settings_bridge_group">خادم جسر الشبكة المحلية (LAN Bridge)</h3>
+          <p class="panel-desc" data-i18n="settings_bridge_desc">ربط تطبيق الهاتف الذكي (Android Agent) لتنفيذ الأوامر المشتركة مع الحاسوب.</p>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label" data-i18n="bridge_service_toggle">حالة خادم الجسر</span>
-              <span class="setting-desc" id="bridgeStatusText" data-i18n="bridge_status_stopped">متوقف</span>
+          <div class="setting-item-row">
+            <div class="setting-text">
+              <span class="setting-title" data-i18n="bridge_service_toggle">تشغيل خادم الجسر</span>
+              <span class="setting-subtitle" id="bridgeStatusText" data-i18n="bridge_status_stopped">متوقف</span>
             </div>
-            <label class="switch">
+            <label class="toggle-switch">
               <input type="checkbox" id="lanBridgeToggle">
-              <span class="slider round"></span>
+              <span class="toggle-slider"></span>
             </label>
           </div>
 
-          <div class="bridge-details" id="bridgeDetailsBox" style="display: none;">
-            <div class="bridge-detail-item">
-              <span class="detail-label" data-i18n="bridge_address_label">عنوان الاتصال:</span>
-              <code class="detail-val" id="bridgeAddressVal">http://192.168.1.50:8765</code>
+          <div class="bridge-details-box" id="bridgeDetailsBox" style="display: none;">
+            <div class="bridge-entry">
+              <span class="bridge-label" data-i18n="bridge_address_label">عنوان الاتصال:</span>
+              <code class="bridge-val" id="bridgeAddressVal">http://192.168.1.50:8765</code>
               <button class="btn btn-xs btn-secondary" id="copyBridgeAddrBtn" data-i18n="btn_copy">نسخ</button>
             </div>
-            <div class="bridge-detail-item">
-              <span class="detail-label" data-i18n="bridge_token_label">رمز التوثيق:</span>
-              <code class="detail-val" id="bridgeTokenVal">silent-exec-secret</code>
+            <div class="bridge-entry">
+              <span class="bridge-label" data-i18n="bridge_token_label">رمز التوثيق:</span>
+              <code class="bridge-val" id="bridgeTokenVal">silent-exec-secret</code>
               <button class="btn btn-xs btn-secondary" id="copyBridgeTokenBtn" data-i18n="btn_copy">نسخ</button>
             </div>
           </div>
         </div>
 
-        <!-- Updates Card -->
-        <div class="glass-card settings-card">
-          <div class="update-card-content">
+        <!-- App Self-Updater Card -->
+        <div class="panel-card settings-card">
+          <div class="card-header-with-action">
             <div>
-              <h3 class="settings-group-title" data-i18n="update_title">تحديثات SilentExec Desktop</h3>
-              <p class="card-desc" id="versionLabel">الإصدار الحالي: v0.4.0 (Windows x86_64)</p>
+              <h3 class="panel-title" data-i18n="update_title">تحديثات SilentExec Desktop</h3>
+              <p class="panel-desc" id="versionLabel">الإصدار الحالي: v0.5.0 (Windows x86_64)</p>
             </div>
             <button class="btn btn-secondary" id="checkUpdatesBtn">
               <span class="btn-icon">🔄</span>

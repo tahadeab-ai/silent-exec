@@ -1,68 +1,100 @@
 /**
- * SilentExec Desktop - Pure Modern Vanilla JS Controller
- * Zero npm / Zero Node.js build step
- * Direct Tauri v2 interop with fallback for webview/testing
+ * SilentExec Desktop v0.5.0 - Pure Modern Vanilla JS Controller
+ * Linear / Raycast / Arc Aesthetic with Zero Node.js / Zero npm build step.
+ * Full bilingual Arabic (RTL) / English (LTR) with zero mixed language.
  */
 
 (function () {
   'use strict';
 
-  // --- Localization Dictionaries (100% localized, zero mixed language) ---
+  // --- Complete Localization Dictionaries ---
   const I18N = {
     ar: {
-      app_title: 'SilentExec Desktop',
-      label_subtitle: 'وكيل سطح المكتب الذكي بالذكاء الاصطناعي',
-      tab_agent: 'الوكيل',
-      tab_models: 'النماذج',
-      tab_settings: 'الإعدادات',
-      console_heading: 'موجه الأوامر الذكي',
+      app_title: 'SilentExec Desktop v0.5.0',
+      nav_agent: 'الوكيل الذكي',
+      nav_models: 'النماذج والبيئة',
+      nav_tools: 'الأدوات و MCP',
+      nav_settings: 'الإعدادات',
+      composer_title: 'موجه الأوامر والأهداف',
       mode_silent: 'صامت',
       mode_interactive: 'تفاعلي',
-      mode_dry_run: 'تجريبي',
-      btn_run: 'تشغيل',
+      mode_dry_run: 'محاكاة',
+      btn_run: 'تنفيذ المهمة',
       btn_stop: 'إيقاف',
-      prompt_placeholder: 'اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح واتساب وابحث عن أحمد وارسل له مرحبا)...',
+      hint_run: 'للتشغيل',
+      hint_newline: 'سطر جديد',
+      prompt_placeholder: 'اكتب أمراً أو مهمة متعددة الخطوات (مثال: افتح المتصفح وابحث عن كود رست أو شغل الحاسبة)...',
       quick_examples_label: 'أمثلة سريعة:',
       confirm_required_title: 'تأكيد تنفيذ الخطوة',
       btn_execute_step: 'تنفيذ الخطوة',
       btn_skip_step: 'تخطي',
-      btn_cancel: 'إلغاء',
-      timeline_title: 'مخطط التنفيذ المباشر',
+      btn_cancel: 'إلغاء الخطة',
+      timeline_title: 'مخطط التنفيذ المباشر (Step Inspector)',
+      timeline_desc: 'فحص تسلسل الخطوات المصنفة، بوابات الأمان، ونتائج التنفيذ الحية.',
       status_idle: 'جاهز للأوامر',
-      empty_timeline_hint: 'أدخل أمراً أعلاه لمشاهدة تحليل المهام وتنفيذ الخطوات ومراقبة الأمان في الوقت الفعلي.',
-      runtime_title: 'بيئة التشغيل المحلية (llama-server)',
-      runtime_desc: 'تتيح تشغيل نماذج الذكاء الاصطناعي محلياً وبسرعة فائقة دون اتصال بالإنترنت أو الاعتماد على سحابة خارجية.',
-      btn_setup_runtime: 'إعداد بيئة التشغيل تلقائياً',
-      models_catalog_title: 'مستودع نماذج SilentExec',
-      models_catalog_desc: 'نماذج مخصصة تم تدريبها بأسلوب QLoRA للتحكم في سطح المكتب باللغتين العربية والإنجليزية.',
-      btn_refresh_models: 'تحديث النماذج',
+      empty_timeline_title: 'لا توجد مهام نشطة',
+      empty_timeline_hint: 'أدخل أمراً أو اختر من الأمثلة السريعة أعلاه لمشاهدة تفكيك الخطة وتنفيذها.',
+      runtime_title: 'محرك التشغيل المحلي (llama-server)',
+      runtime_desc: 'يعمل محلياً بدون سحابة خارجية مع دعم كامل لقواعد GBNF وحفظ ذاكرة KV Cache.',
+      runtime_ready: 'جاهز ومفعل',
+      runtime_not_ready: 'غير مثبت',
+      btn_setup_runtime: 'إعداد / فحص البيئة',
+      models_catalog_title: 'مستودع نماذج الذكاء الاصطناعي (GGUF)',
+      models_catalog_desc: 'نماذج Qwen2.5 خفيفة ومحسّنة لأداء الاستجابة الفورية والأوامر ثنائية اللغة.',
+      btn_refresh_models: 'تحديث القائمة',
       loading_models: 'جارٍ استعلام مستودع GitHub Releases...',
-      no_models_found: 'لم يتم العثور على نماذج منشورة حالياً.',
+      no_models_found: 'لم يتم العثور على نماذج متوفرة حالياً.',
       model_cached: 'محمل محلياً',
       model_remote: 'متاح للتحميل',
       model_active: 'النموذج النشط',
       btn_download: 'تحميل',
+      btn_pause: 'إيقاف مؤقت',
+      btn_resume: 'استئناف',
       btn_activate: 'تفعيل',
       btn_delete: 'حذف',
-      settings_general_group: 'الإعدادات العامة واللغة',
+      tools_title: 'أدوات النظام المدمجة (21 أداة)',
+      tools_desc: 'مصنفة حسب بوابات الأمان الصارمة (SafetyGate Tiers).',
+      tier1_title: 'تنفيذ صامت مباشر',
+      tier1_desc: 'إجراءات قراءة وتصفح آمنة لا تشكل خطراً على بيانات المستخدم (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Done).',
+      tier2_title: 'تأكيد صريح إلزامي',
+      tier2_desc: 'إجراءات حساسة تتطلب تأكيد المستخدم قبل التنفيذ الفعلي (DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).',
+      tier3_title: 'حظر تلقائي صارم',
+      tier3_desc: 'محاولات حقن الأوامر، مسارات النظام الحساسة، والتعديلات العشوائية غير المصرح بها.',
+      mcp_title: 'خوادم أدوات Model Context Protocol (MCP)',
+      mcp_desc: 'ربط وتوسيع قدرات الوكيل مع خوادم MCP عبر معيار JSON-RPC 2.0 stdio.',
+      btn_add_mcp: 'إضافة خادم MCP',
+      mcp_form_add_title: 'تسجيل خادم MCP جديد',
+      mcp_server_name: 'اسم الخادم',
+      mcp_server_command: 'الأمر التنفيذي',
+      mcp_server_args: 'الوسائط (مفصولة بمسافات)',
+      btn_save: 'حفظ الخادم',
+      settings_general_group: 'المظهر واللغة',
       setting_lang_label: 'لغة الواجهة',
-      setting_lang_desc: 'اختر اللغة المفضلة للواجهة والموجهات',
-      setting_theme_label: 'المظهر المرئي',
-      setting_theme_desc: 'التبديل بين النمط الداكن والفاتح',
-      theme_dark: 'داكن',
-      theme_light: 'فاتح',
-      settings_execution_group: 'وضع التنفيذ وبوابات الأمان',
-      mode_silent_title: 'تنفيذ ذاتي صامت',
-      mode_silent_desc: 'تنفيذ الأوامر المصرح بها فوراً في الخلفية مع تسجيل الأحداث دون مقاطعة المستخدم.',
-      mode_interactive_title: 'تأكيد خطوة بخطوة',
-      mode_interactive_desc: 'طلب موافقة صريحة قبل أي إجراء مهم لتوفير أقصى درجات الأمان والرقابة.',
-      mode_dry_run_title: 'محاكاة آمنة (Dry-Run)',
-      mode_dry_run_desc: 'فحص الخطة ومحاكاة التنفيذ واختبار الصلاحيات دون إجراء أي تعديل حقيقي على النظام.',
+      setting_lang_desc: 'تغيير اتجاه ولغة العرض بين العربية (RTL) والإنجليزية (LTR)',
+      setting_theme_label: 'النمط البصري',
+      setting_theme_desc: 'التبديل بين مظهر السواد الداكن المريح والنقاء الفاتح',
+      theme_dark: 'داكن (Obsidian)',
+      theme_light: 'فاتح (Crisp)',
+      settings_ai_backend_group: 'محرك الذكاء الاصطناعي (AI Engine)',
+      settings_ai_backend_desc: 'حدد المحرك النشط لتحليل وتفكيك المهام الطبيعية.',
+      btn_test_connection: 'اختبار الاتصال',
+      backend_offline: 'محلي 100%',
+      backend_local_daemon: 'خدمة محلية',
+      backend_cloud: 'سحابي / مخصص',
+      backend_local_desc: 'تنفيذ محلي فائق السرعة عبر llama-server و GBNF grammar بدون أي اتصال خارجي.',
+      backend_ollama_desc: 'اتصال بخدمة Ollama المحلية عبر http://127.0.0.1:11434 مع مخرجات JSON صارمة.',
+      backend_openai_desc: 'دعم Gemini / OpenRouter / Groq / DeepSeek المتوافق مع واجهة OpenAI v1.',
+      ollama_url_label: 'عنوان خادم Ollama',
+      ollama_model_label: 'اسم النموذج',
+      openai_url_label: 'Base URL',
+      openai_model_label: 'Model Name',
+      openai_key_label: 'API Key',
+      settings_execution_group: 'أوضاع التنفيذ وموجّه القواعد',
       setting_fast_router_label: 'موجّه القواعد السريعة (Fast Rule Router)',
-      setting_fast_router_desc: 'استجابة فورية فائقة السرعة (<15ms) للأوامر المباشرة مع استثناء الأوامر المركبة',
+      setting_fast_router_desc: 'استجابة فورية (<15ms) للأوامر الشائعة وتصفح النظام',
       settings_bridge_group: 'خادم جسر الشبكة المحلية (LAN Bridge)',
-      settings_bridge_desc: 'ربط وتكامل تطبيق الهاتف (Android Agent) مع الحاسوب عبر الشبكة المحلية لتنفيذ الأوامر المشتركة.',
-      bridge_service_toggle: 'حالة خادم الجسر',
+      settings_bridge_desc: 'ربط تطبيق الهاتف الذكي (Android Agent) لتنفيذ الأوامر المشتركة مع الحاسوب.',
+      bridge_service_toggle: 'تشغيل خادم الجسر',
       bridge_status_running: 'يعمل (متصل بالشبكة)',
       bridge_status_stopped: 'متوقف',
       bridge_address_label: 'عنوان الاتصال:',
@@ -74,72 +106,99 @@
       update_checking: 'جارٍ التحقق من التحديثات...',
       update_latest: 'أنت تستخدم أحدث إصدار متاح حالياً.',
       update_available: 'يتوفر إصدار أحدث:',
-      stage_understanding: 'الفهم والاستيعاب اللغوي',
-      stage_planned: 'إنشاء خطة متعددة الخطوات',
-      stage_running: 'جارٍ التنفيذ',
-      stage_completed: 'اكتمل بنجاح',
-      stage_blocked: 'تم حظر الإجراء لسياسة الأمان',
-      stage_failed: 'فشل التنفيذ',
-      quick_ex_1: 'افتح واتساب وابحث عن أحمد وارسل له مرحبا',
-      quick_ex_2: 'افتح المتصفح وابحث عن كود رست',
-      quick_ex_3: 'افتح التنزيلات واحذف الملفات المؤقتة',
-      quick_ex_4: 'ارجع'
+      quick_ex_1: 'افتح المتصفح وابحث عن كود رست',
+      quick_ex_2: 'افتح واتساب',
+      quick_ex_3: 'شغل الحاسبة',
+      quick_ex_4: 'افتح التنزيلات',
+      quick_ex_5: 'ارجع'
     },
     en: {
-      app_title: 'SilentExec Desktop',
-      label_subtitle: 'Intelligent AI Desktop Agent',
-      tab_agent: 'Agent',
-      tab_models: 'Models',
-      tab_settings: 'Settings',
-      console_heading: 'Smart Command Console',
+      app_title: 'SilentExec Desktop v0.5.0',
+      nav_agent: 'Smart Agent',
+      nav_models: 'Models & Runtime',
+      nav_tools: 'Tools & MCP',
+      nav_settings: 'Settings',
+      composer_title: 'Command & Goal Composer',
       mode_silent: 'Silent',
       mode_interactive: 'Interactive',
-      mode_dry_run: 'Dry-Run',
-      btn_run: 'Run',
+      mode_dry_run: 'Simulate',
+      btn_run: 'Execute Task',
       btn_stop: 'Stop',
-      prompt_placeholder: 'Type a command or multi-step goal (e.g. Open Chrome and search for Rust)...',
+      hint_run: 'to run',
+      hint_newline: 'new line',
+      prompt_placeholder: 'Type a command or multi-step goal (e.g. Open browser and search for Rust, or launch Calculator)...',
       quick_examples_label: 'Quick Examples:',
       confirm_required_title: 'Confirm Step Execution',
       btn_execute_step: 'Execute Step',
       btn_skip_step: 'Skip',
-      btn_cancel: 'Cancel',
-      timeline_title: 'Live Execution Timeline',
-      status_idle: 'Ready for commands',
-      empty_timeline_hint: 'Enter a command above to watch task planning, step execution, and safety gate evaluation in real time.',
-      runtime_title: 'Local Runtime (llama-server)',
-      runtime_desc: 'Enables high-speed local AI inference without internet connection or reliance on external cloud APIs.',
-      btn_setup_runtime: 'Setup Runtime Automatically',
-      models_catalog_title: 'SilentExec Models Catalog',
-      models_catalog_desc: 'Custom QLoRA fine-tuned desktop automation models in Arabic and English.',
-      btn_refresh_models: 'Refresh Models',
-      loading_models: 'Querying GitHub Releases catalog...',
-      no_models_found: 'No released models found currently.',
-      model_cached: 'Cached locally',
-      model_remote: 'Available for download',
+      btn_cancel: 'Cancel Plan',
+      timeline_title: 'Live Execution Inspector (Step Inspector)',
+      timeline_desc: 'Inspect classified steps, safety gates, and live execution outcomes.',
+      status_idle: 'Ready for Commands',
+      empty_timeline_title: 'No Active Tasks',
+      empty_timeline_hint: 'Type a command or choose a quick example above to watch plan decomposition and execution.',
+      runtime_title: 'Local Runtime Engine (llama-server)',
+      runtime_desc: 'Runs locally with zero external cloud dependencies, full GBNF grammar constraints, and KV cache reuse.',
+      runtime_ready: 'Ready & Active',
+      runtime_not_ready: 'Not Installed',
+      btn_setup_runtime: 'Setup / Verify Runtime',
+      models_catalog_title: 'AI Models Repository (GGUF)',
+      models_catalog_desc: 'Compact Qwen2.5 models fine-tuned for ultra-low latency bilingual desktop navigation.',
+      btn_refresh_models: 'Refresh List',
+      loading_models: 'Querying GitHub Releases repository...',
+      no_models_found: 'No models available currently.',
+      model_cached: 'Locally Cached',
+      model_remote: 'Available for Download',
       model_active: 'Active Model',
       btn_download: 'Download',
+      btn_pause: 'Pause',
+      btn_resume: 'Resume',
       btn_activate: 'Activate',
       btn_delete: 'Delete',
-      settings_general_group: 'General & Localization',
-      setting_lang_label: 'UI Language',
-      setting_lang_desc: 'Choose your preferred language for interface and prompts',
-      setting_theme_label: 'Visual Theme',
-      setting_theme_desc: 'Toggle between dark and light appearance',
-      theme_dark: 'Dark',
-      theme_light: 'Light',
-      settings_execution_group: 'Execution Mode & Safety Gates',
-      mode_silent_title: 'Silent Autonomous Execution',
-      mode_silent_desc: 'Immediately runs permitted actions in the background without user interruption.',
-      mode_interactive_title: 'Step-by-Step Confirmation',
-      mode_interactive_desc: 'Requires explicit confirmation before impactful actions for maximum safety.',
-      mode_dry_run_title: 'Safe Simulation (Dry-Run)',
-      mode_dry_run_desc: 'Validates safety policies and simulates plan steps without altering the system.',
-      setting_fast_router_label: 'Fast Rule Router',
-      setting_fast_router_desc: 'Instant execution (<15ms) for simple direct commands while bypassing compound queries',
-      settings_bridge_group: 'Local Area Network Bridge (LAN Bridge)',
-      settings_bridge_desc: 'Pairs mobile Android agent with desktop over LAN to execute shared workflows.',
-      bridge_service_toggle: 'LAN Bridge Server Status',
-      bridge_status_running: 'Running (Network active)',
+      tools_title: 'Built-in System Tools (21 Tools)',
+      tools_desc: 'Classified under strict SafetyGate Tiers.',
+      tier1_title: 'Direct Silent Execution',
+      tier1_desc: 'Safe read and navigation actions posing zero risk to user data (OpenFolder, OpenFile, LaunchApp, SearchFiles, OpenUrl, CopyToClipboard, SetVolume, SetBrightness, CreateNote, GuiActions, Done).',
+      tier2_title: 'Mandatory User Confirmation',
+      tier2_desc: 'Sensitive actions requiring explicit user confirmation before execution (DeleteFile, MoveFile, Shutdown, Reboot, LockScreen, Sleep, SetAlarm, SendSms).',
+      tier3_title: 'Strict Automated Blocking',
+      tier3_desc: 'Command injection attempts, protected system paths, and unauthorized actions.',
+      mcp_title: 'Model Context Protocol (MCP) Tool Servers',
+      mcp_desc: 'Extend agent capabilities with external MCP servers over JSON-RPC 2.0 stdio.',
+      btn_add_mcp: 'Add MCP Server',
+      mcp_form_add_title: 'Register New MCP Server',
+      mcp_server_name: 'Server Name',
+      mcp_server_command: 'Executable Command',
+      mcp_server_args: 'Arguments (space-separated)',
+      btn_save: 'Save Server',
+      settings_general_group: 'Appearance & Language',
+      setting_lang_label: 'Interface Language',
+      setting_lang_desc: 'Toggle layout direction and copy between Arabic (RTL) and English (LTR)',
+      setting_theme_label: 'Visual Style',
+      setting_theme_desc: 'Toggle between comfortable Obsidian Dark and Crisp Light modes',
+      theme_dark: 'Dark (Obsidian)',
+      theme_light: 'Light (Crisp)',
+      settings_ai_backend_group: 'AI Engine & Inference Backend',
+      settings_ai_backend_desc: 'Select the active AI engine for understanding natural language tasks.',
+      btn_test_connection: 'Test Connection',
+      backend_offline: '100% Offline',
+      backend_local_daemon: 'Local Daemon',
+      backend_cloud: 'Cloud / Custom',
+      backend_local_desc: 'Ultra-fast local execution via llama-server and GBNF grammar without external network calls.',
+      backend_ollama_desc: 'Connects to local Ollama daemon via http://127.0.0.1:11434 with strict JSON mode.',
+      backend_openai_desc: 'Compatible with Gemini, OpenRouter, Groq, and DeepSeek OpenAI v1 endpoints.',
+      ollama_url_label: 'Ollama Server URL',
+      ollama_model_label: 'Model Name',
+      openai_url_label: 'Base URL',
+      openai_model_label: 'Model Name',
+      openai_key_label: 'API Key',
+      settings_execution_group: 'Execution Modes & Fast Router',
+      setting_fast_router_label: 'Fast Rule Router (<15ms)',
+      setting_fast_router_desc: 'Deterministic sub-15ms execution for common system commands',
+      settings_bridge_group: 'Local Network Bridge (LAN Bridge)',
+      settings_bridge_desc: 'Pair mobile device (Android Agent) with PC over local network.',
+      bridge_service_toggle: 'Bridge Service Status',
+      bridge_status_running: 'Running (Connected)',
       bridge_status_stopped: 'Stopped',
       bridge_address_label: 'Connection URL:',
       bridge_token_label: 'Auth Token:',
@@ -147,732 +206,776 @@
       copied_toast: 'Copied to clipboard successfully',
       update_title: 'SilentExec Desktop Updates',
       btn_check_updates: 'Check for Updates',
-      update_checking: 'Checking GitHub releases...',
-      update_latest: 'You are running the latest version available.',
-      update_available: 'Newer version available:',
-      stage_understanding: 'Natural Language Understanding',
-      stage_planned: 'Multi-Step Plan Created',
-      stage_running: 'Executing',
-      stage_completed: 'Completed Successfully',
-      stage_blocked: 'Blocked by Safety Gate',
-      stage_failed: 'Execution Failed',
-      quick_ex_1: 'Open Chrome and search for Rust',
-      quick_ex_2: 'Open Downloads and search report',
-      quick_ex_3: 'Show desktop',
-      quick_ex_4: 'Go back'
+      update_checking: 'Checking for updates...',
+      update_latest: 'You are running the latest version.',
+      update_available: 'Newer release available:',
+      quick_ex_1: 'Open browser and search for Rust code',
+      quick_ex_2: 'Open WhatsApp',
+      quick_ex_3: 'Launch Calculator',
+      quick_ex_4: 'Open Downloads folder',
+      quick_ex_5: 'Go back'
     }
   };
 
-  // --- App State ---
-  const state = {
-    lang: localStorage.getItem('silent_exec_lang') || 'ar',
-    theme: localStorage.getItem('silent_exec_theme') || 'dark',
-    activeTab: 'agent',
-    mode: 'silent', // 'silent' | 'interactive' | 'dry_run'
-    activeModelTag: 'v0.3.0-model',
+  // State Management
+  const AppState = {
+    lang: 'ar',
+    theme: 'dark',
+    mode: 'silent',
+    currentView: 'agent',
+    backend: 'local_llama',
+    ollama_url: 'http://127.0.0.1:11434',
+    ollama_model: 'qwen2.5:1.5b',
+    openai_api_base: 'https://api.openai.com/v1',
+    openai_api_model: 'gpt-4o-mini',
+    openai_api_key: '',
     fastRouterEnabled: true,
-    isBridgeRunning: false,
-    bridgeUrl: 'http://127.0.0.1:8765',
-    bridgeToken: 'silent-exec-secret',
+    activeModelTag: null,
     isExecuting: false,
-    pendingStepIndex: null,
-    modelsList: []
+    downloadState: {}
   };
 
-  // --- Tauri Invoke Helper ---
+  // Safe Tauri v2 invoker helper
   async function invokeTauri(cmd, args = {}) {
-    if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
-      try {
-        return await window.__TAURI__.core.invoke(cmd, args);
-      } catch (err) {
-        console.error(`Tauri error on ${cmd}:`, err);
-        throw err;
-      }
-    } else {
-      // Mock fallback for browser dev/testing
-      console.warn(`[Mock Invoke] ${cmd}:`, args);
-      return mockBackend(cmd, args);
+    if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+      return await window.__TAURI__.core.invoke(cmd, args);
     }
+    console.warn(`[Tauri Mock] Invoke '${cmd}':`, args);
+    return mockInvoke(cmd, args);
   }
 
-  function mockBackend(cmd, args) {
+  // Safe Tauri v2 event listener
+  async function listenTauri(event, handler) {
+    if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
+      return await window.__TAURI__.event.listen(event, handler);
+    }
+    return () => {};
+  }
+
+  function mockInvoke(cmd, args) {
     if (cmd === 'get_app_config') {
       return {
-        language: state.lang,
-        mode: state.mode,
-        active_model_tag: state.activeModelTag,
-        fast_router_enabled: state.fastRouterEnabled,
-        bridge_running: state.isBridgeRunning,
-        bridge_url: state.bridgeUrl,
-        bridge_token: state.bridgeToken
+        language: AppState.lang,
+        mode: AppState.mode,
+        active_model_tag: 'v0.3.0-model',
+        fast_router_enabled: true,
+        backend: 'local_llama',
+        ollama_url: 'http://127.0.0.1:11434',
+        ollama_model: 'qwen2.5:1.5b',
+        openai_api_base: 'https://api.openai.com/v1',
+        openai_api_model: 'gpt-4o-mini',
+        openai_api_key: '',
+        bridge_running: false,
+        bridge_url: null,
+        bridge_token: null
       };
-    } else if (cmd === 'list_models') {
+    }
+    if (cmd === 'list_models') {
       return [
         {
           tag: 'v0.3.0-model',
-          name: 'SilentExec Qwen2.5-1.5B Multi-Step',
-          filename: 'silent-exec-v0.3.0-qwen1.5b.Q4_K_M.gguf',
-          size_bytes: 980000000,
+          name: 'Qwen2.5 1.5B Instruct Q4_K_M',
+          filename: 'Qwen2.5-1.5B-Instruct.Q4_K_M.gguf',
+          size_bytes: 986000000,
           is_cached: true,
           is_active: true
         },
         {
           tag: 'v0.2.0-model',
-          name: 'SilentExec Qwen2.5-1.5B Single-Step',
-          filename: 'silent-exec-v0.2.0-qwen1.5b.Q4_K_M.gguf',
-          size_bytes: 980000000,
+          name: 'Qwen2.5 3B Instruct Q4_K_M',
+          filename: 'Qwen2.5-3B-Instruct.Q4_K_M.gguf',
+          size_bytes: 1980000000,
           is_cached: false,
           is_active: false
         }
       ];
-    } else if (cmd === 'execute_query') {
-      return {
-        success: true,
-        query: args.query || '',
-        steps: [
-          {
-            step_index: 1,
-            total_steps: 2,
-            stage: 'planned',
-            description: 'Analyzing compound intent',
-            action: null,
-            details: 'Found 2 sequential steps'
-          },
-          {
-            step_index: 1,
-            total_steps: 2,
-            stage: 'completed',
-            description: 'Open application',
-            action: 'open_app',
-            details: 'Target resolved and launched'
-          },
-          {
-            step_index: 2,
-            total_steps: 2,
-            stage: 'completed',
-            description: 'Search item',
-            action: 'search_item',
-            details: 'Query processed successfully'
-          }
-        ],
-        message: 'Task completed successfully',
-        requires_confirm: false,
-        pending_step_index: null
-      };
-    } else if (cmd === 'check_updates') {
-      return {
-        current_version: '0.4.0',
-        latest_version: '0.4.0',
-        tag_name: 'v0.4.0-pc',
-        update_available: false
-      };
     }
-    return { status: 'ok' };
+    if (cmd === 'list_mcp_servers') {
+      return [
+        { name: 'weather', command: 'node', args: ['weather.js'], enabled: true },
+        { name: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', 'C:/Users/O2'], enabled: true }
+      ];
+    }
+    if (cmd === 'test_ai_backend') {
+      return { success: true, latency_ms: 12, message: 'Backend connected and responsive' };
+    }
+    return {};
   }
 
-  // --- DOM Elements ---
-  const el = {
-    body: document.body,
-    html: document.documentElement,
-    subtitle: document.getElementById('labelSubtitle'),
-    activeModelName: document.getElementById('activeModelName'),
-    langToggleBtn: document.getElementById('langToggleBtn'),
-    langBadge: document.getElementById('langBadge'),
-    themeToggleBtn: document.getElementById('themeToggleBtn'),
-    themeIcon: document.getElementById('themeIcon'),
-    navTabs: document.querySelectorAll('.nav-tab'),
-    tabContents: document.querySelectorAll('.tab-content'),
-    currentModeBadge: document.getElementById('currentModeBadge'),
-    currentModeLabel: document.getElementById('currentModeLabel'),
-    promptInput: document.getElementById('promptInput'),
-    runBtn: document.getElementById('runBtn'),
-    stopBtn: document.getElementById('stopBtn'),
-    quickChips: document.getElementById('quickChips'),
-    confirmBar: document.getElementById('confirmBar'),
-    confirmTitle: document.getElementById('confirmTitle'),
-    confirmDesc: document.getElementById('confirmDesc'),
-    confirmProceedBtn: document.getElementById('confirmProceedBtn'),
-    confirmSkipBtn: document.getElementById('confirmSkipBtn'),
-    confirmCancelBtn: document.getElementById('confirmCancelBtn'),
-    timelineContainer: document.getElementById('timelineContainer'),
-    stepCounterLabel: document.getElementById('stepCounterLabel'),
-    setupRuntimeBtn: document.getElementById('setupRuntimeBtn'),
-    refreshModelsBtn: document.getElementById('refreshModelsBtn'),
-    modelsGrid: document.getElementById('modelsGrid'),
-    langSelectorGroup: document.getElementById('langSelectorGroup'),
-    themeSelectorGroup: document.getElementById('themeSelectorGroup'),
-    modeOptionCards: document.querySelectorAll('.mode-option-card'),
-    fastRouterToggle: document.getElementById('fastRouterToggle'),
-    lanBridgeToggle: document.getElementById('lanBridgeToggle'),
-    bridgeStatusText: document.getElementById('bridgeStatusText'),
-    bridgeDetailsBox: document.getElementById('bridgeDetailsBox'),
-    bridgeAddressVal: document.getElementById('bridgeAddressVal'),
-    bridgeTokenVal: document.getElementById('bridgeTokenVal'),
-    copyBridgeAddrBtn: document.getElementById('copyBridgeAddrBtn'),
-    copyBridgeTokenBtn: document.getElementById('copyBridgeTokenBtn'),
-    checkUpdatesBtn: document.getElementById('checkUpdatesBtn'),
-    updateStatusMsg: document.getElementById('updateStatusMsg'),
-    toast: document.getElementById('toast')
-  };
-
-  // --- Toast Notification ---
+  // Toast Notification
   function showToast(msg) {
-    el.toast.textContent = msg;
-    el.toast.style.display = 'block';
-    setTimeout(() => {
-      el.toast.style.display = 'none';
-    }, 3000);
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3200);
   }
 
-  // --- Internationalization (i18n) Engine ---
-  function setLanguage(lang) {
-    state.lang = lang;
-    localStorage.setItem('silent_exec_lang', lang);
-    el.html.lang = lang;
-    el.html.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    el.langBadge.textContent = lang === 'ar' ? 'EN' : 'عربي';
+  // Apply Theme
+  function applyTheme(theme) {
+    AppState.theme = theme;
+    if (theme === 'light') {
+      document.body.classList.remove('theme-dark');
+      document.body.classList.add('theme-light');
+      const icon = document.getElementById('themeIcon');
+      if (icon) icon.textContent = '🌙';
+    } else {
+      document.body.classList.remove('theme-light');
+      document.body.classList.add('theme-dark');
+      const icon = document.getElementById('themeIcon');
+      if (icon) icon.textContent = '☀️';
+    }
 
-    // Update all elements with data-i18n
-    const dict = I18N[lang] || I18N.ar;
-    document.querySelectorAll('[data-i18n]').forEach((node) => {
-      const key = node.getAttribute('data-i18n');
-      if (dict[key]) {
-        node.textContent = dict[key];
+    document.querySelectorAll('#themeSelectorGroup .segment-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.val === theme);
+    });
+  }
+
+  // Apply Language & Full RTL/LTR Symmetry
+  function applyLanguage(lang) {
+    AppState.lang = lang;
+    const isRtl = lang === 'ar';
+    document.documentElement.lang = lang;
+    document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+
+    const t = I18N[lang] || I18N.ar;
+
+    // Update all text nodes with data-i18n
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (t[key]) {
+        el.textContent = t[key];
       }
     });
 
-    // Update placeholder
-    if (el.promptInput) {
-      el.promptInput.placeholder = dict.prompt_placeholder;
-    }
+    // Update placeholders
+    const promptInput = document.getElementById('promptInput');
+    if (promptInput) promptInput.placeholder = t.prompt_placeholder;
 
-    // Update segmented buttons
-    el.langSelectorGroup.querySelectorAll('.btn-segment').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-val') === lang);
+    // Update Lang badges
+    const langBadge = document.getElementById('langBadge');
+    if (langBadge) langBadge.textContent = isRtl ? 'EN' : 'عربي';
+
+    document.querySelectorAll('#langSelectorGroup .segment-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.val === lang);
     });
 
-    updateModePill();
     renderQuickChips();
+    updateViewBreadcrumb();
   }
 
-  // --- Theme Management ---
-  function setTheme(theme) {
-    state.theme = theme;
-    localStorage.setItem('silent_exec_theme', theme);
-    el.body.className = theme === 'light' ? 'theme-light' : 'theme-dark';
-    el.themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+  function updateViewBreadcrumb() {
+    const t = I18N[AppState.lang] || I18N.ar;
+    const titleEl = document.getElementById('viewTitleBreadcrumb');
+    if (!titleEl) return;
+    const viewNames = {
+      agent: t.nav_agent,
+      models: t.nav_models,
+      tools: t.nav_tools,
+      settings: t.nav_settings
+    };
+    titleEl.textContent = viewNames[AppState.currentView] || t.nav_agent;
+  }
 
-    el.themeSelectorGroup.querySelectorAll('.btn-segment').forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-val') === theme);
+  function switchView(viewName) {
+    AppState.currentView = viewName;
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === viewName);
     });
-  }
-
-  // --- Mode Pill Updater ---
-  function updateModePill() {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.currentModeBadge.className = `mode-pill mode-${state.mode}`;
-    const modeKey = `mode_${state.mode}`;
-    el.currentModeLabel.textContent = dict[modeKey] || state.mode;
-
-    el.modeOptionCards.forEach((card) => {
-      card.classList.toggle('active', card.getAttribute('data-mode') === state.mode);
+    document.querySelectorAll('.workspace-view').forEach(view => {
+      view.classList.toggle('active', view.id === `view${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`);
     });
+    updateViewBreadcrumb();
+
+    if (viewName === 'models') loadModels();
+    if (viewName === 'tools') loadMcpServers();
   }
 
-  // --- Quick Suggestion Chips ---
   function renderQuickChips() {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.quickChips.innerHTML = '';
-    const examples = [dict.quick_ex_1, dict.quick_ex_2, dict.quick_ex_3, dict.quick_ex_4];
-    examples.forEach((exText) => {
-      if (!exText) return;
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.textContent = exText;
-      chip.addEventListener('click', () => {
-        el.promptInput.value = exText;
-        el.promptInput.focus();
-      });
-      el.quickChips.appendChild(chip);
-    });
-  }
+    const container = document.getElementById('quickChips');
+    if (!container) return;
+    const t = I18N[AppState.lang] || I18N.ar;
+    const examples = [t.quick_ex_1, t.quick_ex_2, t.quick_ex_3, t.quick_ex_4, t.quick_ex_5];
 
-  // --- Navigation Tabs ---
-  function setupNavigation() {
-    el.navTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const targetTab = tab.getAttribute('data-tab');
-        el.navTabs.forEach((t) => t.classList.remove('active'));
-        el.tabContents.forEach((c) => c.classList.remove('active'));
-
-        tab.classList.add('active');
-        const view = document.getElementById(`view${targetTab.charAt(0).toUpperCase() + targetTab.slice(1)}`);
-        if (view) view.classList.add('active');
-        state.activeTab = targetTab;
-
-        if (targetTab === 'models' && state.modelsList.length === 0) {
-          loadModels();
+    container.innerHTML = '';
+    examples.forEach(text => {
+      const chip = document.createElement('button');
+      chip.className = 'example-chip';
+      chip.textContent = text;
+      chip.onclick = () => {
+        const input = document.getElementById('promptInput');
+        if (input) {
+          input.value = text;
+          input.focus();
         }
-      });
+      };
+      container.appendChild(chip);
     });
   }
 
-  // --- Step Timeline Renderer ---
-  function renderTimeline(steps, isDone = false, isFailed = false) {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.timelineContainer.innerHTML = '';
+  // --- Agent Execution & Step Inspector ---
+  async function runAgent() {
+    const promptInput = document.getElementById('promptInput');
+    const query = promptInput ? promptInput.value.trim() : '';
+    if (!query) return;
 
-    if (!steps || steps.length === 0) {
-      el.timelineContainer.innerHTML = `
-        <div class="empty-timeline-state">
-          <div class="empty-icon">🎯</div>
-          <p>${dict.empty_timeline_hint}</p>
+    const runBtn = document.getElementById('runBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const timelineContainer = document.getElementById('timelineContainer');
+    const counterLabel = document.getElementById('stepCounterLabel');
+    const t = I18N[AppState.lang] || I18N.ar;
+
+    if (runBtn) runBtn.disabled = true;
+    if (stopBtn) stopBtn.disabled = false;
+    AppState.isExecuting = true;
+
+    if (counterLabel) counterLabel.textContent = t.stage_running;
+    if (timelineContainer) {
+      timelineContainer.innerHTML = `
+        <div class="empty-state-box">
+          <div class="spinner"></div>
+          <p style="margin-top: 10px; color: var(--text-muted);">${t.stage_understanding}...</p>
         </div>
       `;
-      el.stepCounterLabel.textContent = dict.status_idle;
-      return;
     }
-
-    const list = document.createElement('div');
-    list.className = 'timeline-list';
-
-    steps.forEach((st, idx) => {
-      const node = document.createElement('div');
-      node.className = 'timeline-node';
-
-      let iconClass = 'status-success';
-      let iconSymbol = '✓';
-      let badgeText = dict.stage_completed;
-
-      if (st.stage === 'running' || st.stage === 'understanding') {
-        iconClass = 'status-running';
-        iconSymbol = '⚡';
-        badgeText = dict.stage_running;
-      } else if (st.stage === 'awaiting_confirm') {
-        iconClass = 'status-warning';
-        iconSymbol = '⚠️';
-        badgeText = dict.confirm_required_title;
-      } else if (st.stage === 'blocked') {
-        iconClass = 'status-error';
-        iconSymbol = '⛔';
-        badgeText = dict.stage_blocked;
-      } else if (st.stage === 'failed') {
-        iconClass = 'status-error';
-        iconSymbol = '✕';
-        badgeText = dict.stage_failed;
-      }
-
-      node.innerHTML = `
-        <div class="node-icon-box ${iconClass}">${iconSymbol}</div>
-        <div class="node-details">
-          <div class="node-head">
-            <span class="node-title">${escapeHtml(st.description || `${dict.stage_running} ${idx + 1}`)}</span>
-            <span class="node-badge ${iconClass}">${badgeText}</span>
-          </div>
-          <div class="node-message">${escapeHtml(st.details || (st.action ? `Action: ${st.action}` : ''))}</div>
-        </div>
-      `;
-      list.appendChild(node);
-    });
-
-    el.timelineContainer.appendChild(list);
-    el.stepCounterLabel.textContent = isDone ? dict.stage_completed : `${steps.length} steps`;
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // --- Execution Controller ---
-  async function handleRun() {
-    const query = el.promptInput.value.trim();
-    if (!query) {
-      el.promptInput.focus();
-      return;
-    }
-
-    const dict = I18N[state.lang] || I18N.ar;
-    state.isExecuting = true;
-    el.runBtn.disabled = true;
-    el.stopBtn.disabled = false;
-    el.confirmBar.style.display = 'none';
-
-    // Show initial understanding card
-    renderTimeline([
-      {
-        step_index: 1,
-        total_steps: 1,
-        stage: 'understanding',
-        description: dict.stage_understanding,
-        action: null,
-        details: query
-      }
-    ]);
 
     try {
-      const res = await invokeTauri('execute_query', {
+      const report = await invokeTauri('run_agent_plan', {
         query,
-        mode: state.mode
+        mode: AppState.mode
       });
 
-      renderTimeline(res.steps, res.success, !res.success);
-
-      if (res.requires_confirm) {
-        state.pendingStepIndex = res.pending_step_index;
-        el.confirmBar.style.display = 'flex';
-        el.confirmTitle.textContent = dict.confirm_required_title;
-        el.confirmDesc.textContent = res.message || 'Action requires confirmation';
-      } else {
-        state.pendingStepIndex = null;
-        el.confirmBar.style.display = 'none';
-        showToast(res.message || dict.stage_completed);
-      }
+      renderExecutionReport(report);
     } catch (err) {
-      renderTimeline(
-        [
-          {
-            step_index: 1,
-            total_steps: 1,
-            stage: 'failed',
-            description: dict.stage_failed,
-            action: null,
-            details: String(err)
-          }
-        ],
-        false,
-        true
-      );
-      showToast(String(err));
+      if (timelineContainer) {
+        timelineContainer.innerHTML = `
+          <div class="step-card" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.05);">
+            <div class="step-card-header">
+              <span class="step-badge-num">!</span>
+              <span class="step-action-tag" style="color: var(--accent-red);">${t.stage_failed}</span>
+            </div>
+            <p class="step-details-text">${err}</p>
+          </div>
+        `;
+      }
+      if (counterLabel) counterLabel.textContent = t.stage_failed;
     } finally {
-      state.isExecuting = false;
-      el.runBtn.disabled = false;
-      el.stopBtn.disabled = true;
+      if (runBtn) runBtn.disabled = false;
+      if (stopBtn) stopBtn.disabled = true;
+      AppState.isExecuting = false;
+    }
+  }
+
+  function renderExecutionReport(report) {
+    const timelineContainer = document.getElementById('timelineContainer');
+    const confirmBar = document.getElementById('confirmBar');
+    const counterLabel = document.getElementById('stepCounterLabel');
+    const t = I18N[AppState.lang] || I18N.ar;
+
+    if (!timelineContainer) return;
+    timelineContainer.innerHTML = '';
+
+    if (!report.steps || report.steps.length === 0) {
+      timelineContainer.innerHTML = `<div class="empty-state-box"><p>${report.message || 'Done'}</p></div>`;
+      return;
+    }
+
+    report.steps.forEach((step, idx) => {
+      const card = document.createElement('div');
+      card.className = 'step-card';
+
+      let stageColor = 'var(--accent-cyan)';
+      if (step.stage === 'completed') stageColor = 'var(--accent-emerald)';
+      if (step.stage === 'blocked') stageColor = 'var(--accent-red)';
+      if (step.stage === 'awaiting_confirm') stageColor = 'var(--accent-amber)';
+
+      card.innerHTML = `
+        <div class="step-card-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="step-badge-num">${idx + 1}</span>
+            <span class="step-action-tag" style="color: ${stageColor};">${step.action || step.stage}</span>
+          </div>
+          <span style="font-size: 11.5px; font-weight: 600; color: ${stageColor};">${step.stage}</span>
+        </div>
+        <p class="step-details-text">${step.details || step.description}</p>
+      `;
+      timelineContainer.appendChild(card);
+    });
+
+    if (report.requires_confirm && confirmBar) {
+      confirmBar.style.display = 'flex';
+      const descEl = document.getElementById('confirmDesc');
+      if (descEl) descEl.textContent = report.message;
+      AppState.pendingStepIndex = report.pending_step_index;
+    } else if (confirmBar) {
+      confirmBar.style.display = 'none';
+    }
+
+    if (counterLabel) {
+      counterLabel.textContent = report.success ? `${report.steps.length} Steps Done` : 'Failed / Blocked';
     }
   }
 
   async function handleConfirmStep(proceed) {
-    if (state.pendingStepIndex === null) return;
-    el.confirmBar.style.display = 'none';
-
+    const confirmBar = document.getElementById('confirmBar');
+    if (!confirmBar) return;
     try {
-      const res = await invokeTauri('confirm_step', {
-        stepIndex: state.pendingStepIndex,
+      const report = await invokeTauri('confirm_step', {
+        stepIndex: AppState.pendingStepIndex || 1,
         proceed
       });
-      state.pendingStepIndex = null;
-      if (res.steps) {
-        renderTimeline(res.steps, res.success, !res.success);
-      }
-      showToast(res.message || 'Step processed');
-    } catch (err) {
-      showToast(String(err));
+      renderExecutionReport(report);
+    } catch (e) {
+      showToast(e);
     }
   }
 
-  // --- Models Hub Controller ---
+  // --- Models Catalog & Resumable Downloads ---
   async function loadModels() {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.modelsGrid.innerHTML = `
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <p>${dict.loading_models}</p>
-      </div>
-    `;
+    const grid = document.getElementById('modelsGrid');
+    if (!grid) return;
+    const t = I18N[AppState.lang] || I18N.ar;
 
     try {
       const models = await invokeTauri('list_models');
-      state.modelsList = models;
-      renderModelsGrid(models);
-    } catch (err) {
-      el.modelsGrid.innerHTML = `
-        <div class="empty-timeline-state">
-          <p>${escapeHtml(String(err))}</p>
-        </div>
-      `;
-    }
-  }
-
-  function renderModelsGrid(models) {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.modelsGrid.innerHTML = '';
-
-    if (!models || models.length === 0) {
-      el.modelsGrid.innerHTML = `
-        <div class="empty-timeline-state">
-          <p>${dict.no_models_found}</p>
-        </div>
-      `;
-      return;
-    }
-
-    models.forEach((m) => {
-      const card = document.createElement('div');
-      card.className = `model-card ${m.is_active ? 'active-model' : ''}`;
-
-      const sizeMb = m.size_bytes > 0 ? `${(m.size_bytes / (1024 * 1024)).toFixed(1)} MB` : 'N/A';
-      const cacheStatus = m.is_cached ? dict.model_cached : dict.model_remote;
-
-      card.innerHTML = `
-        <div class="model-top">
-          <h4 class="model-name">${escapeHtml(m.name || m.filename)}</h4>
-          <span class="model-tag">${escapeHtml(m.tag)}</span>
-        </div>
-        <div class="model-info-row">
-          <span>${sizeMb}</span>
-          <span>${cacheStatus}</span>
-        </div>
-        <div class="model-card-actions">
-          ${
-            !m.is_cached
-              ? `<button class="btn btn-sm btn-primary dl-btn" data-tag="${escapeHtml(m.tag)}">${dict.btn_download}</button>`
-              : !m.is_active
-              ? `<button class="btn btn-sm btn-primary act-btn" data-tag="${escapeHtml(m.tag)}">${dict.btn_activate}</button>
-                 <button class="btn btn-sm btn-secondary del-btn" data-tag="${escapeHtml(m.tag)}">${dict.btn_delete}</button>`
-              : `<span class="mode-badge silent">${dict.model_active}</span>`
-          }
-        </div>
-      `;
-
-      // Download
-      const dlBtn = card.querySelector('.dl-btn');
-      if (dlBtn) {
-        dlBtn.addEventListener('click', async () => {
-          dlBtn.disabled = true;
-          dlBtn.textContent = '...';
-          try {
-            await invokeTauri('download_model', { tag: m.tag });
-            showToast(`${dict.model_cached}: ${m.tag}`);
-            loadModels();
-          } catch (e) {
-            showToast(String(e));
-            dlBtn.disabled = false;
-            dlBtn.textContent = dict.btn_download;
-          }
-        });
+      if (!models || models.length === 0) {
+        grid.innerHTML = `<div class="empty-state-box"><p>${t.no_models_found}</p></div>`;
+        return;
       }
 
-      // Activate
-      const actBtn = card.querySelector('.act-btn');
-      if (actBtn) {
-        actBtn.addEventListener('click', async () => {
-          try {
-            await invokeTauri('activate_model', { tag: m.tag });
-            state.activeModelTag = m.tag;
-            el.activeModelName.textContent = m.tag;
-            showToast(`${dict.model_active}: ${m.tag}`);
-            loadModels();
-          } catch (e) {
-            showToast(String(e));
-          }
-        });
-      }
+      grid.innerHTML = '';
+      models.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'model-card';
 
-      // Delete
-      const delBtn = card.querySelector('.del-btn');
-      if (delBtn) {
-        delBtn.addEventListener('click', async () => {
-          try {
-            await invokeTauri('delete_model', { tag: m.tag });
-            showToast(`${dict.btn_delete}: ${m.tag}`);
-            loadModels();
-          } catch (e) {
-            showToast(String(e));
-          }
-        });
-      }
+        const sizeMB = (m.size_bytes / (1024 * 1024)).toFixed(0);
+        const isDownloading = AppState.downloadState[m.tag] && AppState.downloadState[m.tag].status === 'Downloading';
+        const prog = AppState.downloadState[m.tag] || { percent: 0, speed: '0 MB/s', eta: '0s' };
 
-      el.modelsGrid.appendChild(card);
-    });
-  }
+        card.innerHTML = `
+          <div class="model-card-header">
+            <div>
+              <h4 class="model-name">${m.name || m.filename}</h4>
+              <div class="model-meta-row" style="margin-top: 4px;">
+                <span class="model-size-badge">${sizeMB} MB</span>
+                <span>${m.tag}</span>
+              </div>
+            </div>
+            ${m.is_active ? `<span class="status-pill ready">${t.model_active}</span>` : ''}
+          </div>
 
-  // --- Runtime Setup ---
-  async function handleSetupRuntime() {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.setupRuntimeBtn.disabled = true;
-    el.setupRuntimeBtn.textContent = '...';
+          <div class="download-progress-wrap" id="progWrap_${m.tag}" style="${isDownloading ? '' : 'display: none;'}">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progFill_${m.tag}" style="width: ${prog.percent}%"></div>
+            </div>
+            <div class="progress-stats-row">
+              <span id="progSpeed_${m.tag}">${prog.speed}</span>
+              <span id="progEta_${m.tag}">ETA: ${prog.eta}</span>
+            </div>
+          </div>
 
-    try {
-      const res = await invokeTauri('setup_runtime', {
-        modelTag: state.activeModelTag
+          <div class="model-card-actions">
+            ${!m.is_cached ? `
+              <button class="btn btn-primary btn-xs" onclick="window.silentExec.startDownload('${m.tag}')">${t.btn_download}</button>
+              <button class="btn btn-secondary btn-xs" onclick="window.silentExec.pauseDownload('${m.tag}')">${t.btn_pause}</button>
+              <button class="btn btn-secondary btn-xs" onclick="window.silentExec.resumeDownload('${m.tag}')">${t.btn_resume}</button>
+              <button class="btn btn-danger btn-xs" onclick="window.silentExec.cancelDownload('${m.tag}')">${t.btn_cancel}</button>
+            ` : `
+              <button class="btn btn-secondary btn-xs" onclick="window.silentExec.activateModel('${m.tag}')">${t.btn_activate}</button>
+              <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteModel('${m.tag}')">${t.btn_delete}</button>
+            `}
+          </div>
+        `;
+        grid.appendChild(card);
       });
-      showToast(dict.runtime_title + ': OK');
-      loadModels();
     } catch (e) {
-      showToast(String(e));
-    } finally {
-      el.setupRuntimeBtn.disabled = false;
-      el.setupRuntimeBtn.textContent = dict.btn_setup_runtime;
+      grid.innerHTML = `<div class="empty-state-box"><p>${e}</p></div>`;
     }
   }
 
-  // --- LAN Bridge Controller ---
-  async function toggleBridge(enabled) {
-    const dict = I18N[state.lang] || I18N.ar;
+  // --- MCP Tool Servers Management ---
+  async function loadMcpServers() {
+    const list = document.getElementById('mcpServersList');
+    if (!list) return;
     try {
-      const res = await invokeTauri('toggle_lan_bridge', { enable: enabled });
-      state.isBridgeRunning = res.is_running;
-      el.lanBridgeToggle.checked = res.is_running;
-      el.bridgeStatusText.textContent = res.is_running
-        ? dict.bridge_status_running
-        : dict.bridge_status_stopped;
-      el.bridgeDetailsBox.style.display = res.is_running ? 'flex' : 'none';
-
-      if (res.address) {
-        el.bridgeAddressVal.textContent = res.address;
+      const servers = await invokeTauri('list_mcp_servers');
+      list.innerHTML = '';
+      if (!servers || servers.length === 0) {
+        list.innerHTML = `<div class="empty-state-box"><p>No external MCP servers configured.</p></div>`;
+        return;
       }
-      if (res.token) {
-        el.bridgeTokenVal.textContent = res.token;
-      }
-    } catch (err) {
-      el.lanBridgeToggle.checked = !enabled;
-      showToast(String(err));
-    }
-  }
 
-  // --- Update Checker ---
-  async function handleCheckUpdates() {
-    const dict = I18N[state.lang] || I18N.ar;
-    el.checkUpdatesBtn.disabled = true;
-    el.updateStatusMsg.style.display = 'block';
-    el.updateStatusMsg.textContent = dict.update_checking;
-
-    try {
-      const info = await invokeTauri('check_updates');
-      if (info.update_available) {
-        el.updateStatusMsg.textContent = `${dict.update_available} ${info.latest_version} (${info.tag_name})`;
-      } else {
-        el.updateStatusMsg.textContent = dict.update_latest;
-      }
+      servers.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'mcp-server-row';
+        row.innerHTML = `
+          <div>
+            <span style="font-weight: 700; font-size: 13.5px;">${s.name}</span>
+            <div style="font-size: 11.5px; color: var(--text-dim); margin-top: 2px;">
+              <code>${s.command} ${(s.args || []).join(' ')}</code>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-secondary btn-xs" onclick="window.silentExec.testMcp('${s.name}')">Test tools/list</button>
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteMcp('${s.name}')">Delete</button>
+          </div>
+        `;
+        list.appendChild(row);
+      });
     } catch (e) {
-      el.updateStatusMsg.textContent = String(e);
-    } finally {
-      el.checkUpdatesBtn.disabled = false;
+      list.innerHTML = `<div class="empty-state-box"><p>${e}</p></div>`;
     }
   }
 
-  // --- Initial Config Load ---
+  // --- App Initialization & Config Sync ---
   async function initApp() {
-    // 1. Set language and theme from localStorage
-    setLanguage(state.lang);
-    setTheme(state.theme);
-    setupNavigation();
-
-    // 2. Fetch config from Tauri backend
     try {
       const cfg = await invokeTauri('get_app_config');
-      if (cfg) {
-        if (cfg.language) setLanguage(cfg.language);
-        if (cfg.mode) {
-          state.mode = cfg.mode;
-          updateModePill();
-        }
-        if (cfg.active_model_tag) {
-          state.activeModelTag = cfg.active_model_tag;
-          el.activeModelName.textContent = cfg.active_model_tag;
-        }
-        if (typeof cfg.fast_router_enabled === 'boolean') {
-          state.fastRouterEnabled = cfg.fast_router_enabled;
-          el.fastRouterToggle.checked = cfg.fast_router_enabled;
-        }
-        if (cfg.bridge_running) {
-          toggleBridge(true);
-        }
-      }
-    } catch (err) {
-      console.warn('Could not load backend config:', err);
+      AppState.lang = cfg.language || 'ar';
+      AppState.mode = cfg.mode || 'silent';
+      AppState.backend = cfg.backend || 'local_llama';
+      AppState.ollama_url = cfg.ollama_url || 'http://127.0.0.1:11434';
+      AppState.ollama_model = cfg.ollama_model || 'qwen2.5:1.5b';
+      AppState.openai_api_base = cfg.openai_api_base || 'https://api.openai.com/v1';
+      AppState.openai_api_model = cfg.openai_api_model || 'gpt-4o-mini';
+      AppState.openai_api_key = cfg.openai_api_key || '';
+      AppState.fastRouterEnabled = cfg.fast_router_enabled !== false;
+      AppState.activeModelTag = cfg.active_model_tag;
+
+      applyLanguage(AppState.lang);
+      applyTheme('dark');
+
+      // Update backend badges
+      updateBackendDisplay();
+
+      // Setup inputs
+      const ollamaUrlIn = document.getElementById('ollamaUrlInput');
+      if (ollamaUrlIn) ollamaUrlIn.value = AppState.ollama_url;
+      const ollamaModelIn = document.getElementById('ollamaModelInput');
+      if (ollamaModelIn) ollamaModelIn.value = AppState.ollama_model;
+      const openaiBaseIn = document.getElementById('openaiBaseUrlInput');
+      if (openaiBaseIn) openaiBaseIn.value = AppState.openai_api_base;
+      const openaiModelIn = document.getElementById('openaiModelInput');
+      if (openaiModelIn) openaiModelIn.value = AppState.openai_api_model;
+      const openaiKeyIn = document.getElementById('openaiKeyInput');
+      if (openaiKeyIn) openaiKeyIn.value = AppState.openai_api_key;
+
+      const frToggle = document.getElementById('fastRouterToggle');
+      if (frToggle) frToggle.checked = AppState.fastRouterEnabled;
+
+      // Setup Listeners
+      setupEventListeners();
+    } catch (e) {
+      console.error('Init failed:', e);
     }
-
-    // 3. Bind event listeners
-    el.langToggleBtn.addEventListener('click', () => {
-      setLanguage(state.lang === 'ar' ? 'en' : 'ar');
-    });
-
-    el.themeToggleBtn.addEventListener('click', () => {
-      setTheme(state.theme === 'dark' ? 'light' : 'dark');
-    });
-
-    el.langSelectorGroup.querySelectorAll('.btn-segment').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        setLanguage(btn.getAttribute('data-val'));
-      });
-    });
-
-    el.themeSelectorGroup.querySelectorAll('.btn-segment').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        setTheme(btn.getAttribute('data-val'));
-      });
-    });
-
-    el.modeOptionCards.forEach((card) => {
-      card.addEventListener('click', async () => {
-        state.mode = card.getAttribute('data-mode');
-        updateModePill();
-        try {
-          await invokeTauri('save_app_config', {
-            mode: state.mode,
-            language: state.lang,
-            activeModelTag: state.activeModelTag,
-            fastRouterEnabled: state.fastRouterEnabled
-          });
-        } catch (_) {}
-      });
-    });
-
-    el.fastRouterToggle.addEventListener('change', async (e) => {
-      state.fastRouterEnabled = e.target.checked;
-      try {
-        await invokeTauri('save_app_config', {
-          mode: state.mode,
-          language: state.lang,
-          activeModelTag: state.activeModelTag,
-          fastRouterEnabled: state.fastRouterEnabled
-        });
-      } catch (_) {}
-    });
-
-    el.runBtn.addEventListener('click', handleRun);
-    el.promptInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        handleRun();
-      }
-    });
-
-    el.confirmProceedBtn.addEventListener('click', () => handleConfirmStep(true));
-    el.confirmSkipBtn.addEventListener('click', () => handleConfirmStep(false));
-    el.confirmCancelBtn.addEventListener('click', () => {
-      el.confirmBar.style.display = 'none';
-      state.pendingStepIndex = null;
-    });
-
-    el.refreshModelsBtn.addEventListener('click', loadModels);
-    el.setupRuntimeBtn.addEventListener('click', handleSetupRuntime);
-
-    el.lanBridgeToggle.addEventListener('change', (e) => {
-      toggleBridge(e.target.checked);
-    });
-
-    el.copyBridgeAddrBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(el.bridgeAddressVal.textContent);
-      const dict = I18N[state.lang] || I18N.ar;
-      showToast(dict.copied_toast);
-    });
-
-    el.copyBridgeTokenBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(el.bridgeTokenVal.textContent);
-      const dict = I18N[state.lang] || I18N.ar;
-      showToast(dict.copied_toast);
-    });
-
-    el.checkUpdatesBtn.addEventListener('click', handleCheckUpdates);
   }
 
-  // Boot on DOM ready
+  function updateBackendDisplay() {
+    const sidebarBackendName = document.getElementById('sidebarBackendName');
+    const backendBadgeText = document.getElementById('backendBadgeText');
+    const names = {
+      local_llama: 'Local GGUF (llama-server)',
+      ollama: 'Ollama API',
+      openai_compat: 'OpenAI-Compatible'
+    };
+    const activeName = names[AppState.backend] || 'Local GGUF';
+    if (sidebarBackendName) sidebarBackendName.textContent = activeName;
+    if (backendBadgeText) backendBadgeText.textContent = activeName;
+
+    document.querySelectorAll('.backend-card').forEach(c => {
+      c.classList.toggle('active', c.dataset.backend === AppState.backend);
+    });
+
+    const ollamaFields = document.getElementById('ollamaConfigFields');
+    const openaiFields = document.getElementById('openaiConfigFields');
+    if (ollamaFields) ollamaFields.style.display = AppState.backend === 'ollama' ? 'grid' : 'none';
+    if (openaiFields) openaiFields.style.display = AppState.backend === 'openai_compat' ? 'grid' : 'none';
+  }
+
+  function setupEventListeners() {
+    // Sidebar Navigation
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
+      btn.addEventListener('click', () => switchView(btn.dataset.view));
+    });
+
+    // Sidebar Collapse
+    const collapseBtn = document.getElementById('sidebarCollapseBtn');
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', () => {
+        const sidebar = document.getElementById('appSidebar');
+        if (sidebar) sidebar.classList.toggle('collapsed');
+      });
+    }
+
+    // Quick Toggles in Footer
+    const langToggleBtn = document.getElementById('langToggleBtn');
+    if (langToggleBtn) {
+      langToggleBtn.addEventListener('click', () => {
+        applyLanguage(AppState.lang === 'ar' ? 'en' : 'ar');
+        saveCurrentConfig();
+      });
+    }
+
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener('click', () => {
+        applyTheme(AppState.theme === 'dark' ? 'light' : 'dark');
+      });
+    }
+
+    // Mode Selector in Composer
+    document.querySelectorAll('.composer-mode-switcher .mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        AppState.mode = btn.dataset.mode;
+        document.querySelectorAll('.composer-mode-switcher .mode-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === AppState.mode);
+        });
+        const topModeText = document.getElementById('topModeBadgeText');
+        if (topModeText) topModeText.textContent = AppState.mode;
+        saveCurrentConfig();
+      });
+    });
+
+    // Composer Input & Keyboard Shortcuts
+    const promptInput = document.getElementById('promptInput');
+    if (promptInput) {
+      promptInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          runAgent();
+        }
+      });
+    }
+
+    const runBtn = document.getElementById('runBtn');
+    if (runBtn) runBtn.addEventListener('click', runAgent);
+
+    // Confirmation Actions
+    const confirmProceedBtn = document.getElementById('confirmProceedBtn');
+    if (confirmProceedBtn) confirmProceedBtn.addEventListener('click', () => handleConfirmStep(true));
+    const confirmSkipBtn = document.getElementById('confirmSkipBtn');
+    if (confirmSkipBtn) confirmSkipBtn.addEventListener('click', () => handleConfirmStep(false));
+
+    // Backend Selection in Settings
+    document.querySelectorAll('.backend-card').forEach(card => {
+      card.addEventListener('click', () => {
+        AppState.backend = card.dataset.backend;
+        updateBackendDisplay();
+        saveCurrentConfig();
+      });
+    });
+
+    // Test Backend Connection
+    const testBackendBtn = document.getElementById('testBackendBtn');
+    if (testBackendBtn) {
+      testBackendBtn.addEventListener('click', async () => {
+        saveCurrentConfig();
+        showToast('Testing AI backend...');
+        try {
+          const res = await invokeTauri('test_ai_backend');
+          showToast(res.message);
+        } catch (e) {
+          showToast(`Error: ${e}`);
+        }
+      });
+    }
+
+    // Fast Router Toggle
+    const frToggle = document.getElementById('fastRouterToggle');
+    if (frToggle) {
+      frToggle.addEventListener('change', () => {
+        AppState.fastRouterEnabled = frToggle.checked;
+        saveCurrentConfig();
+      });
+    }
+
+    // Setup Runtime
+    const setupRuntimeBtn = document.getElementById('setupRuntimeBtn');
+    if (setupRuntimeBtn) {
+      setupRuntimeBtn.addEventListener('click', async () => {
+        showToast('Setting up local runtime...');
+        try {
+          const res = await invokeTauri('setup_runtime', { modelTag: AppState.activeModelTag || 'v0.3.0-model' });
+          showToast(`Runtime ready at: ${res.server_path}`);
+          loadModels();
+        } catch (e) {
+          showToast(`Setup failed: ${e}`);
+        }
+      });
+    }
+
+    // Refresh Models
+    const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+    if (refreshModelsBtn) refreshModelsBtn.addEventListener('click', loadModels);
+
+    // MCP Add / Save Form
+    const addMcpBtn = document.getElementById('addMcpServerBtn');
+    const mcpFormBox = document.getElementById('mcpFormBox');
+    if (addMcpBtn && mcpFormBox) {
+      addMcpBtn.addEventListener('click', () => {
+        mcpFormBox.style.display = mcpFormBox.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    const cancelMcpBtn = document.getElementById('cancelMcpBtn');
+    if (cancelMcpBtn && mcpFormBox) {
+      cancelMcpBtn.addEventListener('click', () => {
+        mcpFormBox.style.display = 'none';
+      });
+    }
+    const saveMcpBtn = document.getElementById('saveMcpBtn');
+    if (saveMcpBtn) {
+      saveMcpBtn.addEventListener('click', async () => {
+        const name = document.getElementById('mcpNameInput').value.trim();
+        const command = document.getElementById('mcpCommandInput').value.trim();
+        const argsStr = document.getElementById('mcpArgsInput').value.trim();
+        const args = argsStr ? argsStr.split(/\s+/) : [];
+
+        if (!name || !command) {
+          showToast('Name and command are required');
+          return;
+        }
+
+        try {
+          await invokeTauri('save_mcp_server', { name, command, args, enabled: true });
+          showToast(`MCP server '${name}' saved`);
+          if (mcpFormBox) mcpFormBox.style.display = 'none';
+          loadMcpServers();
+        } catch (e) {
+          showToast(`Failed: ${e}`);
+        }
+      });
+    }
+
+    // Updates Check
+    const checkUpdatesBtn = document.getElementById('checkUpdatesBtn');
+    if (checkUpdatesBtn) {
+      checkUpdatesBtn.addEventListener('click', async () => {
+        showToast('Checking for updates...');
+        try {
+          const res = await invokeTauri('check_app_update');
+          const box = document.getElementById('updateStatusMsg');
+          if (box) {
+            box.style.display = 'block';
+            box.textContent = res.update_available ? `Update available: ${res.latest_version}` : 'You are on the latest release';
+          }
+        } catch (e) {
+          showToast(`Check failed: ${e}`);
+        }
+      });
+    }
+  }
+
+  async function saveCurrentConfig() {
+    const ollamaUrlIn = document.getElementById('ollamaUrlInput');
+    const ollamaModelIn = document.getElementById('ollamaModelInput');
+    const openaiBaseIn = document.getElementById('openaiBaseUrlInput');
+    const openaiModelIn = document.getElementById('openaiModelInput');
+    const openaiKeyIn = document.getElementById('openaiKeyInput');
+
+    try {
+      await invokeTauri('save_app_config', {
+        language: AppState.lang,
+        mode: AppState.mode,
+        activeModelTag: AppState.activeModelTag,
+        fastRouterEnabled: AppState.fastRouterEnabled,
+        backend: AppState.backend,
+        ollamaUrl: ollamaUrlIn ? ollamaUrlIn.value.trim() : AppState.ollama_url,
+        ollamaModel: ollamaModelIn ? ollamaModelIn.value.trim() : AppState.ollama_model,
+        openaiApiBase: openaiBaseIn ? openaiBaseIn.value.trim() : AppState.openai_api_base,
+        openaiApiModel: openaiModelIn ? openaiModelIn.value.trim() : AppState.openai_api_model,
+        openaiApiKey: openaiKeyIn ? openaiKeyIn.value.trim() : AppState.openai_api_key
+      });
+    } catch (e) {
+      console.warn('Config save error:', e);
+    }
+  }
+
+  // Global window functions for inline onclick handlers
+  window.silentExec = {
+    startDownload: async (tag) => {
+      showToast(`Starting download for ${tag}...`);
+      const wrap = document.getElementById(`progWrap_${tag}`);
+      if (wrap) wrap.style.display = 'flex';
+
+      listenTauri(`download-progress:${tag}`, (event) => {
+        const p = event.payload;
+        const fill = document.getElementById(`progFill_${tag}`);
+        const speed = document.getElementById(`progSpeed_${tag}`);
+        const eta = document.getElementById(`progEta_${tag}`);
+        const percent = p.total_bytes > 0 ? ((p.downloaded_bytes / p.total_bytes) * 100).toFixed(1) : 0;
+        if (fill) fill.style.width = `${percent}%`;
+        if (speed) speed.textContent = `${p.speed_mbps.toFixed(2)} MB/s`;
+        if (eta) eta.textContent = `ETA: ${p.eta_seconds}s`;
+      });
+
+      try {
+        await invokeTauri('start_model_download', { tag });
+        showToast(`Model ${tag} downloaded successfully`);
+        loadModels();
+      } catch (e) {
+        showToast(`Download failed or paused: ${e}`);
+      }
+    },
+    pauseDownload: async (tag) => {
+      try {
+        await invokeTauri('pause_model_download', { tag });
+        showToast(`Paused download ${tag}`);
+      } catch (e) {
+        showToast(e);
+      }
+    },
+    resumeDownload: async (tag) => {
+      window.silentExec.startDownload(tag);
+    },
+    cancelDownload: async (tag) => {
+      try {
+        await invokeTauri('cancel_model_download', { tag });
+        showToast(`Cancelled download ${tag}`);
+        loadModels();
+      } catch (e) {
+        showToast(e);
+      }
+    },
+    activateModel: async (tag) => {
+      try {
+        await invokeTauri('activate_model', { tag });
+        AppState.activeModelTag = tag;
+        showToast(`Model ${tag} activated`);
+        loadModels();
+      } catch (e) {
+        showToast(e);
+      }
+    },
+    deleteModel: async (tag) => {
+      try {
+        await invokeTauri('delete_model', { tag });
+        showToast(`Model ${tag} deleted`);
+        loadModels();
+      } catch (e) {
+        showToast(e);
+      }
+    },
+    testMcp: async (name) => {
+      showToast(`Testing MCP tools/list for '${name}'...`);
+      try {
+        const tools = await invokeTauri('test_mcp_server', { name });
+        showToast(`Discovered ${tools.length} tools`);
+      } catch (e) {
+        showToast(`MCP error: ${e}`);
+      }
+    },
+    deleteMcp: async (name) => {
+      try {
+        await invokeTauri('delete_mcp_server', { name });
+        showToast(`Deleted MCP server '${name}'`);
+        loadMcpServers();
+      } catch (e) {
+        showToast(e);
+      }
+    }
+  };
+
+  // Launch on DOM Ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
   } else {

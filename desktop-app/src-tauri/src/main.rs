@@ -7,9 +7,11 @@ use silent_exec_core::{
 };
 use silent_exec_pc::{
     action_type_to_str, parse_plan, resolve_clause, split_compound_prompt, start_bridge_server,
-    AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter, FileIndexer,
-    ModelDownloadInfo, ModelManager, ModelReleaseInfo, PcExecutor, SelfUpdater, SetupResult,
+    AiBackend, AppConfig, BridgeConfig, DownloadProgress, DownloadStatus, ExecutionResult,
+    FastRuleRouter, FileIndexer, McpClient, McpServerConfig, McpTool, ModelDownloadInfo,
+    ModelManager, ModelReleaseInfo, PcExecutor, SelfUpdater, SetupResult,
 };
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,9 +55,30 @@ pub struct AppConfigDto {
     pub mode: String,
     pub active_model_tag: Option<String>,
     pub fast_router_enabled: bool,
+    pub backend: String,
+    pub ollama_url: String,
+    pub ollama_model: String,
+    pub openai_api_base: String,
+    pub openai_api_model: String,
+    pub openai_api_key: String,
     pub bridge_running: bool,
     pub bridge_url: Option<String>,
     pub bridge_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackendTestResult {
+    pub success: bool,
+    pub latency_ms: u64,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerDto {
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +96,7 @@ type BridgeInstance = (SocketAddr, Arc<AtomicBool>, JoinHandle<()>);
 struct AppState {
     bridge_handle: Mutex<Option<BridgeInstance>>,
     pending_execution: Mutex<Option<(ActionCommand, ExecutionMode)>>,
+    download_cancellations: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 fn create_default_executor(dry_run: bool) -> PcExecutor {
@@ -116,6 +140,12 @@ fn get_app_config(state: State<AppState>) -> AppConfigDto {
         mode: cfg.mode,
         active_model_tag: cfg.active_model_tag,
         fast_router_enabled: cfg.fast_router_enabled,
+        backend: cfg.backend,
+        ollama_url: cfg.ollama_url,
+        ollama_model: cfg.ollama_model,
+        openai_api_base: cfg.openai_api_base,
+        openai_api_model: cfg.openai_api_model,
+        openai_api_key: cfg.openai_api_key,
         bridge_running: running,
         bridge_url: url,
         bridge_token: token,
@@ -128,6 +158,12 @@ fn save_app_config(
     mode: Option<String>,
     active_model_tag: Option<String>,
     fast_router_enabled: Option<bool>,
+    backend: Option<String>,
+    ollama_url: Option<String>,
+    ollama_model: Option<String>,
+    openai_api_base: Option<String>,
+    openai_api_model: Option<String>,
+    openai_api_key: Option<String>,
 ) -> Result<(), String> {
     let mut cfg = AppConfig::load();
     if let Some(l) = language {
@@ -141,6 +177,24 @@ fn save_app_config(
     }
     if let Some(f) = fast_router_enabled {
         cfg.fast_router_enabled = f;
+    }
+    if let Some(b) = backend {
+        cfg.backend = b;
+    }
+    if let Some(ou) = ollama_url {
+        cfg.ollama_url = ou;
+    }
+    if let Some(om) = ollama_model {
+        cfg.ollama_model = om;
+    }
+    if let Some(oab) = openai_api_base {
+        cfg.openai_api_base = oab;
+    }
+    if let Some(oam) = openai_api_model {
+        cfg.openai_api_model = oam;
+    }
+    if let Some(oak) = openai_api_key {
+        cfg.openai_api_key = oak;
     }
 
     let path = AppConfig::default_config_path();
@@ -543,9 +597,238 @@ fn list_models() -> Result<Vec<ModelReleaseInfo>, String> {
 }
 
 #[tauri::command]
-fn download_model(tag: String) -> Result<ModelDownloadInfo, String> {
+fn start_model_download(
+    tag: String,
+    window: tauri::Window,
+    state: State<AppState>,
+) -> Result<ModelDownloadInfo, String> {
     let mgr = ModelManager::new(None)?;
-    mgr.download_model(&tag).map_err(|e| e.to_string())
+    let models = mgr.list_available_models(None)?;
+    let target_model = models
+        .into_iter()
+        .find(|m| m.tag == tag)
+        .ok_or_else(|| format!("Model with tag {} not found", tag))?;
+
+    let filename = target_model.filename;
+    let base_url = format!(
+        "https://github.com/{}/releases/download/{}",
+        "tahadeab-ai/silent-exec", tag
+    );
+    let download_url = format!("{}/{}", base_url, filename);
+    let final_path = mgr.cache_dir().join(&filename);
+    let part_path = mgr.cache_dir().join(format!("{}.part", filename));
+
+    // Get expected sha256
+    let checksums_url = format!("{}/SHA256SUMS.txt", base_url);
+    let out = std::process::Command::new("curl")
+        .args(["-sSfL", &checksums_url])
+        .output()
+        .map_err(|e| format!("Failed to fetch SHA256SUMS.txt: {}", e))?;
+
+    if !out.status.success() {
+        return Err(format!(
+            "Failed to download checksums from {}",
+            checksums_url
+        ));
+    }
+
+    let sums_text = String::from_utf8_lossy(&out.stdout);
+    let mut expected_hash = None;
+    for line in sums_text.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 && (parts[1] == filename || parts[1].ends_with(&filename)) {
+            expected_hash = Some(parts[0].to_string());
+            break;
+        }
+    }
+
+    let sha256_val = expected_hash.ok_or_else(|| format!("No SHA256 found for {}", filename))?;
+
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut cancellations = state.download_cancellations.lock().unwrap();
+        cancellations.insert(tag.clone(), cancel_flag.clone());
+    }
+
+    let tag_for_event = tag.clone();
+    let window_clone = window.clone();
+    let res = ModelManager::download_resumable_file(
+        &download_url,
+        &part_path,
+        &final_path,
+        &sha256_val,
+        cancel_flag,
+        move |progress| {
+            let _ = window_clone.emit(&format!("download-progress:{}", tag_for_event), progress);
+        },
+    );
+
+    {
+        let mut cancellations = state.download_cancellations.lock().unwrap();
+        cancellations.remove(&tag);
+    }
+
+    res?;
+
+    let size_bytes = std::fs::metadata(&final_path).map(|m| m.len()).unwrap_or(0);
+    Ok(ModelDownloadInfo {
+        tag,
+        filename,
+        path: final_path,
+        sha256: sha256_val,
+        size_bytes,
+        already_cached: false,
+    })
+}
+
+#[tauri::command]
+fn pause_model_download(tag: String, state: State<AppState>) -> Result<(), String> {
+    let mut cancellations = state.download_cancellations.lock().unwrap();
+    if let Some(flag) = cancellations.remove(&tag) {
+        flag.store(true, Ordering::SeqCst);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn resume_model_download(
+    tag: String,
+    window: tauri::Window,
+    state: State<AppState>,
+) -> Result<ModelDownloadInfo, String> {
+    start_model_download(tag, window, state)
+}
+
+#[tauri::command]
+fn cancel_model_download(tag: String, state: State<AppState>) -> Result<(), String> {
+    let mut cancellations = state.download_cancellations.lock().unwrap();
+    if let Some(flag) = cancellations.remove(&tag) {
+        flag.store(true, Ordering::SeqCst);
+    }
+
+    // Also remove the .part file if present
+    if let Ok(mgr) = ModelManager::new(None) {
+        if let Ok(models) = mgr.list_available_models(None) {
+            if let Some(m) = models.into_iter().find(|m| m.tag == tag) {
+                let part_path = mgr.cache_dir().join(format!("{}.part", m.filename));
+                if part_path.exists() {
+                    let _ = std::fs::remove_file(&part_path);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn test_ai_backend() -> Result<BackendTestResult, String> {
+    let cfg = AppConfig::load();
+    let start = std::time::Instant::now();
+
+    let backend = match cfg.backend.as_str() {
+        "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
+        "openai_compat" => AiBackend::new_openai_compat(
+            Some(&cfg.openai_api_base),
+            Some(&cfg.openai_api_model),
+            Some(&cfg.openai_api_key),
+        ),
+        _ => AiBackend::new_local_llama(None, None),
+    };
+
+    match backend.infer("ping") {
+        Ok(_) => Ok(BackendTestResult {
+            success: true,
+            latency_ms: start.elapsed().as_millis() as u64,
+            message: format!("Backend '{}' responded successfully", cfg.backend),
+        }),
+        Err(e) => Ok(BackendTestResult {
+            success: false,
+            latency_ms: start.elapsed().as_millis() as u64,
+            message: format!("Backend test failed: {}", e),
+        }),
+    }
+}
+
+#[tauri::command]
+fn list_mcp_servers() -> Result<Vec<McpServerDto>, String> {
+    let cfg = AppConfig::load();
+    Ok(cfg
+        .mcp_servers
+        .into_iter()
+        .map(|s| McpServerDto {
+            name: s.name,
+            command: s.command,
+            args: s.args,
+            enabled: s.enabled,
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn save_mcp_server(
+    name: String,
+    command: String,
+    args: Vec<String>,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut cfg = AppConfig::load();
+    if let Some(existing) = cfg.mcp_servers.iter_mut().find(|s| s.name == name) {
+        existing.command = command;
+        existing.args = args;
+        existing.enabled = enabled;
+    } else {
+        cfg.mcp_servers.push(McpServerConfig {
+            name,
+            command,
+            args,
+            enabled,
+        });
+    }
+
+    let path = AppConfig::default_config_path();
+    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_mcp_server(name: String) -> Result<(), String> {
+    let mut cfg = AppConfig::load();
+    cfg.mcp_servers.retain(|s| s.name != name);
+    let path = AppConfig::default_config_path();
+    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn test_mcp_server(name: String) -> Result<Vec<McpTool>, String> {
+    let cfg = AppConfig::load();
+    let s_cfg = cfg
+        .mcp_servers
+        .into_iter()
+        .find(|s| s.name == name)
+        .ok_or_else(|| format!("Server '{}' not found", name))?;
+
+    let mut client = McpClient::new(s_cfg);
+    client.start()?;
+    let _ = client.initialize()?;
+    client.list_tools()
+}
+
+#[tauri::command]
+fn check_app_update() -> Result<UpdateInfoDto, String> {
+    check_updates()
+}
+
+#[tauri::command]
+fn run_agent_plan(
+    query: String,
+    mode: Option<String>,
+    state: State<AppState>,
+) -> Result<ExecutionReport, String> {
+    execute_query(query, mode, state)
 }
 
 #[tauri::command]
@@ -646,6 +929,7 @@ fn main() {
     let app_state = AppState {
         bridge_handle: Mutex::new(None),
         pending_execution: Mutex::new(None),
+        download_cancellations: Mutex::new(HashMap::new()),
     };
 
     tauri::Builder::default()
@@ -727,11 +1011,22 @@ fn main() {
             confirm_step,
             list_models,
             download_model,
+            start_model_download,
+            pause_model_download,
+            resume_model_download,
+            cancel_model_download,
             activate_model,
             delete_model,
             setup_runtime,
             toggle_lan_bridge,
-            check_updates
+            check_updates,
+            check_app_update,
+            test_ai_backend,
+            list_mcp_servers,
+            save_mcp_server,
+            delete_mcp_server,
+            test_mcp_server,
+            run_agent_plan
         ])
         .run(tauri::generate_context!())
         .expect("error while running SilentExec Desktop application");
