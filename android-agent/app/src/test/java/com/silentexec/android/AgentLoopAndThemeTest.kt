@@ -560,13 +560,19 @@ class AgentLoopAndThemeTest {
         }
         val executor = AndroidActionExecutor()
         val updates = mutableListOf<AgentStepUpdate>()
+        var callCount = 0
 
         val runner = AgentLoopRunner(
             executor = executor,
             settings = settings,
             stepDelayMs = 0L,
             decider = {
-                """{"action":"open_android_app","target":"com.google.android.youtube","platform":"android","confidence":1.0}"""
+                callCount++
+                if (callCount == 1) {
+                    """{"action":"open_android_app","target":"com.google.android.youtube","platform":"android","confidence":1.0}"""
+                } else {
+                    """{"action":"done","platform":"android","confidence":1.0}"""
+                }
             }
         )
 
@@ -576,5 +582,23 @@ class AgentLoopAndThemeTest {
         assertEquals(1, started.size)
         assertEquals(ActionType.OPEN_ANDROID_APP, started[0].command.action)
         assertEquals("com.google.android.youtube", started[0].command.target)
+        assertTrue(updates.any { it is AgentStepUpdate.AllCompleted })
+    }
+
+    @Test
+    fun test17_cloudApiClient_defaultsAndConfiguration() {
+        val client = com.silentexec.android.nlp.CloudApiClient()
+        assertEquals("https://api.openai.com/v1", client.baseUrl)
+        assertEquals("gpt-4o-mini", client.model)
+        assertEquals("", client.apiKey)
+
+        val customClient = com.silentexec.android.nlp.CloudApiClient(
+            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
+            model = "gemini-2.0-flash",
+            apiKey = "AIzaSyTestKey"
+        )
+        assertEquals("https://generativelanguage.googleapis.com/v1beta/openai", customClient.baseUrl)
+        assertEquals("gemini-2.0-flash", customClient.model)
+        assertEquals("AIzaSyTestKey", customClient.apiKey)
     }
 }
