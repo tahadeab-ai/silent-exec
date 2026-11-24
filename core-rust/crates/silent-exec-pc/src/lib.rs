@@ -6,6 +6,7 @@ pub mod executor;
 pub mod fast_router;
 pub mod indexer;
 pub mod inference;
+pub mod mcp_bridge;
 pub mod model_manager;
 pub mod planner;
 pub mod runtime_manager;
@@ -13,18 +14,25 @@ pub mod ui_win32;
 pub mod updater;
 
 pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
-pub use config::AppConfig;
+pub use config::{AppConfig, McpServerConfig};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
 pub use fast_router::FastRuleRouter;
 pub use indexer::{
     compute_fuzzy_score, normalize_arabic_english, FileIndexer, IndexedItem, ScoredMatch,
 };
 pub use inference::{
-    build_chatml_prompt, extract_action_json, format_prompt, LlamaBackend, DEFAULT_SYSTEM_PROMPT,
-    EMBEDDED_ACTION_GBNF,
+    build_chatml_prompt, extract_action_json, format_prompt, AiBackend, LlamaBackend,
+    DEFAULT_SYSTEM_PROMPT, EMBEDDED_ACTION_GBNF,
 };
-pub use model_manager::{ModelDownloadInfo, ModelManager, ModelReleaseInfo};
-pub use planner::{parse_plan, split_compound_prompt, PlanEngine, PlanExecutionSummary, StepEvent};
+pub use mcp_bridge::{
+    JsonRpcError, JsonRpcRequest, JsonRpcResponse, McpClient, McpTool, McpToolCallResult,
+};
+pub use model_manager::{
+    DownloadProgress, DownloadStatus, ModelDownloadInfo, ModelManager, ModelReleaseInfo,
+};
+pub use planner::{
+    parse_plan, resolve_clause, split_compound_prompt, PlanEngine, PlanExecutionSummary, StepEvent,
+};
 pub use runtime_manager::{
     check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
     select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
@@ -37,7 +45,9 @@ pub use updater::{SelfUpdater, UpdateInfo};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use silent_exec_core::{ActionCommand, ActionType, MultiStepPlan, Platform, SafetyGate};
+    use silent_exec_core::{
+        ActionCommand, ActionType, ExecutionMode, MultiStepPlan, Platform, SafetyGate,
+    };
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::PathBuf;
@@ -373,8 +383,24 @@ mod tests {
         fs::create_dir_all(&git_dir).unwrap();
         fs::create_dir_all(&inside_models).unwrap();
 
+        // Without schemas/action_schema.json or core-rust/Cargo.toml, it's just a generic git repo (e.g. user home),
+        // so it must pass!
+        let generic_check = ModelManager::assert_not_in_git_repo(&inside_models);
+        assert!(
+            generic_check.is_ok(),
+            "Generic git directory outside silent-exec source repository should not block cache"
+        );
+
+        // Under actual source repository markers (containing schemas/action_schema.json):
+        let schemas_dir = guard.path.join("schemas");
+        fs::create_dir_all(&schemas_dir).unwrap();
+        fs::write(schemas_dir.join("action_schema.json"), "{}").unwrap();
+
         let check = ModelManager::assert_not_in_git_repo(&inside_models);
-        assert!(check.is_err(), "Must reject directories inside a Git repo");
+        assert!(
+            check.is_err(),
+            "Must reject directories inside SilentExec source repo"
+        );
     }
 
     #[test]
@@ -920,9 +946,20 @@ mod tests {
         let sub_dir = temp_guard.path.join("runtime");
         fs::create_dir_all(&sub_dir).unwrap();
 
+        // Under generic git repo (e.g. user home), passes!
+        let generic_res = RuntimeManager::assert_not_in_git_repo(&sub_dir);
+        assert!(generic_res.is_ok());
+
+        // Under source repo with core-rust/Cargo.toml, blocked!
+        let core_rust = temp_guard.path.join("core-rust");
+        fs::create_dir_all(&core_rust).unwrap();
+        fs::write(core_rust.join("Cargo.toml"), "[workspace]").unwrap();
+
         let res = RuntimeManager::assert_not_in_git_repo(&sub_dir);
         assert!(res.is_err());
-        assert!(res.unwrap_err().contains("located inside a Git repository"));
+        assert!(res
+            .unwrap_err()
+            .contains("located inside the SilentExec source repository"));
     }
 
     #[test]
@@ -1582,5 +1619,177 @@ mod tests {
 
         assert!(!dangerous_summary.completed);
         assert!(dangerous_events.contains(&StepEvent::Failed));
+    }
+
+    #[test]
+    fn test_62_resumable_part_file_sha256_verification_and_rename() {
+        let guard = TempDirGuard::new("resumable_test");
+        let part_file = guard.path.join("model.bin.part");
+        let final_file = guard.path.join("model.bin");
+
+        let content = b"resumable download content block 1234567890";
+        fs::write(&part_file, content).unwrap();
+
+        let expected_hash = ModelManager::compute_file_sha256(&part_file).unwrap();
+
+        let computed = ModelManager::compute_file_sha256(&part_file).unwrap();
+        assert_eq!(expected_hash, computed);
+
+        // Rename logic
+        fs::rename(&part_file, &final_file).unwrap();
+        assert!(final_file.exists());
+        assert!(!part_file.exists());
+        assert!(ModelManager::verify_checksum(&final_file, &expected_hash));
+    }
+
+    #[test]
+    fn test_63_deterministic_web_search_resolution() {
+        let cmd1 = resolve_clause("ابحث عن كود رست").expect("Must resolve Arabic search");
+        assert_eq!(cmd1.action, ActionType::OpenUrl);
+        assert!(cmd1
+            .target
+            .as_ref()
+            .unwrap()
+            .starts_with("https://www.google.com/search?q="));
+
+        let cmd2 = resolve_clause("search for rust async").expect("Must resolve English search");
+        assert_eq!(cmd2.action, ActionType::OpenUrl);
+        assert!(cmd2
+            .target
+            .as_ref()
+            .unwrap()
+            .contains("search?q=rust+async"));
+    }
+
+    #[test]
+    fn test_64_deterministic_verified_app_aliases() {
+        let cmd_chrome = resolve_clause("افتح المتصفح").expect("Must resolve browser alias");
+        assert_eq!(cmd_chrome.action, ActionType::LaunchApp);
+        assert_eq!(cmd_chrome.target.as_deref(), Some("chrome"));
+
+        let cmd_whatsapp = resolve_clause("شغل واتساب").expect("Must resolve whatsapp alias");
+        assert_eq!(cmd_whatsapp.action, ActionType::LaunchApp);
+        assert_eq!(cmd_whatsapp.target.as_deref(), Some("whatsapp"));
+
+        let cmd_calc = resolve_clause("افتح الحاسبة").expect("Must resolve calc alias");
+        assert_eq!(cmd_calc.action, ActionType::LaunchApp);
+        assert_eq!(cmd_calc.target.as_deref(), Some("calc"));
+
+        let cmd_notepad = resolve_clause("شغل المفكرة").expect("Must resolve notepad alias");
+        assert_eq!(cmd_notepad.action, ActionType::LaunchApp);
+        assert_eq!(cmd_notepad.target.as_deref(), Some("notepad"));
+
+        let cmd_code = resolve_clause("افتح الكود").expect("Must resolve vscode alias");
+        assert_eq!(cmd_code.action, ActionType::LaunchApp);
+        assert_eq!(cmd_code.target.as_deref(), Some("code"));
+    }
+
+    #[test]
+    fn test_65_rejects_fake_launch_app_on_unknown_clauses() {
+        // Unknown raw Arabic sentence without app keywords must return None, NOT fake launch_app
+        let unknown1 = resolve_clause("اعمل تحليل للمبيعات وارسلها للمدير");
+        assert!(unknown1.is_none());
+
+        let unknown2 = resolve_clause("لخص لي الاجتماع السابق");
+        assert!(unknown2.is_none());
+    }
+
+    #[test]
+    fn test_66_ollama_payload_structure() {
+        let payload = AiBackend::build_ollama_payload("qwen2.5:1.5b", "افتح ملف تقرير");
+        assert_eq!(payload["model"], "qwen2.5:1.5b");
+        assert_eq!(payload["format"], "json");
+        assert_eq!(payload["stream"], false);
+        assert_eq!(payload["messages"][0]["role"], "system");
+        assert_eq!(payload["messages"][1]["role"], "user");
+        assert_eq!(payload["messages"][1]["content"], "افتح ملف تقرير");
+    }
+
+    #[test]
+    fn test_67_openai_compat_payload_structure() {
+        let payload = AiBackend::build_openai_compat_payload("gpt-4o-mini", "open report.pdf");
+        assert_eq!(payload["model"], "gpt-4o-mini");
+        assert_eq!(payload["response_format"]["type"], "json_object");
+        assert_eq!(payload["messages"][0]["role"], "system");
+        assert_eq!(payload["messages"][1]["role"], "user");
+        assert_eq!(payload["messages"][1]["content"], "open report.pdf");
+    }
+
+    #[test]
+    fn test_68_mcp_json_rpc_message_framing() {
+        let req = JsonRpcRequest::new("tools/list", None);
+        assert_eq!(req.jsonrpc, "2.0");
+        assert_eq!(req.method, "tools/list");
+        assert!(req.id > 0);
+
+        let serialized = serde_json::to_string(&req).unwrap();
+        assert!(serialized.contains("\"jsonrpc\":\"2.0\""));
+        assert!(serialized.contains("\"method\":\"tools/list\""));
+
+        let resp_json = r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"test_tool","description":"A test tool"}]}}"#;
+        let resp: JsonRpcResponse = serde_json::from_str(resp_json).unwrap();
+        assert_eq!(resp.id, Some(1));
+        assert!(resp.error.is_none());
+        assert!(resp.result.is_some());
+    }
+
+    #[test]
+    fn test_69_mcp_safety_gate_blocking_dangerous_tool() {
+        let mut client = McpClient::new(McpServerConfig {
+            name: "test_mcp".to_string(),
+            command: "echo".to_string(),
+            args: vec![],
+            enabled: true,
+        });
+
+        // Calling dangerous shell injection target via MCP tool
+        let res = client
+            .call_tool("cmd; rm -rf /", None, ExecutionMode::Silent)
+            .unwrap();
+        assert!(matches!(res, ExecutionResult::Blocked { .. }));
+    }
+
+    #[test]
+    fn test_70_mcp_dry_run_simulation() {
+        let mut client = McpClient::new(McpServerConfig {
+            name: "calculator".to_string(),
+            command: "calc".to_string(),
+            args: vec![],
+            enabled: true,
+        });
+
+        let res = client
+            .call_tool(
+                "add",
+                Some(serde_json::json!({"a": 2, "b": 3})),
+                ExecutionMode::DryRun,
+            )
+            .unwrap();
+
+        assert!(matches!(res, ExecutionResult::DryRun { .. }));
+    }
+
+    #[test]
+    fn test_71_config_ai_backend_and_mcp_persistence() {
+        let guard = TempDirGuard::new("config_ai_test");
+        let config_file = guard.path.join("config.json");
+
+        let mut cfg = AppConfig::default();
+        cfg.backend = "ollama".to_string();
+        cfg.ollama_model = "qwen2.5:3b".to_string();
+        cfg.mcp_servers.push(McpServerConfig {
+            name: "weather".to_string(),
+            command: "node".to_string(),
+            args: vec!["weather_server.js".to_string()],
+            enabled: true,
+        });
+
+        cfg.save_to(&config_file).unwrap();
+
+        let loaded = AppConfig::load_from(&config_file).unwrap();
+        assert_eq!(loaded.backend, "ollama");
+        assert_eq!(loaded.ollama_model, "qwen2.5:3b");
+        assert_eq!(loaded.mcp_servers.len(), 1);
+        assert_eq!(loaded.mcp_servers[0].name, "weather");
     }
 }

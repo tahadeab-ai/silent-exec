@@ -9,8 +9,136 @@ use crate::indexer::normalize_arabic_english;
 use crate::inference::extract_action_json;
 use serde::{Deserialize, Serialize};
 use silent_exec_core::{
-    ActionCommand, ActionType, ExecutionMode, MultiStepPlan, SafetyDecision, SafetyGate,
+    ActionCommand, ActionType, ExecutionMode, MultiStepPlan, Platform, SafetyDecision, SafetyGate,
 };
+
+/// Deterministic clause resolver that converts verified app aliases and web searches
+/// into valid ActionCommands without faking `launch_app` on unknown clauses.
+pub fn resolve_clause(clause: &str) -> Option<ActionCommand> {
+    let trimmed = clause.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // First check FastRuleRouter
+    if let Some(cmd) = FastRuleRouter::route(trimmed) {
+        return Some(cmd);
+    }
+
+    let norm = normalize_arabic_english(trimmed);
+    let lower = trimmed.to_lowercase();
+
+    // 1. Web search resolution: "ابحث عن <q>" / "search for <q>" / "ابحث <q>" / "search <q>"
+    let search_query = norm
+        .strip_prefix("ابحث عن ")
+        .or_else(|| norm.strip_prefix("ابحث "))
+        .or_else(|| lower.strip_prefix("search for "))
+        .or_else(|| lower.strip_prefix("search "))
+        .map(|s| s.trim());
+
+    if let Some(q) = search_query {
+        if !q.is_empty() {
+            // URL encode the query
+            let encoded: String = q
+                .bytes()
+                .map(|b| {
+                    if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' || b == b'~'
+                    {
+                        (b as char).to_string()
+                    } else if b == b' ' {
+                        "+".to_string()
+                    } else {
+                        format!("%{:02X}", b)
+                    }
+                })
+                .collect();
+            let url = format!("https://www.google.com/search?q={}", encoded);
+            return Some(ActionCommand {
+                action: ActionType::OpenUrl,
+                target: Some(url),
+                folder: None,
+                args: None,
+                platform: Platform::Pc,
+                confidence: 0.95,
+            });
+        }
+    }
+
+    // 2. Verified App Aliases:
+    // "المتصفح" / "chrome" / "edge" -> "msedge" / "chrome"
+    // "واتساب" -> "whatsapp"
+    // "الحاسبة" -> "calc"
+    // "المفكرة" -> "notepad"
+    // "الكود" / "vscode" -> "code"
+    let app_aliases: &[(&[&str], &str)] = &[
+        (&["متصفح", "المتصفح", "كروم", "chrome"], "chrome"),
+        (&["ايدج", "edge", "msedge"], "msedge"),
+        (&["واتساب", "الواتساب", "whatsapp"], "whatsapp"),
+        (
+            &[
+                "حاسبة",
+                "الحاسبة",
+                "اله حاسبة",
+                "الاله الحاسبة",
+                "calc",
+                "calculator",
+            ],
+            "calc",
+        ),
+        (&["مفكرة", "المفكرة", "نوت باد", "notepad"], "notepad"),
+        (
+            &["كود", "الكود", "محرر الكود", "vscode", "code", "vs code"],
+            "code",
+        ),
+        (
+            &[
+                "ترمنال",
+                "الترمنال",
+                "طرفية",
+                "الطرفية",
+                "terminal",
+                "cmd",
+                "powershell",
+            ],
+            "powershell",
+        ),
+    ];
+
+    // Check if the clause is an open / launch command for an alias
+    let prefixes = ["افتح ", "شغل ", "ادخل ", "open ", "launch ", "run "];
+    let candidate = {
+        let mut c = norm.as_str();
+        for p in &prefixes {
+            if let Some(stripped) = norm.strip_prefix(p) {
+                c = stripped.trim();
+                break;
+            } else if let Some(stripped) = lower.strip_prefix(p) {
+                c = stripped.trim();
+                break;
+            }
+        }
+        c
+    };
+
+    for &(aliases, target_app) in app_aliases {
+        for &alias in aliases {
+            let norm_alias = normalize_arabic_english(alias);
+            if candidate == alias || candidate == norm_alias || norm == alias || norm == norm_alias
+            {
+                return Some(ActionCommand {
+                    action: ActionType::LaunchApp,
+                    target: Some(target_app.to_string()),
+                    folder: None,
+                    args: None,
+                    platform: Platform::Pc,
+                    confidence: 0.95,
+                });
+            }
+        }
+    }
+
+    None
+}
 
 /// Per-step status events emitted during plan execution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -356,7 +484,7 @@ impl PlanEngine {
         let mut steps = Vec::new();
 
         for clause in &clauses {
-            if let Some(cmd) = FastRuleRouter::route(clause) {
+            if let Some(cmd) = resolve_clause(clause) {
                 steps.push(cmd);
             } else {
                 let raw_out = llm_fn(clause)?;

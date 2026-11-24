@@ -22,6 +22,36 @@ fn default_model_tag() -> Option<String> {
     Some("v0.2.0-model".to_string())
 }
 
+fn default_backend() -> String {
+    "local_llama".to_string()
+}
+
+fn default_ollama_url() -> String {
+    "http://127.0.0.1:11434".to_string()
+}
+
+fn default_ollama_model() -> String {
+    "qwen2.5:1.5b".to_string()
+}
+
+fn default_openai_url() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_model() -> String {
+    "gpt-4o-mini".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpServerConfig {
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppConfig {
     #[serde(default = "default_language")]
@@ -35,6 +65,34 @@ pub struct AppConfig {
 
     #[serde(default = "default_true")]
     pub fast_router_enabled: bool,
+
+    /// AI backend to use: "local_llama" | "ollama" | "openai_compat"
+    #[serde(default = "default_backend")]
+    pub backend: String,
+
+    /// Ollama endpoint URL (default: http://127.0.0.1:11434)
+    #[serde(default = "default_ollama_url")]
+    pub ollama_url: String,
+
+    /// Ollama model name (e.g. qwen2.5:1.5b or qwen2.5:3b)
+    #[serde(default = "default_ollama_model")]
+    pub ollama_model: String,
+
+    /// OpenAI compatible API base URL
+    #[serde(default = "default_openai_url")]
+    pub openai_api_base: String,
+
+    /// OpenAI compatible API model
+    #[serde(default = "default_openai_model")]
+    pub openai_api_model: String,
+
+    /// OpenAI compatible API key
+    #[serde(default)]
+    pub openai_api_key: String,
+
+    /// Registered MCP tool servers
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
 }
 
 impl Default for AppConfig {
@@ -44,6 +102,13 @@ impl Default for AppConfig {
             mode: default_mode(),
             active_model_tag: default_model_tag(),
             fast_router_enabled: true,
+            backend: default_backend(),
+            ollama_url: default_ollama_url(),
+            ollama_model: default_ollama_model(),
+            openai_api_base: default_openai_url(),
+            openai_api_model: default_openai_model(),
+            openai_api_key: String::new(),
+            mcp_servers: Vec::new(),
         }
     }
 }

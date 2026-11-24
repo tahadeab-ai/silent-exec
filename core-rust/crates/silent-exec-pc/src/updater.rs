@@ -2,11 +2,14 @@
 //! Queries GitHub Releases for newer `v*-pc` releases,
 //! verifies SHA-256 checksums, and updates the executable.
 
+use crate::model_manager::{DownloadProgress, ModelManager};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateInfo {
@@ -164,6 +167,20 @@ impl SelfUpdater {
     /// Downloads the updated binary, validates SHA-256 against SHA256SUMS.txt,
     /// and replaces current executable.
     pub fn download_and_apply(&self, info: &UpdateInfo) -> Result<PathBuf, String> {
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        self.download_and_apply_with_progress(info, cancel_flag, |_| {})
+    }
+
+    /// Resumable download and apply with progress callback and cancellation support.
+    pub fn download_and_apply_with_progress<F>(
+        &self,
+        info: &UpdateInfo,
+        cancel_flag: Arc<AtomicBool>,
+        progress_cb: F,
+    ) -> Result<PathBuf, String>
+    where
+        F: FnMut(DownloadProgress),
+    {
         if !info.update_available {
             return Err("No update available".to_string());
         }
@@ -177,7 +194,8 @@ impl SelfUpdater {
         } else {
             "silent-exec-pc"
         };
-        let downloaded_exe = temp_dir.join(format!("{}.new", exe_name));
+        let downloaded_exe = temp_dir.join(exe_name);
+        let downloaded_part = temp_dir.join(format!("{}.part", exe_name));
         let downloaded_sums = temp_dir.join("SHA256SUMS.txt");
 
         println!("Fetching checksums from: {}", info.sha256_url);
@@ -214,31 +232,18 @@ impl SelfUpdater {
             )
         })?;
 
-        println!("Downloading new binary from: {}", info.download_url);
-        let dl_status = Command::new("curl")
-            .args([
-                "-sSfL",
-                "-o",
-                downloaded_exe.to_str().unwrap(),
-                &info.download_url,
-            ])
-            .status()
-            .map_err(|e| format!("Failed to download executable: {}", e))?;
-
-        if !dl_status.success() {
-            return Err("Failed to download new binary".to_string());
-        }
-
-        // Verify SHA256
-        let actual_hash = Self::compute_sha256(&downloaded_exe)?;
-        if !actual_hash.eq_ignore_ascii_case(&expected_sha256) {
-            let _ = fs::remove_file(&downloaded_exe);
-            return Err(format!(
-                "Checksum mismatch! Expected: {}, Actual: {}",
-                expected_sha256, actual_hash
-            ));
-        }
-        println!("✓ SHA-256 Checksum Verified: {}", actual_hash);
+        println!(
+            "Downloading new binary (resumable) from: {}",
+            info.download_url
+        );
+        ModelManager::download_resumable_file(
+            &info.download_url,
+            &downloaded_part,
+            &downloaded_exe,
+            &expected_sha256,
+            cancel_flag,
+            progress_cb,
+        )?;
 
         // Replace current executable
         let current_exe = std::env::current_exe()

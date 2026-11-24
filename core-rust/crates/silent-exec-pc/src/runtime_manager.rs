@@ -275,14 +275,19 @@ impl RuntimeManager {
         PathBuf::from(".silent_exec_runtime")
     }
 
-    /// Verifies that a path does not reside within a `.git` workspace.
+    /// Verifies that a path does not reside within the silent-exec source repository.
+    /// Only rejects if an ancestor contains BOTH `.git` AND either `schemas/action_schema.json` or `core-rust/Cargo.toml`.
+    /// Never blocks %LOCALAPPDATA% or ~/.cache.
     pub fn assert_not_in_git_repo(path: &Path) -> Result<(), String> {
         let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let mut cur = abs_path.as_path();
         while let Some(parent) = cur.parent() {
-            if cur.join(".git").exists() {
+            if cur.join(".git").exists()
+                && (cur.join("schemas").join("action_schema.json").exists()
+                    || cur.join("core-rust").join("Cargo.toml").exists())
+            {
                 return Err(format!(
-                    "Runtime directory '{}' is located inside a Git repository ('{}'). Binaries must be stored outside git history.",
+                    "Runtime directory '{}' is located inside the SilentExec source repository ('{}'). Binaries must be stored outside git history.",
                     path.display(),
                     cur.display()
                 ));

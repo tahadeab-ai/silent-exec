@@ -6,9 +6,9 @@ use silent_exec_core::{
     ActionCommand, ActionType, ExecutionMode, MultiStepPlan, Platform, SafetyDecision, SafetyGate,
 };
 use silent_exec_pc::{
-    action_type_to_str, parse_plan, split_compound_prompt, start_bridge_server, AppConfig,
-    BridgeConfig, ExecutionResult, FastRuleRouter, FileIndexer, ModelDownloadInfo, ModelManager,
-    ModelReleaseInfo, PcExecutor, SelfUpdater, SetupResult,
+    action_type_to_str, parse_plan, resolve_clause, split_compound_prompt, start_bridge_server,
+    AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter, FileIndexer,
+    ModelDownloadInfo, ModelManager, ModelReleaseInfo, PcExecutor, SelfUpdater, SetupResult,
 };
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -274,38 +274,104 @@ fn execute_query(
         }
     }
 
+    // Helper to run AI backend inference or return clear actionable error
+    let run_ai_backend = |prompt_str: &str| -> Result<ActionCommand, String> {
+        let backend = match cfg.backend.as_str() {
+            "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
+            "openai_compat" => AiBackend::new_openai_compat(
+                Some(&cfg.openai_api_base),
+                Some(&cfg.openai_api_model),
+                Some(&cfg.openai_api_key),
+            ),
+            _ => {
+                // local_llama default
+                let manager = ModelManager::new(None).ok();
+                if let Some(m) = manager {
+                    if m.find_cached_model().is_some() {
+                        AiBackend::new_local_llama(None, None)
+                    } else {
+                        return Err(
+                            "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
+                                .to_string(),
+                        );
+                    }
+                } else {
+                    return Err(
+                        "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
+                            .to_string(),
+                    );
+                }
+            }
+        };
+
+        backend.infer(prompt_str).map_err(|e| {
+            format!(
+                "AI backend error ({}) — click Setup in Models tab or configure Ollama/API in Settings",
+                e
+            )
+        })
+    };
+
     // 2. Compound or Multi-Step Planning
     let clauses = split_compound_prompt(trimmed);
     let plan = if clauses.len() > 1 {
         let mut steps = Vec::new();
         for clause in &clauses {
-            if let Some(cmd) = FastRuleRouter::route(clause) {
+            if let Some(cmd) = resolve_clause(clause) {
                 steps.push(cmd);
             } else {
-                steps.push(ActionCommand {
-                    action: ActionType::LaunchApp,
-                    target: Some(clause.clone()),
-                    folder: None,
-                    args: None,
-                    platform: Platform::Pc,
-                    confidence: 0.9,
-                });
+                match run_ai_backend(clause) {
+                    Ok(cmd) => steps.push(cmd),
+                    Err(err_msg) => {
+                        steps_out.push(StepInfo {
+                            step_index: steps.len() + 1,
+                            total_steps: clauses.len(),
+                            stage: "failed".to_string(),
+                            description: "AI Backend Required".to_string(),
+                            action: None,
+                            details: Some(err_msg.clone()),
+                        });
+                        return Ok(ExecutionReport {
+                            success: false,
+                            query: query.clone(),
+                            steps: steps_out,
+                            message: err_msg,
+                            requires_confirm: false,
+                            pending_step_index: None,
+                        });
+                    }
+                }
             }
         }
         MultiStepPlan { steps }
     } else {
-        match parse_plan(trimmed) {
-            Ok(p) => p,
-            Err(_) => MultiStepPlan {
-                steps: vec![ActionCommand {
-                    action: ActionType::LaunchApp,
-                    target: Some(trimmed.to_string()),
-                    folder: None,
-                    args: None,
-                    platform: Platform::Pc,
-                    confidence: 0.85,
-                }],
-            },
+        if let Some(cmd) = resolve_clause(trimmed) {
+            MultiStepPlan { steps: vec![cmd] }
+        } else {
+            match parse_plan(trimmed) {
+                Ok(p) => p,
+                Err(_) => match run_ai_backend(trimmed) {
+                    Ok(cmd) => MultiStepPlan { steps: vec![cmd] },
+                    Err(err_msg) => {
+                        steps_out.push(StepInfo {
+                            step_index: 1,
+                            total_steps: 1,
+                            stage: "failed".to_string(),
+                            description: "AI Backend Required".to_string(),
+                            action: None,
+                            details: Some(err_msg.clone()),
+                        });
+                        return Ok(ExecutionReport {
+                            success: false,
+                            query: query.clone(),
+                            steps: steps_out,
+                            message: err_msg,
+                            requires_confirm: false,
+                            pending_step_index: None,
+                        });
+                    }
+                },
+            }
         }
     };
 

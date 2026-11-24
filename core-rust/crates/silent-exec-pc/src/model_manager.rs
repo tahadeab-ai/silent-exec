@@ -8,6 +8,27 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DownloadStatus {
+    Downloading,
+    Paused,
+    Verifying,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DownloadProgress {
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+    pub speed_mbps: f64,
+    pub eta_seconds: u64,
+    pub status: DownloadStatus,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelDownloadInfo {
@@ -111,14 +132,19 @@ impl ModelManager {
         PathBuf::from(".silent_exec_cache")
     }
 
-    /// Verifies that a path does not reside within a `.git` workspace.
+    /// Verifies that a path does not reside within the silent-exec source repository.
+    /// Only rejects if an ancestor contains BOTH `.git` AND either `schemas/action_schema.json` or `core-rust/Cargo.toml`.
+    /// Never blocks %LOCALAPPDATA% or ~/.cache.
     pub fn assert_not_in_git_repo(path: &Path) -> Result<(), String> {
         let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let mut cur = abs_path.as_path();
         while let Some(parent) = cur.parent() {
-            if cur.join(".git").exists() {
+            if cur.join(".git").exists()
+                && (cur.join("schemas").join("action_schema.json").exists()
+                    || cur.join("core-rust").join("Cargo.toml").exists())
+            {
                 return Err(format!(
-                    "Cache directory '{}' is located inside a Git repository ('{}'). Models must be cached outside git history.",
+                    "Cache directory '{}' is located inside the SilentExec source repository ('{}'). Models must be cached outside git history.",
                     path.display(),
                     cur.display()
                 ));
@@ -216,37 +242,20 @@ impl ModelManager {
             });
         }
 
-        // Stream download into .part file via curl
+        // Download model via resumable HTTP range download (curl -L -C -)
         let download_url = format!("{}/{}", base_url, filename);
         let part_path = self.cache_dir.join(format!("{}.part", filename));
 
-        println!(
-            "Downloading model from {} to {}...",
-            download_url,
-            part_path.display()
-        );
-        let dl_status = Command::new("curl")
-            .args(["-sSfL", "-o", part_path.to_str().unwrap(), &download_url])
-            .status()
-            .map_err(|e| format!("Failed to invoke curl for download: {}", e))?;
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        Self::download_resumable_file(
+            &download_url,
+            &part_path,
+            &target_path,
+            &sha256_val,
+            cancel_flag,
+            |_| {},
+        )?;
 
-        if !dl_status.success() {
-            let _ = fs::remove_file(&part_path);
-            return Err(format!("curl failed downloading model from {}", download_url).into());
-        }
-
-        let computed_sha256 = Self::compute_file_sha256(&part_path)?;
-        if !computed_sha256.eq_ignore_ascii_case(&sha256_val) {
-            let _ = fs::remove_file(&part_path);
-            return Err(format!(
-                "SHA256 checksum mismatch for {}: expected {}, got {}",
-                filename, sha256_val, computed_sha256
-            )
-            .into());
-        }
-
-        // Rename .part to final
-        fs::rename(&part_path, &target_path)?;
         let size_bytes = fs::metadata(&target_path)?.len();
         println!(
             "Successfully downloaded and verified {} ({} bytes)",
@@ -261,6 +270,193 @@ impl ModelManager {
             size_bytes,
             already_cached: false,
         })
+    }
+
+    /// Resumable HTTP download using curl's range continuation `-C -`.
+    /// Emits progress callbacks and handles cancellation and SHA-256 verification.
+    pub fn download_resumable_file<F>(
+        download_url: &str,
+        part_path: &Path,
+        final_path: &Path,
+        expected_sha256: &str,
+        cancel_flag: Arc<AtomicBool>,
+        mut progress_cb: F,
+    ) -> Result<(), String>
+    where
+        F: FnMut(DownloadProgress),
+    {
+        if cancel_flag.load(Ordering::SeqCst) {
+            progress_cb(DownloadProgress {
+                downloaded_bytes: 0,
+                total_bytes: 0,
+                speed_mbps: 0.0,
+                eta_seconds: 0,
+                status: DownloadStatus::Cancelled,
+            });
+            return Err("Download cancelled before start".to_string());
+        }
+
+        // Determine existing .part file size
+        let initial_bytes = if part_path.exists() {
+            fs::metadata(part_path).map(|m| m.len()).unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Query content length via HTTP HEAD
+        let total_bytes = {
+            let head_out = Command::new("curl")
+                .args(["-sIL", download_url])
+                .output()
+                .ok();
+            let mut len = 0u64;
+            if let Some(out) = head_out {
+                let headers = String::from_utf8_lossy(&out.stdout);
+                for line in headers.lines() {
+                    let lower = line.to_lowercase();
+                    if lower.starts_with("content-length:") {
+                        if let Some(val) = line.split(':').nth(1) {
+                            if let Ok(parsed) = val.trim().parse::<u64>() {
+                                len = parsed;
+                            }
+                        }
+                    }
+                }
+            }
+            if len == 0 {
+                initial_bytes
+            } else {
+                len
+            }
+        };
+
+        progress_cb(DownloadProgress {
+            downloaded_bytes: initial_bytes,
+            total_bytes,
+            speed_mbps: 0.0,
+            eta_seconds: 0,
+            status: DownloadStatus::Downloading,
+        });
+
+        println!(
+            "Downloading (resumable) from {} to {} (existing: {} bytes, total: {} bytes)...",
+            download_url,
+            part_path.display(),
+            initial_bytes,
+            total_bytes
+        );
+
+        let start_time = Instant::now();
+        // Spawn curl with -C - for byte-range continuation
+        let mut child = Command::new("curl")
+            .args([
+                "-sSfL",
+                "-C",
+                "-",
+                "-o",
+                part_path.to_str().unwrap(),
+                download_url,
+            ])
+            .spawn()
+            .map_err(|e| format!("Failed to spawn curl for resumable download: {}", e))?;
+
+        while match child.try_wait() {
+            Ok(None) => true,
+            Ok(Some(_)) => false,
+            Err(_) => false,
+        } {
+            if cancel_flag.load(Ordering::SeqCst) {
+                let _ = child.kill();
+                let _ = child.wait();
+                let current_bytes = fs::metadata(part_path).map(|m| m.len()).unwrap_or(0);
+                progress_cb(DownloadProgress {
+                    downloaded_bytes: current_bytes,
+                    total_bytes,
+                    speed_mbps: 0.0,
+                    eta_seconds: 0,
+                    status: DownloadStatus::Cancelled,
+                });
+                return Err("Download cancelled by user".to_string());
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(300));
+
+            let current_bytes = fs::metadata(part_path).map(|m| m.len()).unwrap_or(0);
+            let elapsed_secs = start_time.elapsed().as_secs_f64();
+            let new_bytes = current_bytes.saturating_sub(initial_bytes);
+            let speed_mbps = if elapsed_secs > 0.0 {
+                (new_bytes as f64 * 8.0) / (elapsed_secs * 1_000_000.0)
+            } else {
+                0.0
+            };
+            let speed_bytes_per_sec = if elapsed_secs > 0.0 {
+                new_bytes as f64 / elapsed_secs
+            } else {
+                0.0
+            };
+            let eta_seconds = if total_bytes > current_bytes && speed_bytes_per_sec > 1024.0 {
+                ((total_bytes - current_bytes) as f64 / speed_bytes_per_sec) as u64
+            } else {
+                0
+            };
+
+            progress_cb(DownloadProgress {
+                downloaded_bytes: current_bytes,
+                total_bytes,
+                speed_mbps,
+                eta_seconds,
+                status: DownloadStatus::Downloading,
+            });
+        }
+
+        let status = child
+            .wait()
+            .map_err(|e| format!("Failed to wait on curl: {}", e))?;
+
+        // curl exit code 33 means HTTP range error (often file is already fully downloaded or server doesn't support range)
+        if !status.success() && status.code() != Some(33) {
+            return Err(format!(
+                "curl failed downloading from {} with exit status {:?}",
+                download_url,
+                status.code()
+            ));
+        }
+
+        // Verification phase
+        let final_bytes = fs::metadata(part_path)
+            .map(|m| m.len())
+            .unwrap_or(total_bytes);
+        progress_cb(DownloadProgress {
+            downloaded_bytes: final_bytes,
+            total_bytes: final_bytes,
+            speed_mbps: 0.0,
+            eta_seconds: 0,
+            status: DownloadStatus::Verifying,
+        });
+
+        let computed_sha256 = Self::compute_file_sha256(part_path)
+            .map_err(|e| format!("Failed to compute sha256: {}", e))?;
+        if !computed_sha256.eq_ignore_ascii_case(expected_sha256) {
+            let _ = fs::remove_file(part_path);
+            return Err(format!(
+                "SHA256 checksum mismatch: expected {}, got {}",
+                expected_sha256, computed_sha256
+            ));
+        }
+
+        // Rename .part to final destination
+        fs::rename(part_path, final_path)
+            .map_err(|e| format!("Failed to rename .part to final destination: {}", e))?;
+
+        progress_cb(DownloadProgress {
+            downloaded_bytes: final_bytes,
+            total_bytes: final_bytes,
+            speed_mbps: 0.0,
+            eta_seconds: 0,
+            status: DownloadStatus::Completed,
+        });
+
+        Ok(())
     }
 
     /// Lists all available *-model releases from GitHub, including sizes and local cache status.
