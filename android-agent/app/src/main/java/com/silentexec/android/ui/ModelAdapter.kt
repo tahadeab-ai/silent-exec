@@ -115,14 +115,14 @@ class ModelAdapter(
 
                             val downloadedMb = state.downloadedBytes / (1024.0 * 1024.0)
                             val totalMb = state.totalBytes / (1024.0 * 1024.0)
-                            tvModelMetrics.text = String.format(Locale.US, "%.1f / %.1f MB", downloadedMb, totalMb)
+                            tvModelMetrics.text = itemView.context.getString(R.string.model_metrics_format, downloadedMb, totalMb)
 
                             val etaStr = if (state.etaSeconds > 0) {
                                 val mins = state.etaSeconds / 60
                                 val secs = state.etaSeconds % 60
                                 if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
                             } else "--"
-                            tvModelSpeedEta.text = String.format(Locale.US, "%.2f MB/s • ETA: %s", state.speedMBps, etaStr)
+                            tvModelSpeedEta.text = itemView.context.getString(R.string.model_speed_eta_format, state.speedMBps, etaStr)
                             tvModelDownloadStatus.text = itemView.context.getString(R.string.model_downloading, percent)
 
                             btnModelDownload.visibility = View.GONE

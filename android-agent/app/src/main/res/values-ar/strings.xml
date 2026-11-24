@@ -58,8 +58,8 @@
     <string name="model_cancel">إلغاء</string>
     <string name="model_paused">تم الإيقاف مؤقتاً</string>
     <string name="model_verifying">جارٍ التحقق من بصمة SHA-256...</string>
-    <string name="model_metrics_format">%.1f / %.1f م.ب</string>
-    <string name="model_speed_eta_format">%.2f م.ب/ث • المتبقي: %s</string>
+    <string name="model_metrics_format">%1$.1f / %2$.1f م.ب</string>
+    <string name="model_speed_eta_format">%1$.2f م.ب/ث • المتبقي: %2$s</string>
     <string name="model_activate">تفعيل</string>
     <string name="model_active_badge">مفعل</string>
     <string name="model_delete">حذف</string>
