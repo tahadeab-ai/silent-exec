@@ -13,6 +13,10 @@ import com.silentexec.android.net.ModelDownloader
 import com.silentexec.android.nlp.CloudApiClient
 import com.silentexec.android.nlp.PlanOrAction
 import com.silentexec.android.nlp.PromptFormatter
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -181,9 +185,9 @@ class ResumableAndBackendTest {
         }
         """.trimIndent()
 
-        val root = org.json.JSONObject(sampleResponse)
-        val choice = root.getJSONArray("choices").getJSONObject(0)
-        val content = choice.getJSONObject("message").getString("content")
+        val root = Json.parseToJsonElement(sampleResponse).jsonObject
+        val choice = root["choices"]!!.jsonArray[0].jsonObject
+        val content = choice["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
 
         val cleanJson = PromptFormatter.extractActionJson(content)
         val planOrAction = PromptFormatter.parsePlanOrSingleAction(cleanJson)
@@ -210,8 +214,9 @@ class ResumableAndBackendTest {
         }
         """.trimIndent()
 
-        val root = org.json.JSONObject(samplePlanResponse)
-        val content = root.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+        val root = Json.parseToJsonElement(samplePlanResponse).jsonObject
+        val choice = root["choices"]!!.jsonArray[0].jsonObject
+        val content = choice["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
 
         val cleanJson = PromptFormatter.extractActionJson(content)
         val planOrAction = PromptFormatter.parsePlanOrSingleAction(cleanJson)

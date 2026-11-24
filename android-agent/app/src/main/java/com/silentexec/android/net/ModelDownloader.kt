@@ -54,16 +54,16 @@ class ModelDownloader(val modelsDir: File) {
     }
 
     fun pause(id: String) {
-        pauseFlags[id]?.set(true)
+        pauseFlags.computeIfAbsent(id) { AtomicBoolean(false) }.set(true)
     }
 
     fun resume(id: String) {
-        pauseFlags[id]?.set(false)
-        cancelFlags[id]?.set(false)
+        pauseFlags.computeIfAbsent(id) { AtomicBoolean(false) }.set(false)
+        cancelFlags.computeIfAbsent(id) { AtomicBoolean(false) }.set(false)
     }
 
     fun cancel(id: String) {
-        cancelFlags[id]?.set(true)
+        cancelFlags.computeIfAbsent(id) { AtomicBoolean(false) }.set(true)
     }
 
     fun isPaused(id: String): Boolean = pauseFlags[id]?.get() == true
