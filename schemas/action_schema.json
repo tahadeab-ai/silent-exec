@@ -38,7 +38,11 @@
             "ui_scroll",
             "ui_back",
             "ui_home",
-            "done"
+            "done",
+            "reply",
+            "read_file",
+            "write_file",
+            "memory_save"
           ]
         },
         "target": {

@@ -1,11 +1,11 @@
 //! Safe Silent PC Executor with SafetyGate enforcement and deterministic Dry-Run mode.
 
 use crate::indexer::FileIndexer;
+use crate::process_helper::hidden_command;
 use serde::{Deserialize, Serialize};
 use silent_exec_core::{ActionCommand, ActionType, SafetyDecision, SafetyGate};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -60,6 +60,10 @@ pub fn action_type_to_str(action: ActionType) -> &'static str {
         ActionType::UiBack => "ui_back",
         ActionType::UiHome => "ui_home",
         ActionType::Done => "done",
+        ActionType::Reply => "reply",
+        ActionType::ReadFile => "read_file",
+        ActionType::WriteFile => "write_file",
+        ActionType::MemorySave => "memory_save",
     }
 }
 
@@ -335,6 +339,54 @@ impl PcExecutor {
                 command_line: "noop".to_string(),
                 message: "ReAct loop complete; task done".to_string(),
             },
+            ActionType::Reply => {
+                let text = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("text"))
+                    .and_then(|t| t.as_str())
+                    .or(cmd.target.as_deref())
+                    .unwrap_or("");
+                ExecutionResult::DryRun {
+                    action: action_name,
+                    target_resolved: Some(text.to_string()),
+                    command_line: format!("reply: \"{}\"", text),
+                    message: "Would output assistant reply".to_string(),
+                }
+            }
+            ActionType::ReadFile => {
+                let target = cmd.target.as_deref().unwrap_or("");
+                ExecutionResult::DryRun {
+                    action: action_name,
+                    target_resolved: Some(target.to_string()),
+                    command_line: format!("read_file: \"{}\"", target),
+                    message: "Would read file content for context".to_string(),
+                }
+            }
+            ActionType::WriteFile => {
+                let target = cmd.target.as_deref().unwrap_or("");
+                ExecutionResult::DryRun {
+                    action: action_name,
+                    target_resolved: Some(target.to_string()),
+                    command_line: format!("write_file: \"{}\"", target),
+                    message: "Would create or write file".to_string(),
+                }
+            }
+            ActionType::MemorySave => {
+                let key = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("key"))
+                    .and_then(|k| k.as_str())
+                    .or(cmd.target.as_deref())
+                    .unwrap_or("");
+                ExecutionResult::DryRun {
+                    action: action_name,
+                    target_resolved: Some(key.to_string()),
+                    command_line: format!("memory_save: \"{}\"", key),
+                    message: "Would persist memory to local store".to_string(),
+                }
+            }
             _ => ExecutionResult::DryRun {
                 action: action_name,
                 target_resolved: cmd.target.clone(),
@@ -365,9 +417,9 @@ impl PcExecutor {
                 };
 
                 let res = if cfg!(target_os = "windows") {
-                    Command::new("explorer.exe").arg(&resolved).spawn()
+                    hidden_command("explorer.exe").arg(&resolved).spawn()
                 } else {
-                    Command::new("xdg-open").arg(&resolved).spawn()
+                    hidden_command("xdg-open").arg(&resolved).spawn()
                 };
 
                 match res {
@@ -401,12 +453,12 @@ impl PcExecutor {
                 };
 
                 let res = if cfg!(target_os = "windows") {
-                    Command::new("cmd")
+                    hidden_command("cmd")
                         .args(["/c", "start", ""])
                         .arg(&resolved)
                         .spawn()
                 } else {
-                    Command::new("xdg-open").arg(&resolved).spawn()
+                    hidden_command("xdg-open").arg(&resolved).spawn()
                 };
 
                 match res {
@@ -446,9 +498,9 @@ impl PcExecutor {
                 };
 
                 let res = if cfg!(target_os = "windows") {
-                    Command::new("explorer.exe").arg(url).spawn()
+                    hidden_command("explorer.exe").arg(url).spawn()
                 } else {
-                    Command::new("xdg-open").arg(url).spawn()
+                    hidden_command("xdg-open").arg(url).spawn()
                 };
 
                 match res {
@@ -500,9 +552,9 @@ impl PcExecutor {
                 };
 
                 let res = if cfg!(target_os = "windows") {
-                    Command::new("cmd").args(["/c", "start", "", app]).spawn()
+                    hidden_command("cmd").args(["/c", "start", "", app]).spawn()
                 } else {
-                    Command::new(app).spawn()
+                    hidden_command(app).spawn()
                 };
 
                 match res {
@@ -639,6 +691,124 @@ impl PcExecutor {
                 details: "ReAct loop terminated successfully; task complete".to_string(),
                 target_resolved: None,
             },
+            ActionType::Reply => {
+                let text = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("text"))
+                    .and_then(|t| t.as_str())
+                    .or(cmd.target.as_deref())
+                    .unwrap_or("");
+                ExecutionResult::Success {
+                    action: action_name,
+                    details: text.to_string(),
+                    target_resolved: Some(text.to_string()),
+                }
+            }
+            ActionType::ReadFile => {
+                let target = match cmd.target.as_deref() {
+                    Some(t) if !t.trim().is_empty() => t.trim(),
+                    _ => {
+                        return ExecutionResult::Error {
+                            message: "Missing target file path for read_file".to_string(),
+                            action: action_name,
+                        };
+                    }
+                };
+                let path = PathBuf::from(target);
+                let resolved = if path.exists() {
+                    path
+                } else if let Some(p) = self.indexer.find_best(target, false) {
+                    p
+                } else {
+                    return ExecutionResult::Error {
+                        message: format!("File '{}' not found", target),
+                        action: action_name,
+                    };
+                };
+                match fs::read_to_string(&resolved) {
+                    Ok(content) => ExecutionResult::Success {
+                        action: action_name,
+                        details: content,
+                        target_resolved: Some(resolved.to_string_lossy().to_string()),
+                    },
+                    Err(e) => ExecutionResult::Error {
+                        message: format!("Failed to read file: {}", e),
+                        action: action_name,
+                    },
+                }
+            }
+            ActionType::WriteFile => {
+                let target = match cmd.target.as_deref() {
+                    Some(t) if !t.trim().is_empty() => t.trim(),
+                    _ => {
+                        return ExecutionResult::Error {
+                            message: "Missing target file path for write_file".to_string(),
+                            action: action_name,
+                        };
+                    }
+                };
+                let path = if let Some(folder) = cmd.folder.as_deref() {
+                    PathBuf::from(folder).join(target)
+                } else {
+                    PathBuf::from(target)
+                };
+                if let Some(parent) = path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let content = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("content").or_else(|| a.get("text")))
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
+                match fs::write(&path, content) {
+                    Ok(_) => ExecutionResult::Success {
+                        action: action_name,
+                        details: format!("Wrote {} bytes to {}", content.len(), path.display()),
+                        target_resolved: Some(path.to_string_lossy().to_string()),
+                    },
+                    Err(e) => ExecutionResult::Error {
+                        message: format!("Failed to write file {}: {}", path.display(), e),
+                        action: action_name,
+                    },
+                }
+            }
+            ActionType::MemorySave => {
+                let key = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("key"))
+                    .and_then(|k| k.as_str())
+                    .or(cmd.target.as_deref())
+                    .unwrap_or("general_fact");
+                let content = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("content").or_else(|| a.get("text")))
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("");
+                let category = cmd
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.get("category"))
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("fact");
+                match crate::memory::save_memory(key, content, Some(category)) {
+                    Ok(item) => ExecutionResult::Success {
+                        action: action_name,
+                        details: format!(
+                            "Saved memory key='{}' (category='{}')",
+                            item.key, item.category
+                        ),
+                        target_resolved: Some(item.key),
+                    },
+                    Err(e) => ExecutionResult::Error {
+                        message: format!("Failed to save memory: {}", e),
+                        action: action_name,
+                    },
+                }
+            }
             other => ExecutionResult::Error {
                 message: format!("Live execution for action '{:?}' not implemented", other),
                 action: action_name,

@@ -3,12 +3,12 @@
 //! and background process lifecycle for `llama-server`.
 
 use crate::model_manager::ModelManager;
+use crate::process_helper::hidden_command;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 /// GitHub Release Asset representation for llama.cpp releases.
@@ -206,7 +206,7 @@ pub fn check_health_http(health_url: &str, timeout: Duration) -> bool {
     }
 
     // Fallback to curl
-    let res = Command::new("curl")
+    let res = hidden_command("curl")
         .args(["-sSf", "--max-time", "1", health_url])
         .output();
     res.map(|o| o.status.success()).unwrap_or(false)
@@ -351,7 +351,7 @@ impl RuntimeManager {
         fs::create_dir_all(destination_dir)?;
 
         // Try tar first (handles both zip and tar.gz on Windows 10+ and Linux)
-        let tar_status = Command::new("tar")
+        let tar_status = hidden_command("tar")
             .args([
                 "-xf",
                 archive_path.to_str().unwrap(),
@@ -373,7 +373,7 @@ impl RuntimeManager {
                 archive_path.display(),
                 destination_dir.display()
             );
-            let ps_status = Command::new("powershell")
+            let ps_status = hidden_command("powershell")
                 .args(["-NoProfile", "-Command", &ps_cmd])
                 .status();
 
@@ -386,7 +386,7 @@ impl RuntimeManager {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let unzip_status = Command::new("unzip")
+            let unzip_status = hidden_command("unzip")
                 .args([
                     "-o",
                     archive_path.to_str().unwrap(),
@@ -427,7 +427,7 @@ impl RuntimeManager {
             release_url
         );
 
-        let output = Command::new("curl")
+        let output = hidden_command("curl")
             .args([
                 "-sSfL",
                 "-H",
@@ -469,7 +469,7 @@ impl RuntimeManager {
             asset.browser_download_url,
             part_path.display()
         );
-        let dl_status = Command::new("curl")
+        let dl_status = hidden_command("curl")
             .args([
                 "-sSfL",
                 "-o",
@@ -557,7 +557,7 @@ pub fn ensure_llama_server_running(
         model_path.display()
     );
 
-    let mut cmd = Command::new(&server_bin);
+    let mut cmd = hidden_command(&server_bin.to_string_lossy());
     cmd.args([
         "-m",
         model_path.to_str().ok_or("Invalid model path")?,

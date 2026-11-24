@@ -28,6 +28,10 @@ action-val ::= "\"open_folder\""
              | "\"ui_back\""
              | "\"ui_home\""
              | "\"done\""
+             | "\"reply\""
+             | "\"read_file\""
+             | "\"write_file\""
+             | "\"memory_save\""
 
 platform-val ::= "\"pc\"" | "\"android\"" | "\"any\""
 

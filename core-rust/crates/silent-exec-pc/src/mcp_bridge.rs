@@ -4,13 +4,14 @@
 
 use crate::config::McpServerConfig;
 use crate::executor::ExecutionResult;
+use crate::process_helper::hidden_command;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use silent_exec_core::{
     ActionCommand, ActionType, ExecutionMode, Platform, SafetyDecision, SafetyGate,
 };
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static RPC_ID: AtomicU64 = AtomicU64::new(1);
@@ -83,7 +84,7 @@ impl McpClient {
 
     /// Spawns the MCP server child process over stdio.
     pub fn start(&mut self) -> Result<(), String> {
-        let mut cmd = Command::new(&self.config.command);
+        let mut cmd = hidden_command(&self.config.command);
         cmd.args(&self.config.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

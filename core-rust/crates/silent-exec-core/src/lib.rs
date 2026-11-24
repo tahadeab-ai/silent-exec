@@ -29,6 +29,11 @@ pub enum ActionType {
     UiHome,
     // ReAct Loop Termination
     Done,
+    // Hermes / Content Generation & Agent Tools
+    Reply,
+    ReadFile,
+    WriteFile,
+    MemorySave,
 }
 
 impl ActionType {
@@ -51,24 +56,56 @@ impl ActionType {
             | Self::UiScroll
             | Self::UiBack
             | Self::UiHome
-            | Self::Done => SafetyTier::Tier1Silent,
+            | Self::Done
+            | Self::Reply
+            | Self::ReadFile
+            | Self::MemorySave => SafetyTier::Tier1Silent,
 
             Self::DeleteFile
             | Self::MoveFile
             | Self::SystemPower
             | Self::ToggleSetting
-            | Self::SendMessage => SafetyTier::Tier2Confirm,
+            | Self::SendMessage
+            | Self::WriteFile => SafetyTier::Tier2Confirm,
         }
     }
 }
 
 /// Target execution platform.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Platform {
     Pc,
     Android,
+    #[default]
     Any,
+}
+
+impl<'de> Deserialize<'de> for Platform {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = match String::deserialize(deserializer) {
+            Ok(val) => val,
+            Err(_) => return Ok(Platform::Any),
+        };
+        match s.to_lowercase().trim() {
+            "pc" => Ok(Platform::Pc),
+            "android" => Ok(Platform::Android),
+            _ => Ok(Platform::Any), // Lenient: unknown platforms (e.g. YouTube, Windows) safely map to Platform::Any
+        }
+    }
+}
+
+#[must_use]
+pub fn default_platform() -> Platform {
+    Platform::Any
+}
+
+#[must_use]
+pub fn default_confidence() -> f64 {
+    0.85
 }
 
 /// Strict ActionCommand contract matching `schemas/action_schema.json`.
@@ -82,7 +119,9 @@ pub struct ActionCommand {
     pub folder: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<serde_json::Value>,
+    #[serde(default = "default_platform")]
     pub platform: Platform,
+    #[serde(default = "default_confidence")]
     pub confidence: f64,
 }
 
@@ -446,14 +485,48 @@ mod tests {
     }
 
     #[test]
-    fn test_05_missing_required_platform_rejected() {
-        let json = r#"{
+    fn test_05_missing_platform_defaults_to_any_and_lenient_unknown() {
+        // Missing platform defaults to Platform::Any
+        let json_missing_platform = r#"{
             "action": "open_file",
             "target": "report.pdf",
             "confidence": 0.90
         }"#;
-        let result = ActionCommand::from_json(json);
-        assert!(result.is_err(), "Missing platform field must fail");
+        let cmd = ActionCommand::from_json(json_missing_platform)
+            .expect("Missing platform should default to Platform::Any");
+        assert_eq!(cmd.platform, Platform::Any);
+
+        // Unknown platform "YouTube" maps safely to Platform::Any
+        let json_youtube = r#"{
+            "action": "open_url",
+            "target": "https://youtube.com",
+            "platform": "YouTube",
+            "confidence": 0.95
+        }"#;
+        let cmd_yt = ActionCommand::from_json(json_youtube)
+            .expect("Lenient platform deserialization must succeed for YouTube");
+        assert_eq!(cmd_yt.platform, Platform::Any);
+
+        // Platform "Windows" maps safely to Platform::Any
+        let json_windows = r#"{
+            "action": "launch_app",
+            "target": "Notepad",
+            "platform": "Windows",
+            "confidence": 0.90
+        }"#;
+        let cmd_win = ActionCommand::from_json(json_windows)
+            .expect("Lenient platform deserialization must succeed for Windows");
+        assert_eq!(cmd_win.platform, Platform::Any);
+
+        // Missing confidence defaults to 0.85
+        let json_missing_conf = r#"{
+            "action": "launch_app",
+            "target": "Calculator"
+        }"#;
+        let cmd_default = ActionCommand::from_json(json_missing_conf)
+            .expect("Missing confidence should default to 0.85");
+        assert_eq!(cmd_default.platform, Platform::Any);
+        assert!((cmd_default.confidence - 0.85).abs() < 1e-6);
     }
 
     #[test]
@@ -1101,5 +1174,67 @@ mod tests {
             ExecutionMode::from_str_loose("dry_run"),
             ExecutionMode::DryRun
         );
+    }
+
+    #[test]
+    fn test_28_hermes_content_generation_tools_and_safety_tiers() {
+        // 1. Reply tool (Tier 1 Silent)
+        let reply_json = r#"{
+            "action": "reply",
+            "target": "Here is the summary of your meeting notes.",
+            "args": {"text": "Here is the summary of your meeting notes."},
+            "platform": "any",
+            "confidence": 0.95
+        }"#;
+        let reply_cmd = ActionCommand::from_json(reply_json).expect("Parse reply action");
+        assert_eq!(reply_cmd.action, ActionType::Reply);
+        assert_eq!(reply_cmd.action.tier(), SafetyTier::Tier1Silent);
+        assert_eq!(
+            SafetyGate::evaluate(&reply_cmd),
+            SafetyDecision::AllowSilent
+        );
+
+        // 2. ReadFile tool (Tier 1 Silent)
+        let read_json = r#"{
+            "action": "read_file",
+            "target": "Documents/notes.txt",
+            "platform": "pc",
+            "confidence": 0.90
+        }"#;
+        let read_cmd = ActionCommand::from_json(read_json).expect("Parse read_file action");
+        assert_eq!(read_cmd.action, ActionType::ReadFile);
+        assert_eq!(read_cmd.action.tier(), SafetyTier::Tier1Silent);
+        assert_eq!(SafetyGate::evaluate(&read_cmd), SafetyDecision::AllowSilent);
+
+        // 3. WriteFile tool (Tier 2 Confirm)
+        let write_json = r#"{
+            "action": "write_file",
+            "target": "Documents/output.py",
+            "args": {"content": "print('hello world')"},
+            "platform": "pc",
+            "confidence": 0.92
+        }"#;
+        let write_cmd = ActionCommand::from_json(write_json).expect("Parse write_file action");
+        assert_eq!(write_cmd.action, ActionType::WriteFile);
+        assert_eq!(write_cmd.action.tier(), SafetyTier::Tier2Confirm);
+        match SafetyGate::evaluate(&write_cmd) {
+            SafetyDecision::RequireConfirm { reason } => {
+                assert!(reason.contains("WriteFile"));
+            }
+            other => panic!("Expected RequireConfirm for write_file, got {:?}", other),
+        }
+
+        // 4. MemorySave tool (Tier 1 Silent)
+        let mem_json = r#"{
+            "action": "memory_save",
+            "target": "preferred_theme",
+            "args": {"key": "preferred_theme", "content": "dark", "category": "preference"},
+            "platform": "any",
+            "confidence": 0.99
+        }"#;
+        let mem_cmd = ActionCommand::from_json(mem_json).expect("Parse memory_save action");
+        assert_eq!(mem_cmd.action, ActionType::MemorySave);
+        assert_eq!(mem_cmd.action.tier(), SafetyTier::Tier1Silent);
+        assert_eq!(SafetyGate::evaluate(&mem_cmd), SafetyDecision::AllowSilent);
     }
 }

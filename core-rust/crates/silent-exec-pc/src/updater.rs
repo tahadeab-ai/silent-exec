@@ -3,11 +3,11 @@
 //! verifies SHA-256 checksums, and updates the executable.
 
 use crate::model_manager::{DownloadProgress, ModelManager};
+use crate::process_helper::hidden_command;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -66,7 +66,7 @@ impl SelfUpdater {
         let current_version = env!("CARGO_PKG_VERSION").to_string();
         let api_url = format!("https://api.github.com/repos/{}/releases", self.repo);
 
-        let output = Command::new("curl")
+        let output = hidden_command("curl")
             .args([
                 "-sSfL",
                 "-H",
@@ -199,7 +199,7 @@ impl SelfUpdater {
         let downloaded_sums = temp_dir.join("SHA256SUMS.txt");
 
         println!("Fetching checksums from: {}", info.sha256_url);
-        let sums_status = Command::new("curl")
+        let sums_status = hidden_command("curl")
             .args([
                 "-sSfL",
                 "-o",

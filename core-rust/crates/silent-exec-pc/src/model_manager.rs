@@ -2,12 +2,12 @@
 //! Fetches and verifies GGUF models and SHA256 checksums from GitHub Releases into the user's local cache.
 //! Strictly enforces that model weights are stored outside the Git repository.
 
+use crate::process_helper::hidden_command;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -48,6 +48,8 @@ pub struct ModelReleaseInfo {
     pub size_bytes: u64,
     pub is_cached: bool,
     pub is_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -188,7 +190,7 @@ impl ModelManager {
         let checksums_url = format!("{}/SHA256SUMS.txt", base_url);
 
         println!("Fetching release checksums from: {}", checksums_url);
-        let output = Command::new("curl")
+        let output = hidden_command("curl")
             .args(["-sSfL", &checksums_url])
             .output()
             .map_err(|e| format!("Failed to invoke curl: {}", e))?;
@@ -305,7 +307,7 @@ impl ModelManager {
 
         // Query content length via HTTP HEAD
         let total_bytes = {
-            let head_out = Command::new("curl")
+            let head_out = hidden_command("curl")
                 .args(["-sIL", download_url])
                 .output()
                 .ok();
@@ -348,7 +350,7 @@ impl ModelManager {
 
         let start_time = Instant::now();
         // Spawn curl with -C - for byte-range continuation
-        let mut child = Command::new("curl")
+        let mut child = hidden_command("curl")
             .args([
                 "-sSfL",
                 "-C",
@@ -436,7 +438,10 @@ impl ModelManager {
 
         let computed_sha256 = Self::compute_file_sha256(part_path)
             .map_err(|e| format!("Failed to compute sha256: {}", e))?;
-        if !computed_sha256.eq_ignore_ascii_case(expected_sha256) {
+        if !expected_sha256.is_empty()
+            && expected_sha256 != "SKIP"
+            && !computed_sha256.eq_ignore_ascii_case(expected_sha256.trim())
+        {
             let _ = fs::remove_file(part_path);
             return Err(format!(
                 "SHA256 checksum mismatch: expected {}, got {}",
@@ -459,14 +464,70 @@ impl ModelManager {
         Ok(())
     }
 
-    /// Lists all available *-model releases from GitHub, including sizes and local cache status.
+    /// Curated Community Edge Models direct GGUF entries
+    pub fn curated_community_models(
+        cache_dir: &Path,
+        active_tag: Option<&str>,
+    ) -> Vec<ModelReleaseInfo> {
+        let items = [
+            (
+                "liquidai-lfm3-1.7b",
+                "LiquidAI/LFM3-1.7B (Fast Edge Agent)",
+                "LFM3-1.7B-Instruct.Q4_K_M.gguf",
+                1_080_000_000u64,
+                Some("https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Instruct.Q4_K_M.gguf".to_string()),
+            ),
+            (
+                "qwen3-1.7b-gguf",
+                "Qwen/Qwen3-1.7B-GGUF (Strong Arabic + Reasoning)",
+                "Qwen3-1.7B-Instruct.Q4_K_M.gguf",
+                1_180_000_000u64,
+                Some("https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Instruct.Q4_K_M.gguf".to_string()),
+            ),
+            (
+                "v0.2.0-model",
+                "SilentExec v0.2.0 (Fine-Tuned Arabic Edge)",
+                "Qwen2.5-1.5B-Instruct.Q4_K_M.gguf",
+                986_000_000u64,
+                Some("https://github.com/tahadeab-ai/silent-exec/releases/download/v0.2.0-model/Qwen2.5-1.5B-Instruct.Q4_K_M.gguf".to_string()),
+            ),
+            (
+                "v0.1.0-model",
+                "SilentExec v0.1.0 (Initial Fine-Tuned Model)",
+                "Qwen2.5-1.5B-Instruct.Q4_K_M.gguf",
+                986_000_000u64,
+                Some("https://github.com/tahadeab-ai/silent-exec/releases/download/v0.1.0-model/Qwen2.5-1.5B-Instruct.Q4_K_M.gguf".to_string()),
+            ),
+        ];
+
+        items
+            .into_iter()
+            .map(|(tag, name, filename, size_bytes, download_url)| {
+                let is_cached = cache_dir.join(filename).exists();
+                let is_active = active_tag == Some(tag);
+                ModelReleaseInfo {
+                    tag: tag.to_string(),
+                    name: name.to_string(),
+                    filename: filename.to_string(),
+                    size_bytes,
+                    is_cached,
+                    is_active,
+                    download_url,
+                }
+            })
+            .collect()
+    }
+
+    /// Lists all available models: curated community edge models + GitHub releases.
     pub fn list_available_models(
         &self,
         active_tag: Option<&str>,
     ) -> Result<Vec<ModelReleaseInfo>, String> {
+        let mut models = Self::curated_community_models(&self.cache_dir, active_tag);
+
         let api_url = format!("https://api.github.com/repos/{}/releases", self.repo);
 
-        let output = Command::new("curl")
+        let output = hidden_command("curl")
             .args([
                 "-sSfL",
                 "-H",
@@ -475,64 +536,61 @@ impl ModelManager {
                 "Accept: application/vnd.github.v3+json",
                 &api_url,
             ])
-            .output()
-            .map_err(|e| format!("Failed to invoke curl: {}", e))?;
+            .output();
 
-        if !output.status.success() {
-            return Err(format!(
-                "Failed to fetch model releases: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
+        let output = match output {
+            Ok(o) if o.status.success() => o,
+            _ => return Ok(models), // Graceful fallback: return curated models even if offline/rate-limited
+        };
 
-        let releases_json: serde_json::Value = serde_json::from_slice(&output.stdout)
-            .map_err(|e| format!("Failed to parse releases JSON: {}", e))?;
+        let releases_json: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+            Ok(v) => v,
+            Err(_) => return Ok(models),
+        };
 
-        let releases = releases_json
-            .as_array()
-            .ok_or_else(|| "Releases response is not an array".to_string())?;
+        if let Some(releases) = releases_json.as_array() {
+            for release in releases {
+                let tag = match release.get("tag_name").and_then(|t| t.as_str()) {
+                    Some(t) => t,
+                    None => continue,
+                };
 
-        let mut models = Vec::new();
+                if tag.contains("-model") && !models.iter().any(|m| m.tag == tag) {
+                    let release_name = release
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or(tag)
+                        .to_string();
 
-        for release in releases {
-            let tag = match release.get("tag_name").and_then(|t| t.as_str()) {
-                Some(t) => t,
-                None => continue,
-            };
+                    let mut gguf_filename = String::new();
+                    let mut size_bytes = 0u64;
 
-            if tag.contains("-model") {
-                let release_name = release
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or(tag)
-                    .to_string();
-
-                let mut gguf_filename = String::new();
-                let mut size_bytes = 0u64;
-
-                if let Some(assets) = release.get("assets").and_then(|a| a.as_array()) {
-                    for asset in assets {
-                        let name = asset.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                        if name.ends_with(".gguf") {
-                            gguf_filename = name.to_string();
-                            size_bytes = asset.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
-                            break;
+                    if let Some(assets) = release.get("assets").and_then(|a| a.as_array()) {
+                        for asset in assets {
+                            let name = asset.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                            if name.ends_with(".gguf") {
+                                gguf_filename = name.to_string();
+                                size_bytes =
+                                    asset.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
+                                break;
+                            }
                         }
                     }
-                }
 
-                if !gguf_filename.is_empty() {
-                    let is_cached = self.cache_dir.join(&gguf_filename).exists();
-                    let is_active = active_tag == Some(tag);
+                    if !gguf_filename.is_empty() {
+                        let is_cached = self.cache_dir.join(&gguf_filename).exists();
+                        let is_active = active_tag == Some(tag);
 
-                    models.push(ModelReleaseInfo {
-                        tag: tag.to_string(),
-                        name: release_name,
-                        filename: gguf_filename,
-                        size_bytes,
-                        is_cached,
-                        is_active,
-                    });
+                        models.push(ModelReleaseInfo {
+                            tag: tag.to_string(),
+                            name: release_name,
+                            filename: gguf_filename,
+                            size_bytes,
+                            is_cached,
+                            is_active,
+                            download_url: None,
+                        });
+                    }
                 }
             }
         }

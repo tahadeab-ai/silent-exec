@@ -6,12 +6,12 @@
 //! Also provides strict ChatML prompt construction, action JSON extraction,
 //! and conversational chatter rejection.
 
+use crate::process_helper::hidden_command;
 use serde_json::Value;
 use silent_exec_core::ActionCommand;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Embedded GBNF grammar for ActionCommand schema.
 pub const EMBEDDED_ACTION_GBNF: &str = include_str!("../../../../schemas/action.gbnf");
@@ -20,6 +20,16 @@ pub const EMBEDDED_ACTION_GBNF: &str = include_str!("../../../../schemas/action.
 pub const DEFAULT_SYSTEM_PROMPT: &str = "You are SilentExec, a zero-chatter OS execution agent. \
     Emit only a valid ActionCommand JSON matching the strict schema. \
     No conversational responses.";
+
+/// Returns effective system prompt with persistent memory context automatically injected.
+pub fn get_effective_system_prompt(user_query: &str) -> String {
+    let memory_ctx = crate::memory::get_relevant_memories_prompt(user_query, 5);
+    if memory_ctx.trim().is_empty() {
+        DEFAULT_SYSTEM_PROMPT.to_string()
+    } else {
+        format!("{}\n\n{}", DEFAULT_SYSTEM_PROMPT, memory_ctx.trim())
+    }
+}
 
 /// Builds a ChatML formatted prompt for Qwen models.
 pub fn build_chatml_prompt(system_prompt: &str, user_query: &str) -> String {
@@ -30,9 +40,10 @@ pub fn build_chatml_prompt(system_prompt: &str, user_query: &str) -> String {
     )
 }
 
-/// Convenience function using the default system prompt.
+/// Convenience function using the effective system prompt with memory injected.
 pub fn format_prompt(user_query: &str) -> String {
-    build_chatml_prompt(DEFAULT_SYSTEM_PROMPT, user_query)
+    let system_prompt = get_effective_system_prompt(user_query);
+    build_chatml_prompt(&system_prompt, user_query)
 }
 
 /// Strictly extracts ActionCommand JSON from raw model output.
@@ -218,14 +229,15 @@ impl AiBackend {
         ActionCommand::from_json(&clean_json)
     }
 
-    /// Builds payload for Ollama /api/chat with format: "json"
+    /// Builds payload for Ollama /api/chat with format: "json" and injected memories
     pub fn build_ollama_payload(model: &str, user_query: &str) -> serde_json::Value {
+        let system_prompt = get_effective_system_prompt(user_query);
         serde_json::json!({
             "model": model,
             "messages": [
                 {
                     "role": "system",
-                    "content": DEFAULT_SYSTEM_PROMPT
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -247,7 +259,7 @@ impl AiBackend {
         let payload_str = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize Ollama payload: {}", e))?;
 
-        let mut child = Command::new("curl")
+        let mut child = hidden_command("curl")
             .args([
                 "-sSf",
                 "-X",
@@ -304,14 +316,15 @@ impl AiBackend {
         Ok(stdout_str.into_owned())
     }
 
-    /// Builds payload for OpenAI compatible /chat/completions endpoint
+    /// Builds payload for OpenAI compatible /chat/completions endpoint with injected memories
     pub fn build_openai_compat_payload(model: &str, user_query: &str) -> serde_json::Value {
+        let system_prompt = get_effective_system_prompt(user_query);
         serde_json::json!({
             "model": model,
             "messages": [
                 {
                     "role": "system",
-                    "content": DEFAULT_SYSTEM_PROMPT
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -357,7 +370,7 @@ impl AiBackend {
         args.push("@-".to_string());
         args.push(endpoint.clone());
 
-        let mut child = Command::new("curl")
+        let mut child = hidden_command("curl")
             .args(&args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -489,7 +502,7 @@ impl LlamaBackend {
         let payload_str = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize request payload: {}", e))?;
 
-        let mut child = Command::new("curl")
+        let mut child = hidden_command("curl")
             .args([
                 "-sSf",
                 "-X",
@@ -578,7 +591,7 @@ impl LlamaBackend {
             ));
         }
 
-        let mut cmd = Command::new(bin_path);
+        let mut cmd = hidden_command(&bin_path.to_string_lossy());
         cmd.arg("-m").arg(model_path);
         cmd.arg("-p").arg(prompt);
         cmd.args(["--temp", "0"]);

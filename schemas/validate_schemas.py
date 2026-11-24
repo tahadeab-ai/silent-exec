@@ -32,7 +32,7 @@ def main() -> int:
 
     schema_validator = jsonschema.Draft202012Validator(action_schema)
 
-    # 2. Check 21 actions alignment (20 actions + 'done')
+    # 2. Check 25 actions alignment (24 actions + 'done')
     if "$defs" in action_schema and "ActionCommand" in action_schema["$defs"]:
         schema_actions = set(action_schema["$defs"]["ActionCommand"]["properties"]["action"]["enum"])
     else:
@@ -46,10 +46,10 @@ def main() -> int:
         f"Mismatch between schema actions ({schema_actions}) "
         f"and safety policy actions ({policy_actions})"
     )
-    assert len(schema_actions) == 21, f"Expected 21 actions (including 'done'), found {len(schema_actions)}"
+    assert len(schema_actions) == 25, f"Expected 25 actions (including 'done'), found {len(schema_actions)}"
     assert "done" in tier1_actions, "'done' action must be Tier 1 Silent"
     assert tier1_actions.isdisjoint(tier2_actions), "Overlap found between Tier 1 and Tier 2"
-    print("✓ All 21 actions (20 tools + done) verified and aligned across schema and policy.")
+    print("✓ All 25 actions (24 tools + done) verified and aligned across schema and policy.")
 
     # 3. Verify action.gbnf existence, completeness, and UTF-8 Arabic compatibility
     print(f"Verifying {action_gbnf_path}...")
@@ -68,7 +68,7 @@ def main() -> int:
     assert "[a-zA-Z0-9]" not in gbnf_content.split("json-string")[1].split("\n")[0], (
         "GBNF json-string should not be restricted to ASCII alphanumerics"
     )
-    print("✓ action.gbnf verified: defines all 21 actions, multi-step grammar, and permits full UTF-8 Arabic generation.")
+    print("✓ action.gbnf verified: defines all 25 actions, multi-step grammar, and permits full UTF-8 Arabic generation.")
 
     # 4. Test valid payloads
     valid_payloads = [
@@ -130,6 +130,33 @@ def main() -> int:
             "action": "done",
             "platform": "any",
             "confidence": 1.0
+        },
+        {
+            "action": "reply",
+            "target": "مرحبا! كيف يمكنني مساعدتك اليوم؟",
+            "args": {"text": "مرحبا! كيف يمكنني مساعدتك اليوم؟"},
+            "platform": "any",
+            "confidence": 0.95
+        },
+        {
+            "action": "read_file",
+            "target": "notes/todo.txt",
+            "platform": "pc",
+            "confidence": 0.92
+        },
+        {
+            "action": "write_file",
+            "target": "summary.md",
+            "args": {"content": "# Project Summary\nAll tests passed."},
+            "platform": "pc",
+            "confidence": 0.88
+        },
+        {
+            "action": "memory_save",
+            "target": "favorite_editor",
+            "args": {"key": "favorite_editor", "content": "VSCode", "category": "preference"},
+            "platform": "any",
+            "confidence": 0.96
         },
         {
             "steps": [

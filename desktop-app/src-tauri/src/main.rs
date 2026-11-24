@@ -3,13 +3,14 @@
 
 use serde::{Deserialize, Serialize};
 use silent_exec_core::{
-    ActionCommand, ExecutionMode, MultiStepPlan, SafetyDecision, SafetyGate,
+    action_type_to_str as core_action_type_to_str, ActionCommand, ExecutionMode, MultiStepPlan,
+    SafetyDecision, SafetyGate,
 };
 use silent_exec_pc::{
-    action_type_to_str, parse_plan, resolve_clause, split_compound_prompt, start_bridge_server,
-    AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter, FileIndexer, McpClient,
-    McpServerConfig, McpTool, ModelDownloadInfo, ModelManager, ModelReleaseInfo, PcExecutor,
-    SelfUpdater, SetupResult,
+    action_type_to_str, hidden_command, parse_plan, resolve_clause, split_compound_prompt,
+    start_bridge_server, AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter,
+    FileIndexer, McpClient, McpServerConfig, McpTool, MemoryItem, ModelDownloadInfo, ModelManager,
+    ModelReleaseInfo, PcExecutor, RuntimeManager, SelfUpdater, SetupResult,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -91,11 +92,18 @@ pub struct UpdateInfoDto {
     pub update_available: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeStatusDto {
+    pub is_running: bool,
+    pub endpoint: String,
+    pub server_path: Option<String>,
+}
+
 type BridgeInstance = (SocketAddr, Arc<AtomicBool>, JoinHandle<()>);
 
 struct AppState {
     bridge_handle: Mutex<Option<BridgeInstance>>,
-    pending_execution: Mutex<Option<(ActionCommand, ExecutionMode)>>,
+    pending_execution: Arc<Mutex<Option<(ActionCommand, ExecutionMode)>>>,
     download_cancellations: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
@@ -119,12 +127,11 @@ fn format_execution_result(res: ExecutionResult) -> (String, String) {
 }
 
 // ---------------------------------------------------------
-// Commands
+// Commands (100% Non-Blocking async fn)
 // ---------------------------------------------------------
 
 #[tauri::command]
-fn get_app_config(state: State<AppState>) -> AppConfigDto {
-    let cfg = AppConfig::load();
+async fn get_app_config(state: State<'_, AppState>) -> Result<AppConfigDto, String> {
     let bridge_guard = state.bridge_handle.lock().unwrap();
     let (running, url, token) = match &*bridge_guard {
         Some((addr, _, _)) => (
@@ -135,7 +142,8 @@ fn get_app_config(state: State<AppState>) -> AppConfigDto {
         None => (false, None, None),
     };
 
-    AppConfigDto {
+    let cfg = AppConfig::load();
+    Ok(AppConfigDto {
         language: cfg.language,
         mode: cfg.mode,
         active_model_tag: cfg.active_model_tag,
@@ -149,11 +157,11 @@ fn get_app_config(state: State<AppState>) -> AppConfigDto {
         bridge_running: running,
         bridge_url: url,
         bridge_token: token,
-    }
+    })
 }
 
 #[tauri::command]
-fn save_app_config(
+async fn save_app_config(
     language: Option<String>,
     mode: Option<String>,
     active_model_tag: Option<String>,
@@ -165,241 +173,245 @@ fn save_app_config(
     openai_api_model: Option<String>,
     openai_api_key: Option<String>,
 ) -> Result<(), String> {
-    let mut cfg = AppConfig::load();
-    if let Some(l) = language {
-        cfg.language = l;
-    }
-    if let Some(m) = mode {
-        cfg.mode = m;
-    }
-    if let Some(t) = active_model_tag {
-        cfg.active_model_tag = Some(t);
-    }
-    if let Some(f) = fast_router_enabled {
-        cfg.fast_router_enabled = f;
-    }
-    if let Some(b) = backend {
-        cfg.backend = b;
-    }
-    if let Some(ou) = ollama_url {
-        cfg.ollama_url = ou;
-    }
-    if let Some(om) = ollama_model {
-        cfg.ollama_model = om;
-    }
-    if let Some(oab) = openai_api_base {
-        cfg.openai_api_base = oab;
-    }
-    if let Some(oam) = openai_api_model {
-        cfg.openai_api_model = oam;
-    }
-    if let Some(oak) = openai_api_key {
-        cfg.openai_api_key = oak;
-    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cfg = AppConfig::load();
+        if let Some(l) = language {
+            cfg.language = l;
+        }
+        if let Some(m) = mode {
+            cfg.mode = m;
+        }
+        if let Some(t) = active_model_tag {
+            cfg.active_model_tag = Some(t);
+        }
+        if let Some(f) = fast_router_enabled {
+            cfg.fast_router_enabled = f;
+        }
+        if let Some(b) = backend {
+            cfg.backend = b;
+        }
+        if let Some(ou) = ollama_url {
+            cfg.ollama_url = ou;
+        }
+        if let Some(om) = ollama_model {
+            cfg.ollama_model = om;
+        }
+        if let Some(oab) = openai_api_base {
+            cfg.openai_api_base = oab;
+        }
+        if let Some(oam) = openai_api_model {
+            cfg.openai_api_model = oam;
+        }
+        if let Some(oak) = openai_api_key {
+            cfg.openai_api_key = oak;
+        }
 
-    let path = AppConfig::default_config_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())?;
-    Ok(())
+        let path = AppConfig::default_config_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+        std::fs::write(&path, data).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn execute_query(
+async fn execute_query(
     query: String,
     mode: Option<String>,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> Result<ExecutionReport, String> {
-    let trimmed = query.trim();
-    if trimmed.is_empty() {
-        return Err("Query cannot be empty".to_string());
-    }
+    let pending_exec = state.pending_execution.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Err("Query cannot be empty".to_string());
+        }
 
-    let cfg = AppConfig::load();
-    let exec_mode = match mode.as_deref().unwrap_or(&cfg.mode) {
-        "interactive" => ExecutionMode::Interactive,
-        "dry_run" => ExecutionMode::DryRun,
-        _ => ExecutionMode::Silent,
-    };
+        let cfg = AppConfig::load();
+        let exec_mode = match mode.as_deref().unwrap_or(&cfg.mode) {
+            "interactive" => ExecutionMode::Interactive,
+            "dry_run" => ExecutionMode::DryRun,
+            _ => ExecutionMode::Silent,
+        };
 
-    let mut steps_out = Vec::new();
-    let executor = create_default_executor(exec_mode == ExecutionMode::DryRun);
+        let mut steps_out = Vec::new();
+        let executor = create_default_executor(exec_mode == ExecutionMode::DryRun);
 
-    // 1. Fast Rule Router check (if single command and enabled)
-    if cfg.fast_router_enabled {
-        if let Some(cmd) = FastRuleRouter::route(trimmed) {
-            let target_str = cmd.target.as_deref().unwrap_or("").to_string();
-            steps_out.push(StepInfo {
-                step_index: 1,
-                total_steps: 1,
-                stage: "understanding".to_string(),
-                description: "Fast Rule Router matched (<15ms)".to_string(),
-                action: Some(action_type_to_str(cmd.action).to_string()),
-                details: Some(format!("Target: {}", target_str)),
-            });
+        // 1. Fast Rule Router check (if single command and enabled)
+        if cfg.fast_router_enabled {
+            if let Some(cmd) = FastRuleRouter::route(trimmed) {
+                let target_str = cmd.target.as_deref().unwrap_or("").to_string();
+                steps_out.push(StepInfo {
+                    step_index: 1,
+                    total_steps: 1,
+                    stage: "understanding".to_string(),
+                    description: "Fast Rule Router matched (<15ms)".to_string(),
+                    action: Some(action_type_to_str(cmd.action).to_string()),
+                    details: Some(format!("Target: {}", target_str)),
+                });
 
-            let decision = SafetyGate::evaluate(&cmd);
-            match decision {
-                SafetyDecision::Block { reason } => {
-                    steps_out.push(StepInfo {
-                        step_index: 1,
-                        total_steps: 1,
-                        stage: "blocked".to_string(),
-                        description: "Blocked by Safety Gate".to_string(),
-                        action: Some(action_type_to_str(cmd.action).to_string()),
-                        details: Some(reason.clone()),
-                    });
-                    return Ok(ExecutionReport {
-                        success: false,
-                        query: query.clone(),
-                        steps: steps_out,
-                        message: format!("Blocked: {}", reason),
-                        requires_confirm: false,
-                        pending_step_index: None,
-                    });
-                }
-                SafetyDecision::RequireConfirm { reason } => {
-                    if exec_mode != ExecutionMode::DryRun {
-                        *state.pending_execution.lock().unwrap() = Some((cmd.clone(), exec_mode));
+                let decision = SafetyGate::evaluate(&cmd);
+                match decision {
+                    SafetyDecision::Block { reason } => {
                         steps_out.push(StepInfo {
                             step_index: 1,
                             total_steps: 1,
-                            stage: "awaiting_confirm".to_string(),
-                            description: "User confirmation required".to_string(),
+                            stage: "blocked".to_string(),
+                            description: "Blocked by Safety Gate".to_string(),
                             action: Some(action_type_to_str(cmd.action).to_string()),
                             details: Some(reason.clone()),
                         });
                         return Ok(ExecutionReport {
-                            success: true,
+                            success: false,
                             query: query.clone(),
                             steps: steps_out,
-                            message: format!("Confirmation required: {}", reason),
-                            requires_confirm: true,
-                            pending_step_index: Some(1),
+                            message: format!("Blocked: {}", reason),
+                            requires_confirm: false,
+                            pending_step_index: None,
                         });
                     }
+                    SafetyDecision::RequireConfirm { reason } => {
+                        if exec_mode != ExecutionMode::DryRun {
+                            *pending_exec.lock().unwrap() = Some((cmd.clone(), exec_mode));
+                            steps_out.push(StepInfo {
+                                step_index: 1,
+                                total_steps: 1,
+                                stage: "awaiting_confirm".to_string(),
+                                description: "User confirmation required".to_string(),
+                                action: Some(action_type_to_str(cmd.action).to_string()),
+                                details: Some(reason.clone()),
+                            });
+                            return Ok(ExecutionReport {
+                                success: true,
+                                query: query.clone(),
+                                steps: steps_out,
+                                message: format!("Confirmation required: {}", reason),
+                                requires_confirm: true,
+                                pending_step_index: Some(1),
+                            });
+                        }
+                    }
+                    SafetyDecision::AllowSilent => {}
                 }
-                SafetyDecision::AllowSilent => {}
-            }
 
-            if exec_mode == ExecutionMode::Interactive {
-                *state.pending_execution.lock().unwrap() = Some((cmd.clone(), exec_mode));
+                if exec_mode == ExecutionMode::Interactive {
+                    *pending_exec.lock().unwrap() = Some((cmd.clone(), exec_mode));
+                    steps_out.push(StepInfo {
+                        step_index: 1,
+                        total_steps: 1,
+                        stage: "awaiting_confirm".to_string(),
+                        description: "Interactive mode: Confirm step".to_string(),
+                        action: Some(action_type_to_str(cmd.action).to_string()),
+                        details: Some(format!("Target: {}", target_str)),
+                    });
+                    return Ok(ExecutionReport {
+                        success: true,
+                        query: query.clone(),
+                        steps: steps_out,
+                        message: "Interactive mode confirmation".to_string(),
+                        requires_confirm: true,
+                        pending_step_index: Some(1),
+                    });
+                }
+
+                let dry_run = exec_mode == ExecutionMode::DryRun;
+                let result = executor.execute(&cmd, dry_run);
+                let (stage, details) = format_execution_result(result);
+
                 steps_out.push(StepInfo {
                     step_index: 1,
                     total_steps: 1,
-                    stage: "awaiting_confirm".to_string(),
-                    description: "Interactive mode: Confirm step".to_string(),
+                    stage,
+                    description: format!("Execute action '{}'", action_type_to_str(cmd.action)),
                     action: Some(action_type_to_str(cmd.action).to_string()),
-                    details: Some(format!("Target: {}", target_str)),
+                    details: Some(details),
                 });
+
                 return Ok(ExecutionReport {
                     success: true,
                     query: query.clone(),
                     steps: steps_out,
-                    message: "Interactive mode confirmation".to_string(),
-                    requires_confirm: true,
-                    pending_step_index: Some(1),
+                    message: "Completed successfully".to_string(),
+                    requires_confirm: false,
+                    pending_step_index: None,
                 });
             }
-
-            let dry_run = exec_mode == ExecutionMode::DryRun;
-            let result = executor.execute(&cmd, dry_run);
-            let (stage, details) = format_execution_result(result);
-
-            steps_out.push(StepInfo {
-                step_index: 1,
-                total_steps: 1,
-                stage,
-                description: format!("Execute action '{}'", action_type_to_str(cmd.action)),
-                action: Some(action_type_to_str(cmd.action).to_string()),
-                details: Some(details),
-            });
-
-            return Ok(ExecutionReport {
-                success: true,
-                query: query.clone(),
-                steps: steps_out,
-                message: "Completed successfully".to_string(),
-                requires_confirm: false,
-                pending_step_index: None,
-            });
         }
-    }
 
-    // Helper to run AI backend inference or return clear actionable error
-    let run_ai_backend = |prompt_str: &str| -> Result<ActionCommand, String> {
-        let backend = match cfg.backend.as_str() {
-            "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
-            "openai_compat" => AiBackend::new_openai_compat(
-                Some(&cfg.openai_api_base),
-                Some(&cfg.openai_api_model),
-                Some(&cfg.openai_api_key),
-            ),
-            _ => {
-                // local_llama default
-                let manager = ModelManager::new(None).ok();
-                if let Some(m) = manager {
-                    if m.find_cached_model().is_some() {
-                        AiBackend::new_local_llama(None, None)
+        // Helper to run AI backend inference
+        let run_ai_backend = |prompt_str: &str| -> Result<ActionCommand, String> {
+            let backend = match cfg.backend.as_str() {
+                "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
+                "openai_compat" => AiBackend::new_openai_compat(
+                    Some(&cfg.openai_api_base),
+                    Some(&cfg.openai_api_model),
+                    Some(&cfg.openai_api_key),
+                ),
+                _ => {
+                    let manager = ModelManager::new(None).ok();
+                    if let Some(m) = manager {
+                        if m.find_cached_model().is_some() {
+                            AiBackend::new_local_llama(None, None)
+                        } else {
+                            return Err(
+                                "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
+                                    .to_string(),
+                            );
+                        }
                     } else {
                         return Err(
                             "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
                                 .to_string(),
                         );
                     }
-                } else {
-                    return Err(
-                        "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
-                            .to_string(),
-                    );
                 }
-            }
+            };
+
+            backend.infer(prompt_str).map_err(|e| {
+                format!(
+                    "AI backend error ({}) — click Setup in Models tab or configure Ollama/API in Settings",
+                    e
+                )
+            })
         };
 
-        backend.infer(prompt_str).map_err(|e| {
-            format!(
-                "AI backend error ({}) — click Setup in Models tab or configure Ollama/API in Settings",
-                e
-            )
-        })
-    };
-
-    // 2. Compound or Multi-Step Planning
-    let clauses = split_compound_prompt(trimmed);
-    let plan = if clauses.len() > 1 {
-        let mut steps = Vec::new();
-        for clause in &clauses {
-            if let Some(cmd) = resolve_clause(clause) {
-                steps.push(cmd);
-            } else {
-                match run_ai_backend(clause) {
-                    Ok(cmd) => steps.push(cmd),
-                    Err(err_msg) => {
-                        steps_out.push(StepInfo {
-                            step_index: steps.len() + 1,
-                            total_steps: clauses.len(),
-                            stage: "failed".to_string(),
-                            description: "AI Backend Required".to_string(),
-                            action: None,
-                            details: Some(err_msg.clone()),
-                        });
-                        return Ok(ExecutionReport {
-                            success: false,
-                            query: query.clone(),
-                            steps: steps_out,
-                            message: err_msg,
-                            requires_confirm: false,
-                            pending_step_index: None,
-                        });
+        // 2. Compound or Multi-Step Planning
+        let clauses = split_compound_prompt(trimmed);
+        let plan = if clauses.len() > 1 {
+            let mut steps = Vec::new();
+            for clause in &clauses {
+                if let Some(cmd) = resolve_clause(clause) {
+                    steps.push(cmd);
+                } else {
+                    match run_ai_backend(clause) {
+                        Ok(cmd) => steps.push(cmd),
+                        Err(err_msg) => {
+                            steps_out.push(StepInfo {
+                                step_index: steps.len() + 1,
+                                total_steps: clauses.len(),
+                                stage: "failed".to_string(),
+                                description: "AI Backend Required".to_string(),
+                                action: None,
+                                details: Some(err_msg.clone()),
+                            });
+                            return Ok(ExecutionReport {
+                                success: false,
+                                query: query.clone(),
+                                steps: steps_out,
+                                message: err_msg,
+                                requires_confirm: false,
+                                pending_step_index: None,
+                            });
+                        }
                     }
                 }
             }
-        }
-        MultiStepPlan { steps }
-    } else {
-        if let Some(cmd) = resolve_clause(trimmed) {
+            MultiStepPlan { steps }
+        } else if let Some(cmd) = resolve_clause(trimmed) {
             MultiStepPlan { steps: vec![cmd] }
         } else {
             match parse_plan(trimmed) {
@@ -426,115 +438,126 @@ fn execute_query(
                     }
                 },
             }
-        }
-    };
+        };
 
-    let total = plan.steps.len();
-    steps_out.push(StepInfo {
-        step_index: 1,
-        total_steps: total,
-        stage: "planned".to_string(),
-        description: format!("Formulated plan with {} step(s)", total),
-        action: None,
-        details: Some(format!("Clauses: {:?}", clauses)),
-    });
+        let total = plan.steps.len();
+        steps_out.push(StepInfo {
+            step_index: 1,
+            total_steps: total,
+            stage: "planned".to_string(),
+            description: format!("Formulated plan with {} step(s)", total),
+            action: None,
+            details: Some(format!("Clauses: {:?}", clauses)),
+        });
 
-    for (idx, step) in plan.steps.iter().enumerate() {
-        let step_num = idx + 1;
-        let decision = SafetyGate::evaluate(step);
-        match decision {
-            SafetyDecision::Block { reason } => {
-                steps_out.push(StepInfo {
-                    step_index: step_num,
-                    total_steps: total,
-                    stage: "blocked".to_string(),
-                    description: format!("Step {} blocked by Safety Policy", step_num),
-                    action: Some(action_type_to_str(step.action).to_string()),
-                    details: Some(reason.clone()),
-                });
-                return Ok(ExecutionReport {
-                    success: false,
-                    query: query.clone(),
-                    steps: steps_out,
-                    message: format!("Step {} blocked: {}", step_num, reason),
-                    requires_confirm: false,
-                    pending_step_index: None,
-                });
-            }
-            SafetyDecision::RequireConfirm { reason } => {
-                if exec_mode != ExecutionMode::DryRun {
-                    *state.pending_execution.lock().unwrap() = Some((step.clone(), exec_mode));
+        for (idx, step) in plan.steps.iter().enumerate() {
+            let step_num = idx + 1;
+            let decision = SafetyGate::evaluate(step);
+            match decision {
+                SafetyDecision::Block { reason } => {
                     steps_out.push(StepInfo {
                         step_index: step_num,
                         total_steps: total,
-                        stage: "awaiting_confirm".to_string(),
-                        description: format!("Step {} requires user confirmation", step_num),
+                        stage: "blocked".to_string(),
+                        description: format!("Step {} blocked by Safety Policy", step_num),
                         action: Some(action_type_to_str(step.action).to_string()),
                         details: Some(reason.clone()),
                     });
                     return Ok(ExecutionReport {
-                        success: true,
+                        success: false,
                         query: query.clone(),
                         steps: steps_out,
-                        message: format!("Confirm step {}: {}", step_num, reason),
-                        requires_confirm: true,
-                        pending_step_index: Some(step_num),
+                        message: format!("Step {} blocked: {}", step_num, reason),
+                        requires_confirm: false,
+                        pending_step_index: None,
                     });
                 }
+                SafetyDecision::RequireConfirm { reason } => {
+                    if exec_mode != ExecutionMode::DryRun {
+                        *pending_exec.lock().unwrap() = Some((step.clone(), exec_mode));
+                        steps_out.push(StepInfo {
+                            step_index: step_num,
+                            total_steps: total,
+                            stage: "awaiting_confirm".to_string(),
+                            description: format!("Step {} requires user confirmation", step_num),
+                            action: Some(action_type_to_str(step.action).to_string()),
+                            details: Some(reason.clone()),
+                        });
+                        return Ok(ExecutionReport {
+                            success: true,
+                            query: query.clone(),
+                            steps: steps_out,
+                            message: format!("Confirm step {}: {}", step_num, reason),
+                            requires_confirm: true,
+                            pending_step_index: Some(step_num),
+                        });
+                    }
+                }
+                SafetyDecision::AllowSilent => {}
             }
-            SafetyDecision::AllowSilent => {}
-        }
 
-        if exec_mode == ExecutionMode::Interactive {
-            let target_str = step.target.as_deref().unwrap_or("").to_string();
-            *state.pending_execution.lock().unwrap() = Some((step.clone(), exec_mode));
+            if exec_mode == ExecutionMode::Interactive {
+                let target_str = step.target.as_deref().unwrap_or("").to_string();
+                *pending_exec.lock().unwrap() = Some((step.clone(), exec_mode));
+                steps_out.push(StepInfo {
+                    step_index: step_num,
+                    total_steps: total,
+                    stage: "awaiting_confirm".to_string(),
+                    description: format!("Interactive mode: Step {} confirmation", step_num),
+                    action: Some(action_type_to_str(step.action).to_string()),
+                    details: Some(format!("Target: {}", target_str)),
+                });
+                return Ok(ExecutionReport {
+                    success: true,
+                    query: query.clone(),
+                    steps: steps_out,
+                    message: format!("Confirm step {} of {}", step_num, total),
+                    requires_confirm: true,
+                    pending_step_index: Some(step_num),
+                });
+            }
+
+            let dry_run = exec_mode == ExecutionMode::DryRun;
+            let res = executor.execute(step, dry_run);
+            let (stage, details) = format_execution_result(res);
+
             steps_out.push(StepInfo {
                 step_index: step_num,
                 total_steps: total,
-                stage: "awaiting_confirm".to_string(),
-                description: format!("Interactive mode: Step {} confirmation", step_num),
+                stage,
+                description: format!("Step {}: {}", step_num, action_type_to_str(step.action)),
                 action: Some(action_type_to_str(step.action).to_string()),
-                details: Some(format!("Target: {}", target_str)),
-            });
-            return Ok(ExecutionReport {
-                success: true,
-                query: query.clone(),
-                steps: steps_out,
-                message: format!("Confirm step {} of {}", step_num, total),
-                requires_confirm: true,
-                pending_step_index: Some(step_num),
+                details: Some(details),
             });
         }
 
-        let dry_run = exec_mode == ExecutionMode::DryRun;
-        let res = executor.execute(step, dry_run);
-        let (stage, details) = format_execution_result(res);
-
-        steps_out.push(StepInfo {
-            step_index: step_num,
-            total_steps: total,
-            stage,
-            description: format!("Step {}: {}", step_num, action_type_to_str(step.action)),
-            action: Some(action_type_to_str(step.action).to_string()),
-            details: Some(details),
-        });
-    }
-
-    Ok(ExecutionReport {
-        success: true,
-        query,
-        steps: steps_out,
-        message: "Plan executed successfully".to_string(),
-        requires_confirm: false,
-        pending_step_index: None,
+        Ok(ExecutionReport {
+            success: true,
+            query,
+            steps: steps_out,
+            message: "Plan executed successfully".to_string(),
+            requires_confirm: false,
+            pending_step_index: None,
+        })
     })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn confirm_step(
+async fn run_agent_plan(
+    query: String,
+    mode: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ExecutionReport, String> {
+    execute_query(query, mode, state).await
+}
+
+#[tauri::command]
+async fn confirm_step(
     step_index: usize,
     proceed: bool,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> Result<ExecutionReport, String> {
     let pending = state.pending_execution.lock().unwrap().take();
     let (cmd, mode) = match pending {
@@ -542,147 +565,203 @@ fn confirm_step(
         None => return Err("No pending step awaiting confirmation".to_string()),
     };
 
-    let mut steps_out = Vec::new();
-    if !proceed {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut steps_out = Vec::new();
+        if !proceed {
+            steps_out.push(StepInfo {
+                step_index,
+                total_steps: step_index,
+                stage: "failed".to_string(),
+                description: format!("Step {} skipped or cancelled by user", step_index),
+                action: Some(action_type_to_str(cmd.action).to_string()),
+                details: Some("User chose not to proceed".to_string()),
+            });
+            return Ok(ExecutionReport {
+                success: false,
+                query: "User skipped".to_string(),
+                steps: steps_out,
+                message: "Step skipped".to_string(),
+                requires_confirm: false,
+                pending_step_index: None,
+            });
+        }
+
+        let executor = create_default_executor(mode == ExecutionMode::DryRun);
+        let dry_run = mode == ExecutionMode::DryRun;
+        let res = executor.execute(&cmd, dry_run);
+        let (stage, details) = format_execution_result(res);
+
         steps_out.push(StepInfo {
             step_index,
             total_steps: step_index,
-            stage: "failed".to_string(),
-            description: format!("Step {} skipped or cancelled by user", step_index),
+            stage,
+            description: format!(
+                "Confirmed and executed '{}'",
+                action_type_to_str(cmd.action)
+            ),
             action: Some(action_type_to_str(cmd.action).to_string()),
-            details: Some("User chose not to proceed".to_string()),
+            details: Some(details),
         });
-        return Ok(ExecutionReport {
-            success: false,
-            query: "User skipped".to_string(),
+
+        Ok(ExecutionReport {
+            success: true,
+            query: "Confirmed step".to_string(),
             steps: steps_out,
-            message: "Step skipped".to_string(),
+            message: "Step executed successfully".to_string(),
             requires_confirm: false,
             pending_step_index: None,
-        });
-    }
-
-    let executor = create_default_executor(mode == ExecutionMode::DryRun);
-    let dry_run = mode == ExecutionMode::DryRun;
-    let res = executor.execute(&cmd, dry_run);
-    let (stage, details) = format_execution_result(res);
-
-    steps_out.push(StepInfo {
-        step_index,
-        total_steps: step_index,
-        stage,
-        description: format!(
-            "Confirmed and executed '{}'",
-            action_type_to_str(cmd.action)
-        ),
-        action: Some(action_type_to_str(cmd.action).to_string()),
-        details: Some(details),
-    });
-
-    Ok(ExecutionReport {
-        success: true,
-        query: "Confirmed step".to_string(),
-        steps: steps_out,
-        message: "Step executed successfully".to_string(),
-        requires_confirm: false,
-        pending_step_index: None,
+        })
     })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn list_models() -> Result<Vec<ModelReleaseInfo>, String> {
-    let cfg = AppConfig::load();
-    let mgr = ModelManager::new(None)?;
-    mgr.list_available_models(cfg.active_model_tag.as_deref())
+async fn list_models() -> Result<Vec<ModelReleaseInfo>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let cfg = AppConfig::load();
+        let mgr = ModelManager::new(None)?;
+        mgr.list_available_models(cfg.active_model_tag.as_deref())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn start_model_download(
+async fn check_runtime_status() -> Result<RuntimeStatusDto, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mgr = RuntimeManager::new(None)?;
+        let server_path = mgr
+            .find_llama_server_binary()
+            .map(|p| p.to_string_lossy().to_string());
+        let health_url = "http://127.0.0.1:8080/health";
+        let is_running = silent_exec_pc::check_health_http(
+            health_url,
+            std::time::Duration::from_millis(500),
+        );
+        Ok(RuntimeStatusDto {
+            is_running,
+            endpoint: "http://127.0.0.1:8080".to_string(),
+            server_path,
+        })
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn run_setup(model_tag: Option<String>) -> Result<SetupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let tag = model_tag.unwrap_or_else(|| "v0.3.0-model".to_string());
+        silent_exec_pc::run_setup(Some(&tag), None, None).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn setup_runtime(model_tag: Option<String>) -> Result<SetupResult, String> {
+    run_setup(model_tag).await
+}
+
+#[tauri::command]
+async fn start_model_download(
     tag: String,
     window: tauri::Window,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> Result<ModelDownloadInfo, String> {
-    let mgr = ModelManager::new(None)?;
-    let models = mgr.list_available_models(None)?;
-    let target_model = models
-        .into_iter()
-        .find(|m| m.tag == tag)
-        .ok_or_else(|| format!("Model with tag {} not found", tag))?;
-
-    let filename = target_model.filename;
-    let base_url = format!(
-        "https://github.com/{}/releases/download/{}",
-        "tahadeab-ai/silent-exec", tag
-    );
-    let download_url = format!("{}/{}", base_url, filename);
-    let final_path = mgr.cache_dir().join(&filename);
-    let part_path = mgr.cache_dir().join(format!("{}.part", filename));
-
-    // Get expected sha256
-    let checksums_url = format!("{}/SHA256SUMS.txt", base_url);
-    let out = std::process::Command::new("curl")
-        .args(["-sSfL", &checksums_url])
-        .output()
-        .map_err(|e| format!("Failed to fetch SHA256SUMS.txt: {}", e))?;
-
-    if !out.status.success() {
-        return Err(format!(
-            "Failed to download checksums from {}",
-            checksums_url
-        ));
-    }
-
-    let sums_text = String::from_utf8_lossy(&out.stdout);
-    let mut expected_hash = None;
-    for line in sums_text.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 2 && (parts[1] == filename || parts[1].ends_with(&filename)) {
-            expected_hash = Some(parts[0].to_string());
-            break;
-        }
-    }
-
-    let sha256_val = expected_hash.ok_or_else(|| format!("No SHA256 found for {}", filename))?;
-
     let cancel_flag = Arc::new(AtomicBool::new(false));
     {
         let mut cancellations = state.download_cancellations.lock().unwrap();
         cancellations.insert(tag.clone(), cancel_flag.clone());
     }
 
-    let tag_for_event = tag.clone();
-    let window_clone = window.clone();
-    let res = ModelManager::download_resumable_file(
-        &download_url,
-        &part_path,
-        &final_path,
-        &sha256_val,
-        cancel_flag,
-        move |progress| {
-            let _ = window_clone.emit(&format!("download-progress:{}", tag_for_event), progress);
-        },
-    );
+    let tag_clone = tag.clone();
+    let cancel_clone = cancel_flag.clone();
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        let mgr = ModelManager::new(None)?;
+        let models = mgr.list_available_models(None)?;
+        let target_model = models
+            .into_iter()
+            .find(|m| m.tag == tag_clone)
+            .ok_or_else(|| format!("Model with tag {} not found", tag_clone))?;
+
+        let filename = target_model.filename.clone();
+        let (download_url, sha256_val) = if let Some(url) = target_model.download_url {
+            (url, "SKIP".to_string())
+        } else {
+            let base_url = format!(
+                "https://github.com/{}/releases/download/{}",
+                "tahadeab-ai/silent-exec", tag_clone
+            );
+            let dl_url = format!("{}/{}", base_url, filename);
+            let checksums_url = format!("{}/SHA256SUMS.txt", base_url);
+            let out = hidden_command("curl")
+                .args(["-sSfL", &checksums_url])
+                .output()
+                .map_err(|e| format!("Failed to fetch SHA256SUMS.txt: {}", e))?;
+
+            if !out.status.success() {
+                return Err(format!(
+                    "Failed to download checksums from {}",
+                    checksums_url
+                ));
+            }
+
+            let sums_text = String::from_utf8_lossy(&out.stdout);
+            let mut expected_hash = None;
+            for line in sums_text.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && (parts[1] == filename || parts[1].ends_with(&filename)) {
+                    expected_hash = Some(parts[0].to_string());
+                    break;
+                }
+            }
+
+            let hash = expected_hash.unwrap_or_else(|| "SKIP".to_string());
+            (dl_url, hash)
+        };
+
+        let final_path = mgr.cache_dir().join(&filename);
+        let part_path = mgr.cache_dir().join(format!("{}.part", filename));
+
+        let tag_for_event = tag_clone.clone();
+        let window_clone = window.clone();
+        ModelManager::download_resumable_file(
+            &download_url,
+            &part_path,
+            &final_path,
+            &sha256_val,
+            cancel_clone,
+            move |progress| {
+                let _ = window_clone
+                    .emit(&format!("download-progress:{}", tag_for_event), progress);
+            },
+        )?;
+
+        let size_bytes = std::fs::metadata(&final_path).map(|m| m.len()).unwrap_or(0);
+        Ok(ModelDownloadInfo {
+            tag: tag_clone,
+            filename,
+            path: final_path,
+            sha256: sha256_val,
+            size_bytes,
+            already_cached: false,
+        })
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?;
 
     {
         let mut cancellations = state.download_cancellations.lock().unwrap();
         cancellations.remove(&tag);
     }
 
-    res?;
-
-    let size_bytes = std::fs::metadata(&final_path).map(|m| m.len()).unwrap_or(0);
-    Ok(ModelDownloadInfo {
-        tag,
-        filename,
-        path: final_path,
-        sha256: sha256_val,
-        size_bytes,
-        already_cached: false,
-    })
+    res
 }
 
 #[tauri::command]
-fn pause_model_download(tag: String, state: State<AppState>) -> Result<(), String> {
+async fn pause_model_download(tag: String, state: State<'_, AppState>) -> Result<(), String> {
     let mut cancellations = state.download_cancellations.lock().unwrap();
     if let Some(flag) = cancellations.remove(&tag) {
         flag.store(true, Ordering::SeqCst);
@@ -691,180 +770,216 @@ fn pause_model_download(tag: String, state: State<AppState>) -> Result<(), Strin
 }
 
 #[tauri::command]
-fn resume_model_download(
+async fn resume_model_download(
     tag: String,
     window: tauri::Window,
-    state: State<AppState>,
+    state: State<'_, AppState>,
 ) -> Result<ModelDownloadInfo, String> {
-    start_model_download(tag, window, state)
+    start_model_download(tag, window, state).await
 }
 
 #[tauri::command]
-fn cancel_model_download(tag: String, state: State<AppState>) -> Result<(), String> {
+async fn cancel_model_download(tag: String, state: State<'_, AppState>) -> Result<(), String> {
     let mut cancellations = state.download_cancellations.lock().unwrap();
     if let Some(flag) = cancellations.remove(&tag) {
         flag.store(true, Ordering::SeqCst);
     }
 
-    // Also remove the .part file if present
-    if let Ok(mgr) = ModelManager::new(None) {
-        if let Ok(models) = mgr.list_available_models(None) {
-            if let Some(m) = models.into_iter().find(|m| m.tag == tag) {
-                let part_path = mgr.cache_dir().join(format!("{}.part", m.filename));
-                if part_path.exists() {
-                    let _ = std::fs::remove_file(&part_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Ok(mgr) = ModelManager::new(None) {
+            if let Ok(models) = mgr.list_available_models(None) {
+                if let Some(m) = models.into_iter().find(|m| m.tag == tag) {
+                    let part_path = mgr.cache_dir().join(format!("{}.part", m.filename));
+                    if part_path.exists() {
+                        let _ = std::fs::remove_file(&part_path);
+                    }
                 }
             }
         }
-    }
-
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn test_ai_backend() -> Result<BackendTestResult, String> {
-    let cfg = AppConfig::load();
-    let start = std::time::Instant::now();
+async fn test_ai_backend() -> Result<BackendTestResult, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let cfg = AppConfig::load();
+        let start = std::time::Instant::now();
 
-    let backend = match cfg.backend.as_str() {
-        "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
-        "openai_compat" => AiBackend::new_openai_compat(
-            Some(&cfg.openai_api_base),
-            Some(&cfg.openai_api_model),
-            Some(&cfg.openai_api_key),
-        ),
-        _ => AiBackend::new_local_llama(None, None),
-    };
+        let backend = match cfg.backend.as_str() {
+            "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
+            "openai_compat" => AiBackend::new_openai_compat(
+                Some(&cfg.openai_api_base),
+                Some(&cfg.openai_api_model),
+                Some(&cfg.openai_api_key),
+            ),
+            _ => AiBackend::new_local_llama(None, None),
+        };
 
-    match backend.infer("ping") {
-        Ok(_) => Ok(BackendTestResult {
-            success: true,
-            latency_ms: start.elapsed().as_millis() as u64,
-            message: format!("Backend '{}' responded successfully", cfg.backend),
-        }),
-        Err(e) => Ok(BackendTestResult {
-            success: false,
-            latency_ms: start.elapsed().as_millis() as u64,
-            message: format!("Backend test failed: {}", e),
-        }),
-    }
+        match backend.infer("ping") {
+            Ok(_) => Ok(BackendTestResult {
+                success: true,
+                latency_ms: start.elapsed().as_millis() as u64,
+                message: format!("Backend '{}' responded successfully", cfg.backend),
+            }),
+            Err(e) => Ok(BackendTestResult {
+                success: false,
+                latency_ms: start.elapsed().as_millis() as u64,
+                message: format!("Backend test failed: {}", e),
+            }),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn list_mcp_servers() -> Result<Vec<McpServerDto>, String> {
-    let cfg = AppConfig::load();
-    Ok(cfg
-        .mcp_servers
-        .into_iter()
-        .map(|s| McpServerDto {
-            name: s.name,
-            command: s.command,
-            args: s.args,
-            enabled: s.enabled,
-        })
-        .collect())
+async fn list_mcp_servers() -> Result<Vec<McpServerDto>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let cfg = AppConfig::load();
+        Ok(cfg
+            .mcp_servers
+            .into_iter()
+            .map(|s| McpServerDto {
+                name: s.name,
+                command: s.command,
+                args: s.args,
+                enabled: s.enabled,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn save_mcp_server(
+async fn save_mcp_server(
     name: String,
     command: String,
     args: Vec<String>,
     enabled: bool,
 ) -> Result<(), String> {
-    let mut cfg = AppConfig::load();
-    if let Some(existing) = cfg.mcp_servers.iter_mut().find(|s| s.name == name) {
-        existing.command = command;
-        existing.args = args;
-        existing.enabled = enabled;
-    } else {
-        cfg.mcp_servers.push(McpServerConfig {
-            name,
-            command,
-            args,
-            enabled,
-        });
-    }
-
-    let path = AppConfig::default_config_path();
-    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn delete_mcp_server(name: String) -> Result<(), String> {
-    let mut cfg = AppConfig::load();
-    cfg.mcp_servers.retain(|s| s.name != name);
-    let path = AppConfig::default_config_path();
-    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn test_mcp_server(name: String) -> Result<Vec<McpTool>, String> {
-    let cfg = AppConfig::load();
-    let s_cfg = cfg
-        .mcp_servers
-        .into_iter()
-        .find(|s| s.name == name)
-        .ok_or_else(|| format!("Server '{}' not found", name))?;
-
-    let mut client = McpClient::new(s_cfg);
-    client.start()?;
-    let _ = client.initialize()?;
-    client.list_tools()
-}
-
-#[tauri::command]
-fn check_app_update() -> Result<UpdateInfoDto, String> {
-    check_updates()
-}
-
-#[tauri::command]
-fn run_agent_plan(
-    query: String,
-    mode: Option<String>,
-    state: State<AppState>,
-) -> Result<ExecutionReport, String> {
-    execute_query(query, mode, state)
-}
-
-#[tauri::command]
-fn activate_model(tag: String) -> Result<(), String> {
-    let mut cfg = AppConfig::load();
-    cfg.active_model_tag = Some(tag);
-    let path = AppConfig::default_config_path();
-    let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn delete_model(tag: String) -> Result<(), String> {
-    let mgr = ModelManager::new(None)?;
-    let models = mgr.list_available_models(None)?;
-    for m in models {
-        if m.tag == tag {
-            let file_path = mgr.cache_dir().join(&m.filename);
-            if file_path.exists() {
-                std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
-            }
-            return Ok(());
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cfg = AppConfig::load();
+        if let Some(existing) = cfg.mcp_servers.iter_mut().find(|s| s.name == name) {
+            existing.command = command;
+            existing.args = args;
+            existing.enabled = enabled;
+        } else {
+            cfg.mcp_servers.push(McpServerConfig {
+                name,
+                command,
+                args,
+                enabled,
+            });
         }
-    }
-    Err(format!("Model with tag {} not found", tag))
+
+        let path = AppConfig::default_config_path();
+        let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+        std::fs::write(&path, data).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn setup_runtime(model_tag: Option<String>) -> Result<SetupResult, String> {
-    let tag = model_tag.unwrap_or_else(|| "v0.3.0-model".to_string());
-    silent_exec_pc::run_setup(Some(&tag), None, None).map_err(|e| e.to_string())
+async fn delete_mcp_server(name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cfg = AppConfig::load();
+        cfg.mcp_servers.retain(|s| s.name != name);
+        let path = AppConfig::default_config_path();
+        let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+        std::fs::write(&path, data).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 #[tauri::command]
-fn toggle_lan_bridge(enable: bool, state: State<AppState>) -> Result<BridgeStatusResponse, String> {
+async fn test_mcp_server(name: String) -> Result<Vec<McpTool>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cfg = AppConfig::load();
+        let s_cfg = cfg
+            .mcp_servers
+            .into_iter()
+            .find(|s| s.name == name)
+            .ok_or_else(|| format!("Server '{}' not found", name))?;
+
+        let mut client = McpClient::new(s_cfg);
+        client.start()?;
+        let _ = client.initialize()?;
+        client.list_tools()
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn check_app_update() -> Result<UpdateInfoDto, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let updater = SelfUpdater::default();
+        let info = updater.check_for_update()?;
+        Ok(UpdateInfoDto {
+            current_version: info.current_version,
+            latest_version: info.latest_version,
+            tag_name: info.tag_name,
+            download_url: info.download_url,
+            sha256_url: info.sha256_url,
+            update_available: info.update_available,
+        })
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn check_updates() -> Result<UpdateInfoDto, String> {
+    check_app_update().await
+}
+
+#[tauri::command]
+async fn activate_model(tag: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cfg = AppConfig::load();
+        cfg.active_model_tag = Some(tag);
+        let path = AppConfig::default_config_path();
+        let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+        std::fs::write(&path, data).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn delete_model(tag: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mgr = ModelManager::new(None)?;
+        let models = mgr.list_available_models(None)?;
+        for m in models {
+            if m.tag == tag {
+                let file_path = mgr.cache_dir().join(&m.filename);
+                if file_path.exists() {
+                    std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
+                }
+                return Ok(());
+            }
+        }
+        Err(format!("Model with tag {} not found", tag))
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn toggle_lan_bridge(
+    enable: bool,
+    state: State<'_, AppState>,
+) -> Result<BridgeStatusResponse, String> {
     let mut guard = state.bridge_handle.lock().unwrap();
 
     if enable {
@@ -908,17 +1023,30 @@ fn toggle_lan_bridge(enable: bool, state: State<AppState>) -> Result<BridgeStatu
 }
 
 #[tauri::command]
-fn check_updates() -> Result<UpdateInfoDto, String> {
-    let updater = SelfUpdater::default();
-    let info = updater.check_for_update()?;
-    Ok(UpdateInfoDto {
-        current_version: info.current_version,
-        latest_version: info.latest_version,
-        tag_name: info.tag_name,
-        download_url: info.download_url,
-        sha256_url: info.sha256_url,
-        update_available: info.update_available,
+async fn list_memories() -> Result<Vec<MemoryItem>, String> {
+    tauri::async_runtime::spawn_blocking(|| silent_exec_pc::list_memories())
+        .await
+        .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn save_memory(
+    key: String,
+    content: String,
+    category: Option<String>,
+) -> Result<MemoryItem, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        silent_exec_pc::save_memory(&key, &content, category.as_deref())
     })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn delete_memory(id_or_key: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || silent_exec_pc::delete_memory(&id_or_key))
+        .await
+        .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
 // ---------------------------------------------------------
@@ -928,7 +1056,7 @@ fn check_updates() -> Result<UpdateInfoDto, String> {
 fn main() {
     let app_state = AppState {
         bridge_handle: Mutex::new(None),
-        pending_execution: Mutex::new(None),
+        pending_execution: Arc::new(Mutex::new(None)),
         download_cancellations: Mutex::new(HashMap::new()),
     };
 
@@ -1017,6 +1145,8 @@ fn main() {
             activate_model,
             delete_model,
             setup_runtime,
+            run_setup,
+            check_runtime_status,
             toggle_lan_bridge,
             check_updates,
             check_app_update,
@@ -1025,7 +1155,10 @@ fn main() {
             save_mcp_server,
             delete_mcp_server,
             test_mcp_server,
-            run_agent_plan
+            run_agent_plan,
+            list_memories,
+            save_memory,
+            delete_memory
         ])
         .run(tauri::generate_context!())
         .expect("error while running SilentExec Desktop application");

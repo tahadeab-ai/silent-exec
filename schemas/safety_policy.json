@@ -19,14 +19,18 @@
     "ui_scroll",
     "ui_back",
     "ui_home",
-    "done"
+    "done",
+    "reply",
+    "read_file",
+    "memory_save"
   ],
   "tier_2_confirm": [
     "delete_file",
     "move_file",
     "system_power",
     "toggle_setting",
-    "send_message"
+    "send_message",
+    "write_file"
   ],
   "tier_3_blocked_patterns": {
     "path_traversal": [

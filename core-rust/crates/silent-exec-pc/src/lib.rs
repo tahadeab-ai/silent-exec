@@ -7,8 +7,10 @@ pub mod fast_router;
 pub mod indexer;
 pub mod inference;
 pub mod mcp_bridge;
+pub mod memory;
 pub mod model_manager;
 pub mod planner;
+pub mod process_helper;
 pub mod runtime_manager;
 pub mod ui_win32;
 pub mod updater;
@@ -21,11 +23,15 @@ pub use indexer::{
     compute_fuzzy_score, normalize_arabic_english, FileIndexer, IndexedItem, ScoredMatch,
 };
 pub use inference::{
-    build_chatml_prompt, extract_action_json, format_prompt, AiBackend, LlamaBackend,
-    DEFAULT_SYSTEM_PROMPT, EMBEDDED_ACTION_GBNF,
+    build_chatml_prompt, extract_action_json, format_prompt, get_effective_system_prompt,
+    AiBackend, LlamaBackend, DEFAULT_SYSTEM_PROMPT, EMBEDDED_ACTION_GBNF,
 };
 pub use mcp_bridge::{
     JsonRpcError, JsonRpcRequest, JsonRpcResponse, McpClient, McpTool, McpToolCallResult,
+};
+pub use memory::{
+    delete_memory, get_relevant_memories_prompt, list_memories, save_memory, MemoryItem,
+    MemoryStore,
 };
 pub use model_manager::{
     DownloadProgress, DownloadStatus, ModelDownloadInfo, ModelManager, ModelReleaseInfo,
@@ -33,6 +39,7 @@ pub use model_manager::{
 pub use planner::{
     parse_plan, resolve_clause, split_compound_prompt, PlanEngine, PlanExecutionSummary, StepEvent,
 };
+pub use process_helper::hidden_command;
 pub use runtime_manager::{
     check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
     select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
@@ -1791,5 +1798,152 @@ mod tests {
         assert_eq!(loaded.ollama_model, "qwen2.5:3b");
         assert_eq!(loaded.mcp_servers.len(), 1);
         assert_eq!(loaded.mcp_servers[0].name, "weather");
+    }
+
+    #[test]
+    fn test_72_memory_store_crud_and_relevance() {
+        let guard = TempDirGuard::new("memory_test");
+        let mem_file = guard.path.join("memory.json");
+
+        let mut store = MemoryStore::load_from(&mem_file).unwrap();
+        assert!(store.list().is_empty());
+
+        let m1 = store.save_item(
+            "preferred_language",
+            "User strictly speaks Arabic and English",
+            Some("preference"),
+        );
+        assert_eq!(m1.key, "preferred_language");
+        assert_eq!(store.list().len(), 1);
+
+        // Update existing
+        let m1_updated = store.save_item(
+            "preferred_language",
+            "User strictly speaks Yemeni Arabic",
+            Some("preference"),
+        );
+        assert_eq!(m1_updated.content, "User strictly speaks Yemeni Arabic");
+        assert_eq!(store.list().len(), 1);
+
+        // Save second item
+        let m2 = store.save_item("projects_dir", "D:\\Projects", Some("fact"));
+        assert_eq!(m2.key, "projects_dir");
+        assert_eq!(store.list().len(), 2);
+
+        store.save_to(&mem_file).unwrap();
+        let reloaded = MemoryStore::load_from(&mem_file).unwrap();
+        assert_eq!(reloaded.list().len(), 2);
+
+        // Relevance
+        let relevant = reloaded.get_relevant("language", 2);
+        assert!(!relevant.is_empty());
+        assert_eq!(relevant[0].key, "preferred_language");
+
+        // Delete
+        let mut store = reloaded;
+        assert!(store.delete_item("projects_dir"));
+        assert_eq!(store.list().len(), 1);
+    }
+
+    #[test]
+    fn test_73_curated_community_models_catalog() {
+        let guard = TempDirGuard::new("models_test");
+        let curated = ModelManager::curated_community_models(&guard.path, Some("v0.2.0-model"));
+        assert!(curated.len() >= 4);
+
+        let liquid = curated.iter().find(|m| m.tag == "liquidai-lfm3-1.7b");
+        assert!(
+            liquid.is_some(),
+            "LiquidAI model must exist in curated catalog"
+        );
+        assert!(liquid.unwrap().download_url.is_some());
+
+        let qwen = curated.iter().find(|m| m.tag == "qwen3-1.7b-gguf");
+        assert!(
+            qwen.is_some(),
+            "Qwen3 GGUF model must exist in curated catalog"
+        );
+
+        let v02 = curated.iter().find(|m| m.tag == "v0.2.0-model");
+        assert!(v02.is_some(), "v0.2.0-model must exist in curated catalog");
+        assert!(v02.unwrap().is_active);
+
+        let v01 = curated.iter().find(|m| m.tag == "v0.1.0-model");
+        assert!(v01.is_some(), "v0.1.0-model must exist in curated catalog");
+    }
+
+    #[test]
+    fn test_74_hermes_tools_execution_and_dry_run() {
+        let guard = TempDirGuard::new("hermes_tools_test");
+        let indexer = FileIndexer::new(vec![guard.path.clone()]);
+        let executor = PcExecutor::new(indexer.clone(), false).with_notes_dir(guard.path.clone());
+        let dry_executor = PcExecutor::new(indexer, true).with_notes_dir(guard.path.clone());
+
+        // 1. Reply tool (DryRun & Live)
+        let reply_cmd = ActionCommand {
+            action: ActionType::Reply,
+            target: Some("Answer: 42".to_string()),
+            folder: None,
+            args: Some(serde_json::json!({"text": "Answer: 42"})),
+            platform: Platform::Any,
+            confidence: 0.95,
+        };
+        let dry_reply = dry_executor.execute(&reply_cmd, false);
+        assert!(matches!(dry_reply, ExecutionResult::DryRun { .. }));
+        let live_reply = executor.execute(&reply_cmd, false);
+        match live_reply {
+            ExecutionResult::Success { details, .. } => assert_eq!(details, "Answer: 42"),
+            other => panic!("Expected Success for reply, got {:?}", other),
+        }
+
+        // 2. WriteFile tool (Tier-2 Confirmation required if false, executes when true)
+        let test_file = guard.path.join("output.txt");
+        let write_cmd = ActionCommand {
+            action: ActionType::WriteFile,
+            target: Some(test_file.to_string_lossy().to_string()),
+            folder: None,
+            args: Some(serde_json::json!({"content": "Hello from agent"})),
+            platform: Platform::Pc,
+            confidence: 0.90,
+        };
+        let unconfirmed_write = executor.execute(&write_cmd, false);
+        assert!(matches!(
+            unconfirmed_write,
+            ExecutionResult::ConfirmationRequired { .. }
+        ));
+        let live_write = executor.execute(&write_cmd, true);
+        assert!(matches!(live_write, ExecutionResult::Success { .. }));
+        assert_eq!(fs::read_to_string(&test_file).unwrap(), "Hello from agent");
+
+        // 3. ReadFile tool (Live)
+        let read_cmd = ActionCommand {
+            action: ActionType::ReadFile,
+            target: Some(test_file.to_string_lossy().to_string()),
+            folder: None,
+            args: None,
+            platform: Platform::Pc,
+            confidence: 0.92,
+        };
+        let live_read = executor.execute(&read_cmd, false);
+        match live_read {
+            ExecutionResult::Success { details, .. } => assert_eq!(details, "Hello from agent"),
+            other => panic!("Expected Success for read_file, got {:?}", other),
+        }
+
+        // 4. MemorySave tool (Live)
+        let mem_cmd = ActionCommand {
+            action: ActionType::MemorySave,
+            target: Some("user_theme".to_string()),
+            folder: None,
+            args: Some(serde_json::json!({
+                "key": "user_theme",
+                "content": "dark_mode",
+                "category": "preference"
+            })),
+            platform: Platform::Any,
+            confidence: 0.98,
+        };
+        let live_mem = executor.execute(&mem_cmd, false);
+        assert!(matches!(live_mem, ExecutionResult::Success { .. }));
     }
 }
