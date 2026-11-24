@@ -149,7 +149,10 @@ class ModelAdapter(
                             btnModelPause.visibility = View.GONE
                             btnModelResume.visibility = View.GONE
                             btnModelCancel.visibility = View.GONE
-                            notifyItemChanged(bindingAdapterPosition)
+                            val pos = adapterPosition
+                            if (pos != RecyclerView.NO_POSITION) {
+                                notifyItemChanged(pos)
+                            }
                         }
                         DownloadStatus.ERROR -> {
                             tvModelDownloadStatus.text = itemView.context.getString(R.string.model_download_failed, "")
@@ -166,7 +169,10 @@ class ModelAdapter(
             val doneCallback: (Result<Unit>) -> Unit = { result ->
                 itemView.post {
                     result.onSuccess {
-                        notifyItemChanged(bindingAdapterPosition)
+                        val pos = adapterPosition
+                        if (pos != RecyclerView.NO_POSITION) {
+                            notifyItemChanged(pos)
+                        }
                     }.onFailure { err ->
                         btnModelDownload.visibility = View.VISIBLE
                         btnModelDownload.isEnabled = true
