@@ -4,6 +4,7 @@ import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ActionType
 import com.silentexec.android.core.AppSettings
 import com.silentexec.android.core.ExecutionMode
+import com.silentexec.android.core.InferenceSource
 import com.silentexec.android.core.Platform
 import com.silentexec.android.core.SafetyTier
 import com.silentexec.android.core.ThemeMode
@@ -515,5 +516,65 @@ class AgentLoopAndThemeTest {
         assertEquals(ThemeMode.LIGHT, ThemeMode.fromString("light"))
         assertEquals(ThemeMode.SYSTEM, ThemeMode.fromString("system"))
         assertEquals(ThemeMode.SYSTEM, ThemeMode.fromString("invalid_theme"))
+    }
+
+    @Test
+    fun test15_appSettings_openAiCompatInferenceSourcePersistence() {
+        val settings = AppSettings()
+
+        // Default inference source is OFFLINE
+        assertEquals(InferenceSource.OFFLINE, settings.inferenceSource)
+
+        // Switch to OPENAI_COMPAT
+        settings.inferenceSource = InferenceSource.OPENAI_COMPAT
+        assertEquals(InferenceSource.OPENAI_COMPAT, settings.inferenceSource)
+
+        // Default OpenAI config
+        assertEquals("https://api.openai.com/v1", settings.openAiApiBase)
+        assertEquals("gpt-4o-mini", settings.openAiApiModel)
+        assertEquals("", settings.openAiApiKey)
+
+        // Custom config
+        settings.openAiApiBase = "https://openrouter.ai/api/v1"
+        settings.openAiApiModel = "qwen/qwen-2.5-7b-instruct"
+        settings.openAiApiKey = "sk-or-v1-testkey"
+
+        assertEquals("https://openrouter.ai/api/v1", settings.openAiApiBase)
+        assertEquals("qwen/qwen-2.5-7b-instruct", settings.openAiApiModel)
+        assertEquals("sk-or-v1-testkey", settings.openAiApiKey)
+
+        // Helper fromString
+        assertEquals(InferenceSource.OPENAI_COMPAT, InferenceSource.fromString("OPENAI_COMPAT"))
+        assertEquals(InferenceSource.OPENAI_COMPAT, InferenceSource.fromString("openai_compat"))
+        assertEquals(InferenceSource.LAN_BRIDGE, InferenceSource.fromString("lan_bridge"))
+        assertEquals(InferenceSource.OFFLINE, InferenceSource.fromString("offline"))
+        assertEquals(InferenceSource.OFFLINE, InferenceSource.fromString("unknown"))
+    }
+
+    @Test
+    fun test16_agentLoopRunner_withInferenceSourceAndDecider() {
+        val settings = AppSettings().apply {
+            executionMode = ExecutionMode.SILENT
+            fastRouterEnabled = false
+            inferenceSource = InferenceSource.OPENAI_COMPAT
+        }
+        val executor = AndroidActionExecutor()
+        val updates = mutableListOf<AgentStepUpdate>()
+
+        val runner = AgentLoopRunner(
+            executor = executor,
+            settings = settings,
+            stepDelayMs = 0L,
+            decider = {
+                """{"action":"open_android_app","target":"com.google.android.youtube","platform":"android","confidence":1.0}"""
+            }
+        )
+
+        runner.run("افتح يوتيوب وشغل مقطع", onUpdate = { updates.add(it) })
+
+        val started = updates.filterIsInstance<AgentStepUpdate.StepStarted>()
+        assertEquals(1, started.size)
+        assertEquals(ActionType.OPEN_ANDROID_APP, started[0].command.action)
+        assertEquals("com.google.android.youtube", started[0].command.target)
     }
 }

@@ -82,6 +82,7 @@
     <string name="settings_engine_title">Inference Engine</string>
     <string name="engine_offline">Offline (On-Device Llama)</string>
     <string name="engine_bridge">LAN Bridge (Remote PC)</string>
+    <string name="engine_cloud">Cloud API (OpenAI/Gemini)</string>
     <string name="settings_fast_router">Fast Rule Router (&lt;15ms)</string>
     <string name="settings_bridge_config_title">LAN Bridge Configuration</string>
     <string name="host_hint">PC IP (e.g. 192.168.1.100)</string>
@@ -89,6 +90,12 @@
     <string name="token_hint">Secret Token</string>
     <string name="save_bridge">Save Bridge Config</string>
     <string name="bridge_saved">LAN Bridge configuration saved</string>
+    <string name="settings_cloud_config_title">Cloud API Configuration</string>
+    <string name="cloud_base_hint">Base URL (e.g. https://api.openai.com/v1)</string>
+    <string name="cloud_model_hint">Model (e.g. gpt-4o-mini)</string>
+    <string name="cloud_key_hint">API Key (optional if local)</string>
+    <string name="save_cloud">Save Cloud Config</string>
+    <string name="cloud_saved">Cloud API configuration saved</string>
     <string name="settings_permissions_title">System Permissions</string>
     <string name="perm_accessibility">Accessibility Service</string>
     <string name="perm_granted">Granted</string>

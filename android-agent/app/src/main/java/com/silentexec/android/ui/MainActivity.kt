@@ -128,12 +128,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rgInferenceSource: RadioGroup
     private lateinit var rbEngineOffline: RadioButton
     private lateinit var rbEngineBridge: RadioButton
+    private lateinit var rbEngineCloud: RadioButton
     private lateinit var cbFastRouter: CheckBox
     private lateinit var cardBridgeConfig: View
     private lateinit var etBridgeHost: EditText
     private lateinit var etBridgePort: EditText
     private lateinit var etBridgeToken: EditText
     private lateinit var btnSaveBridge: Button
+    private lateinit var cardCloudConfig: View
+    private lateinit var etCloudApiBase: EditText
+    private lateinit var etCloudApiModel: EditText
+    private lateinit var etCloudApiKey: EditText
+    private lateinit var btnSaveCloud: Button
     private lateinit var tvPermAccessibilityStatus: TextView
     private lateinit var btnOpenAccessibilitySettings: Button
     private lateinit var tvAppVersion: TextView
@@ -282,12 +288,18 @@ class MainActivity : AppCompatActivity() {
         rgInferenceSource = findViewById(R.id.rgInferenceSource)
         rbEngineOffline = findViewById(R.id.rbEngineOffline)
         rbEngineBridge = findViewById(R.id.rbEngineBridge)
+        rbEngineCloud = findViewById(R.id.rbEngineCloud)
         cbFastRouter = findViewById(R.id.cbFastRouter)
         cardBridgeConfig = findViewById(R.id.cardBridgeConfig)
         etBridgeHost = findViewById(R.id.etBridgeHost)
         etBridgePort = findViewById(R.id.etBridgePort)
         etBridgeToken = findViewById(R.id.etBridgeToken)
         btnSaveBridge = findViewById(R.id.btnSaveBridge)
+        cardCloudConfig = findViewById(R.id.cardCloudConfig)
+        etCloudApiBase = findViewById(R.id.etCloudApiBase)
+        etCloudApiModel = findViewById(R.id.etCloudApiModel)
+        etCloudApiKey = findViewById(R.id.etCloudApiKey)
+        btnSaveCloud = findViewById(R.id.btnSaveCloud)
         tvPermAccessibilityStatus = findViewById(R.id.tvPermAccessibilityStatus)
         btnOpenAccessibilitySettings = findViewById(R.id.btnOpenAccessibilitySettings)
         tvAppVersion = findViewById(R.id.tvAppVersion)
@@ -342,11 +354,13 @@ class MainActivity : AppCompatActivity() {
         }
         tvHeaderMode.text = getString(R.string.header_mode_label, modeStr)
 
-        val modelStr = if (settings.inferenceSource == InferenceSource.LAN_BRIDGE) {
-            "LAN Bridge"
-        } else {
-            val file = settings.activeModelFile
-            if (file.isNotBlank()) file.removeSuffix(".gguf") else "None"
+        val modelStr = when (settings.inferenceSource) {
+            InferenceSource.LAN_BRIDGE -> "LAN Bridge"
+            InferenceSource.OPENAI_COMPAT -> settings.openAiApiModel.ifBlank { "Cloud API" }
+            InferenceSource.OFFLINE -> {
+                val file = settings.activeModelFile
+                if (file.isNotBlank()) file.removeSuffix(".gguf") else "None"
+            }
         }
         tvHeaderModel.text = getString(R.string.header_model_label, modelStr)
 
@@ -823,23 +837,44 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 5. Inference Engine
-        if (settings.inferenceSource == InferenceSource.LAN_BRIDGE) {
-            rbEngineBridge.isChecked = true
-            cardBridgeConfig.visibility = View.VISIBLE
-        } else {
-            rbEngineOffline.isChecked = true
-            cardBridgeConfig.visibility = View.GONE
+        when (settings.inferenceSource) {
+            InferenceSource.LAN_BRIDGE -> {
+                rbEngineBridge.isChecked = true
+                cardBridgeConfig.visibility = View.VISIBLE
+                cardCloudConfig.visibility = View.GONE
+            }
+            InferenceSource.OPENAI_COMPAT -> {
+                rbEngineCloud.isChecked = true
+                cardBridgeConfig.visibility = View.GONE
+                cardCloudConfig.visibility = View.VISIBLE
+            }
+            InferenceSource.OFFLINE -> {
+                rbEngineOffline.isChecked = true
+                cardBridgeConfig.visibility = View.GONE
+                cardCloudConfig.visibility = View.GONE
+            }
         }
 
         rgInferenceSource.setOnCheckedChangeListener { _, checkedId ->
-            if (checkedId == R.id.rbEngineBridge) {
-                settings.inferenceSource = InferenceSource.LAN_BRIDGE
-                cardBridgeConfig.visibility = View.VISIBLE
-            } else {
-                settings.inferenceSource = InferenceSource.OFFLINE
-                cardBridgeConfig.visibility = View.GONE
-                loadActiveModelIfAvailable()
+            when (checkedId) {
+                R.id.rbEngineBridge -> {
+                    settings.inferenceSource = InferenceSource.LAN_BRIDGE
+                    cardBridgeConfig.visibility = View.VISIBLE
+                    cardCloudConfig.visibility = View.GONE
+                }
+                R.id.rbEngineCloud -> {
+                    settings.inferenceSource = InferenceSource.OPENAI_COMPAT
+                    cardBridgeConfig.visibility = View.GONE
+                    cardCloudConfig.visibility = View.VISIBLE
+                }
+                else -> {
+                    settings.inferenceSource = InferenceSource.OFFLINE
+                    cardBridgeConfig.visibility = View.GONE
+                    cardCloudConfig.visibility = View.GONE
+                    loadActiveModelIfAvailable()
+                }
             }
+            updateHeaderStatus()
         }
 
         cbFastRouter.isChecked = settings.fastRouterEnabled
@@ -857,6 +892,19 @@ class MainActivity : AppCompatActivity() {
             settings.bridgePort = etBridgePort.text.toString().toIntOrNull() ?: 8765
             settings.bridgeToken = etBridgeToken.text.toString().trim()
             Toast.makeText(this, R.string.bridge_saved, Toast.LENGTH_SHORT).show()
+        }
+
+        // 6b. Cloud API Config
+        etCloudApiBase.setText(settings.openAiApiBase)
+        etCloudApiModel.setText(settings.openAiApiModel)
+        etCloudApiKey.setText(settings.openAiApiKey)
+
+        btnSaveCloud.setOnClickListener {
+            settings.openAiApiBase = etCloudApiBase.text.toString().trim()
+            settings.openAiApiModel = etCloudApiModel.text.toString().trim()
+            settings.openAiApiKey = etCloudApiKey.text.toString().trim()
+            updateHeaderStatus()
+            Toast.makeText(this, R.string.cloud_saved, Toast.LENGTH_SHORT).show()
         }
 
         // 7. Accessibility Permission Card

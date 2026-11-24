@@ -82,6 +82,7 @@
     <string name="settings_engine_title">محرك الاستنتاج</string>
     <string name="engine_offline">محلي (على الجهاز دون إنترنت)</string>
     <string name="engine_bridge">جسر الشبكة المحلية (الكمبيوتر)</string>
+    <string name="engine_cloud">سحابي (OpenAI / Gemini API)</string>
     <string name="settings_fast_router">الموجّه السريع (&lt;15 ملي ثانية)</string>
     <string name="settings_bridge_config_title">إعدادات جسر الشبكة المحلية</string>
     <string name="host_hint">عنوان IP للكمبيوتر (مثال: 192.168.1.100)</string>
@@ -89,6 +90,12 @@
     <string name="token_hint">الرمز السري</string>
     <string name="save_bridge">حفظ إعدادات الجسر</string>
     <string name="bridge_saved">تم حفظ إعدادات جسر الشبكة بنجاح</string>
+    <string name="settings_cloud_config_title">إعدادات مزود الذكاء الاصطناعي السحابي</string>
+    <string name="cloud_base_hint">رابط المزود (مثال: https://api.openai.com/v1)</string>
+    <string name="cloud_model_hint">اسم النموذج (مثال: gpt-4o-mini أو qwen2.5)</string>
+    <string name="cloud_key_hint">مفتاح API (اختياري للشبكة المحلية)</string>
+    <string name="save_cloud">حفظ إعدادات API</string>
+    <string name="cloud_saved">تم حفظ إعدادات المزود السحابي بنجاح</string>
     <string name="settings_permissions_title">أذونات النظام</string>
     <string name="perm_accessibility">خدمة إمكانية الوصول</string>
     <string name="perm_granted">ممنوح</string>

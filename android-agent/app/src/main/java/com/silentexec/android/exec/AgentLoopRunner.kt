@@ -12,6 +12,7 @@ import com.silentexec.android.core.SafetyDecision
 import com.silentexec.android.core.SafetyGate
 import com.silentexec.android.core.SafetyTier
 import com.silentexec.android.net.LanBridgeClient
+import com.silentexec.android.nlp.CloudApiClient
 import com.silentexec.android.nlp.OnDeviceLlamaEngine
 import com.silentexec.android.nlp.PlanOrAction
 import com.silentexec.android.nlp.PromptFormatter
@@ -62,6 +63,7 @@ class AgentLoopRunner(
     private val settings: AppSettings,
     private val llamaEngine: OnDeviceLlamaEngine? = null,
     private val bridgeClient: LanBridgeClient? = null,
+    private val cloudApiClient: CloudApiClient? = null,
     private val grammarText: String = "",
     private val stepDelayMs: Long = 600L,
     private val uiObserver: (() -> List<String>)? = null,
@@ -363,6 +365,20 @@ class AgentLoopRunner(
 
     private fun obtainDecision(prompt: String, fallbackGoal: String): String {
         decider?.let { return it(prompt) }
+
+        if (settings.inferenceSource == InferenceSource.OPENAI_COMPAT) {
+            val client = cloudApiClient ?: CloudApiClient(
+                baseUrl = settings.openAiApiBase,
+                model = settings.openAiApiModel,
+                apiKey = settings.openAiApiKey
+            )
+            val res = client.generateCompletion(
+                systemPrompt = PromptFormatter.DEFAULT_SYSTEM_PROMPT,
+                userPrompt = prompt
+            )
+            val raw = res.getOrThrow()
+            return PromptFormatter.extractActionJson(raw)
+        }
 
         if (settings.inferenceSource == InferenceSource.LAN_BRIDGE && bridgeClient != null) {
             val host = settings.bridgeHost

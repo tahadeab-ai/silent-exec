@@ -8,6 +8,7 @@ import com.silentexec.android.BuildConfig
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -55,28 +56,69 @@ class AppUpdater(
             }
         }
 
-        // 2. Download into .part
-        val conn = URL(release.apkDownloadUrl).openConnection() as HttpURLConnection
+        // 2. Resumable download into .part
+        val existingBytes = if (partFile.exists()) partFile.length() else 0L
+
+        var conn = URL(release.apkDownloadUrl).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         conn.connectTimeout = 15000
         conn.readTimeout = 30000
         conn.instanceFollowRedirects = true
-
-        if (conn.responseCode !in 200..299) {
-            throw IllegalStateException("Failed to download APK: HTTP ${conn.responseCode} from ${release.apkDownloadUrl}")
+        if (existingBytes > 0) {
+            conn.setRequestProperty("Range", "bytes=$existingBytes-")
         }
 
-        val totalBytes = conn.contentLengthLong
-        var downloadedBytes = 0L
+        var responseCode = conn.responseCode
+        if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP || responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == 307 || responseCode == 308) {
+            val redirectUrl = conn.getHeaderField("Location")
+            conn.disconnect()
+            if (!redirectUrl.isNullOrEmpty()) {
+                conn = URL(redirectUrl).openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 30000
+                conn.instanceFollowRedirects = true
+                if (existingBytes > 0) {
+                    conn.setRequestProperty("Range", "bytes=$existingBytes-")
+                }
+                responseCode = conn.responseCode
+            }
+        }
+
+        val isPartial = (responseCode == HttpURLConnection.HTTP_PARTIAL)
+        val appendMode = isPartial && existingBytes > 0
+
+        if (responseCode !in 200..299) {
+            throw IllegalStateException("Failed to download APK: HTTP $responseCode from ${release.apkDownloadUrl}")
+        }
+
+        val contentLength = conn.contentLengthLong
+        val totalBytes = when {
+            isPartial -> existingBytes + contentLength
+            contentLength > 0 -> contentLength
+            else -> existingBytes
+        }
+
+        var downloadedBytes = if (appendMode) existingBytes else 0L
+        if (!appendMode && existingBytes > 0) {
+            partFile.delete()
+        }
+
+        val output = RandomAccessFile(partFile, "rw")
+        if (appendMode) {
+            output.seek(existingBytes)
+        } else {
+            output.setLength(0)
+        }
 
         conn.inputStream.use { input ->
-            FileOutputStream(partFile).use { output ->
+            output.use { raf ->
                 val buffer = ByteArray(32768)
                 var read: Int
                 var lastPercent = -1
 
                 while (input.read(buffer).also { read = it } != -1) {
-                    output.write(buffer, 0, read)
+                    raf.write(buffer, 0, read)
                     downloadedBytes += read
 
                     if (totalBytes > 0) {

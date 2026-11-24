@@ -30,7 +30,8 @@ enum class ThemeMode {
 
 enum class InferenceSource {
     OFFLINE,
-    LAN_BRIDGE;
+    LAN_BRIDGE,
+    OPENAI_COMPAT;
 
     companion object {
         fun fromString(value: String): InferenceSource =
@@ -185,6 +186,18 @@ class AppSettings(
         get() = prefs.getString(KEY_BRIDGE_TOKEN, "") ?: ""
         set(value) = prefs.edit().putString(KEY_BRIDGE_TOKEN, value).apply()
 
+    var openAiApiBase: String
+        get() = prefs.getString(KEY_OPENAI_API_BASE, DEFAULT_OPENAI_API_BASE) ?: DEFAULT_OPENAI_API_BASE
+        set(value) = prefs.edit().putString(KEY_OPENAI_API_BASE, value).apply()
+
+    var openAiApiModel: String
+        get() = prefs.getString(KEY_OPENAI_API_MODEL, DEFAULT_OPENAI_API_MODEL) ?: DEFAULT_OPENAI_API_MODEL
+        set(value) = prefs.edit().putString(KEY_OPENAI_API_MODEL, value).apply()
+
+    var openAiApiKey: String
+        get() = prefs.getString(KEY_OPENAI_API_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_OPENAI_API_KEY, value).apply()
+
     fun applyLocale() {
         runCatching {
             val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(language)
@@ -221,7 +234,12 @@ class AppSettings(
         const val KEY_BRIDGE_HOST = "setting_bridge_host"
         const val KEY_BRIDGE_PORT = "setting_bridge_port"
         const val KEY_BRIDGE_TOKEN = "setting_bridge_token"
+        const val KEY_OPENAI_API_BASE = "setting_openai_api_base"
+        const val KEY_OPENAI_API_MODEL = "setting_openai_api_model"
+        const val KEY_OPENAI_API_KEY = "setting_openai_api_key"
 
         const val DEFAULT_LANGUAGE = "ar"
+        const val DEFAULT_OPENAI_API_BASE = "https://api.openai.com/v1"
+        const val DEFAULT_OPENAI_API_MODEL = "gpt-4o-mini"
     }
 }
