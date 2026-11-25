@@ -50,6 +50,18 @@ pub struct ModelReleaseInfo {
     pub is_active: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_url: Option<String>,
+    #[serde(default)]
+    pub params: String,
+    #[serde(default)]
+    pub context_window: String,
+    #[serde(default)]
+    pub ram_required_gb: String,
+    #[serde(default)]
+    pub speed_tier: String,
+    #[serde(default)]
+    pub recommended_for: String,
+    #[serde(default)]
+    pub is_recommended: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -550,6 +562,14 @@ impl ModelManager {
                 );
                 let is_cached = cache_dir.join(&filename).exists();
                 let is_active = active_tag == Some(tag);
+                let (
+                    params,
+                    context_window,
+                    ram_required_gb,
+                    speed_tier,
+                    recommended_for,
+                    is_recommended,
+                ) = Self::specs_for_model(tag, &filename);
                 return Ok(ModelReleaseInfo {
                     tag: tag.to_string(),
                     name: display_name.to_string(),
@@ -558,6 +578,12 @@ impl ModelManager {
                     is_cached,
                     is_active,
                     download_url: Some(download_url),
+                    params,
+                    context_window,
+                    ram_required_gb,
+                    speed_tier,
+                    recommended_for,
+                    is_recommended,
                 });
             }
         }
@@ -592,6 +618,52 @@ impl ModelManager {
             cache_dir,
             active_tag,
         )
+    }
+
+    /// Returns structured hardware & capability specs for a known model tag or filename.
+    pub fn specs_for_model(
+        tag: &str,
+        filename: &str,
+    ) -> (String, String, String, String, String, bool) {
+        let lower_tag = tag.to_lowercase();
+        let lower_file = filename.to_lowercase();
+        if lower_tag.contains("lfm3") || lower_file.contains("lfm3") {
+            (
+                "1.7B".to_string(),
+                "32K".to_string(),
+                "1.4 GB".to_string(),
+                "Ultra Fast".to_string(),
+                "أفضل وكيل محلي سريع — LFM3 / Fast Edge Agent".to_string(),
+                true,
+            )
+        } else if lower_tag.contains("qwen3") || lower_file.contains("qwen3") {
+            (
+                "1.7B".to_string(),
+                "32K".to_string(),
+                "1.4 GB".to_string(),
+                "Fast".to_string(),
+                "أقوى عربية وتفكير — Qwen3 / Strong Arabic & Reasoning".to_string(),
+                true,
+            )
+        } else if lower_file.contains("0.5b") {
+            (
+                "0.5B".to_string(),
+                "32K".to_string(),
+                "0.6 GB".to_string(),
+                "Ultra Fast".to_string(),
+                "خفيف للأجهزة الضعيفة — Ultra-Light".to_string(),
+                false,
+            )
+        } else {
+            (
+                "1.5B".to_string(),
+                "32K".to_string(),
+                "1.2 GB".to_string(),
+                "Balanced".to_string(),
+                "متوازن للأجهزة المتوسطة — Balanced Arabic Edge".to_string(),
+                false,
+            )
+        }
     }
 
     /// Curated Community Edge Models direct GGUF entries
@@ -635,6 +707,14 @@ impl ModelManager {
             .map(|(tag, name, filename, size_bytes, download_url)| {
                 let is_cached = cache_dir.join(filename).exists();
                 let is_active = active_tag == Some(tag);
+                let (
+                    params,
+                    context_window,
+                    ram_required_gb,
+                    speed_tier,
+                    recommended_for,
+                    is_recommended,
+                ) = Self::specs_for_model(tag, filename);
                 ModelReleaseInfo {
                     tag: tag.to_string(),
                     name: name.to_string(),
@@ -643,6 +723,12 @@ impl ModelManager {
                     is_cached,
                     is_active,
                     download_url,
+                    params,
+                    context_window,
+                    ram_required_gb,
+                    speed_tier,
+                    recommended_for,
+                    is_recommended,
                 }
             })
             .collect()
@@ -722,6 +808,14 @@ impl ModelManager {
                     if !gguf_filename.is_empty() {
                         let is_cached = self.cache_dir.join(&gguf_filename).exists();
                         let is_active = active_tag == Some(tag);
+                        let (
+                            params,
+                            context_window,
+                            ram_required_gb,
+                            speed_tier,
+                            recommended_for,
+                            is_recommended,
+                        ) = Self::specs_for_model(tag, &gguf_filename);
 
                         models.push(ModelReleaseInfo {
                             tag: tag.to_string(),
@@ -731,6 +825,12 @@ impl ModelManager {
                             is_cached,
                             is_active,
                             download_url: None,
+                            params,
+                            context_window,
+                            ram_required_gb,
+                            speed_tier,
+                            recommended_for,
+                            is_recommended,
                         });
                     }
                 }

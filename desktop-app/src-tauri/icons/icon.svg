@@ -1,33 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1e1b4b"/>
-      <stop offset="50%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#022c22"/>
+    <linearGradient id="bgGrad" x1="48" y1="32" x2="464" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#050810"/>
     </linearGradient>
-    <linearGradient id="boltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34d399"/>
-      <stop offset="50%" stop-color="#10b981"/>
-      <stop offset="100%" stop-color="#059669"/>
+    <linearGradient id="sparkGrad" x1="150" y1="96" x2="384" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="55%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
     </linearGradient>
-    <linearGradient id="indigoGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#818cf8"/>
-      <stop offset="60%" stop-color="#6366f1"/>
+    <linearGradient id="cursorGrad" x1="112" y1="184" x2="216" y2="328" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#10B981"/>
     </linearGradient>
   </defs>
-
-  <!-- Terminal Window Background -->
-  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#bgGrad)" stroke="#10b981" stroke-width="8" stroke-opacity="0.6"/>
-  
-  <!-- Terminal Top Header Bar -->
-  <line x1="32" y1="120" x2="480" y2="120" stroke="#334155" stroke-width="3"/>
-  <circle cx="80" cy="76" r="10" fill="#ef4444" opacity="0.8"/>
-  <circle cx="112" cy="76" r="10" fill="#f59e0b" opacity="0.8"/>
-  <circle cx="144" cy="76" r="10" fill="#10b981" opacity="0.8"/>
-
-  <!-- Command prompt glyph '>' in indigo -->
-  <path d="M88 180 L136 220 L88 260" fill="none" stroke="url(#indigoGlow)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-
-  <!-- Lightning Bolt Emblem -->
-  <polygon points="288,140 196,280 268,280 224,400 356,244 284,244" fill="url(#boltGrad)"/>
+  <rect x="20" y="20" width="472" height="472" rx="116" fill="url(#bgGrad)" stroke="url(#sparkGrad)" stroke-width="14"/>
+  <path d="M124 188L198 256L124 324" stroke="url(#cursorGrad)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M308 110L216 264H284L248 402L384 234H312L344 110Z" fill="url(#sparkGrad)"/>
 </svg>

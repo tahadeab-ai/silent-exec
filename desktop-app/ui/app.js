@@ -10,8 +10,10 @@
   // --- Complete Localization Dictionaries ---
   const I18N = {
     ar: {
-      app_title: 'SilentExec Desktop v1.1.0',
-      version_label: 'الإصدار الحالي: v1.1.0 (Windows x86_64)',
+      app_title: 'SilentExec Desktop v1.2.0',
+      version_label: 'الإصدار الحالي: v1.2.0 (Windows x86_64)',
+      thought_label: 'التفكير',
+      btn_install_update: '⬇️ تحميل وتثبيت التحديث الآن',
       status_ready: 'جاهز',
       status_not_downloaded: 'غير محمّل',
       btn_manage_models: 'النماذج',
@@ -147,8 +149,10 @@
       quick_ex_5: 'ارجع'
     },
     en: {
-      app_title: 'SilentExec Desktop v1.1.0',
-      version_label: 'Current Version: v1.1.0 (Windows x86_64)',
+      app_title: 'SilentExec Desktop v1.2.0',
+      version_label: 'Current Version: v1.2.0 (Windows x86_64)',
+      thought_label: 'Thinking',
+      btn_install_update: '⬇️ Download & Install Update',
       status_ready: 'Ready',
       status_not_downloaded: 'Not Downloaded',
       btn_manage_models: 'Models',
@@ -710,6 +714,15 @@
         if (isConfirm) { pillClass = 'awaiting_confirm'; statusIcon = '?'; }
 
         const actionName = step.action || step.stage;
+        if (step.thought && step.thought.trim().length > 0) {
+          stepsPillsHtml += `
+            <div class="step-thought-block">
+              <span class="thought-icon">💭</span>
+              <span class="thought-label">${escapeHtml(t.thought_label || 'التفكير')}:</span>
+              <span class="thought-text">${escapeHtml(step.thought)}</span>
+            </div>
+          `;
+        }
         stepsPillsHtml += `
           <button class="step-pill-btn ${pillClass}" onclick="window.silentExec.toggleInspector('${turnId}')" title="فحص تفاصيل الخطوة">
             <span>⚡</span>
@@ -922,6 +935,16 @@
           `;
         }
 
+        const specsHtml = `
+          <div class="model-specs-row">
+            ${m.params ? `<span class="model-spec-chip">${escapeHtml(m.params)}</span>` : ''}
+            ${m.context_window ? `<span class="model-spec-chip">${escapeHtml(m.context_window)} ctx</span>` : ''}
+            ${m.ram_required_gb ? `<span class="model-spec-chip">RAM ${escapeHtml(m.ram_required_gb)}</span>` : ''}
+            ${m.speed_tier ? `<span class="model-spec-chip speed">${escapeHtml(m.speed_tier)}</span>` : ''}
+          </div>
+          ${m.recommended_for ? `<div class="model-rec-note">${m.is_recommended ? '⭐ ' : ''}${escapeHtml(m.recommended_for)}</div>` : ''}
+        `;
+
         card.innerHTML = `
           <div class="model-card-header">
             <div>
@@ -931,8 +954,13 @@
                 <span>${escapeHtml(m.tag)}</span>
               </div>
             </div>
-            ${cardState === 'active' ? `<span class="status-pill ready active-badge">${t.model_active}</span>` : ''}
+            <div style="display:flex; gap:6px; align-items:center;">
+              ${m.is_recommended ? `<span class="status-pill recommended-badge">⭐</span>` : ''}
+              ${cardState === 'active' ? `<span class="status-pill ready active-badge">${t.model_active}</span>` : ''}
+            </div>
           </div>
+
+          ${specsHtml}
 
           <div class="download-progress-wrap" id="progWrap_${m.tag}" style="${showProgress ? '' : 'display: none;'}">
             <div class="progress-bar-track">
@@ -1170,62 +1198,160 @@
   }
 
   function renderHeaderModelSwitcher() {
-    const select = document.getElementById('headerModelSelector');
+    const labelEl = document.getElementById('headerModelLabel');
+    const popover = document.getElementById('headerModelPopover');
     const badge = document.getElementById('headerModelStatusBadge');
-    if (!select) return;
+    if (!labelEl || !popover) return;
 
     const t = I18N[AppState.lang] || I18N.ar;
     const models = AppState.modelsCatalog && AppState.modelsCatalog.length > 0
       ? AppState.modelsCatalog
       : [
-          { tag: 'qwen3-1.7b-gguf', name: 'Qwen3-1.7B', is_cached: false, is_active: false },
-          { tag: 'liquidai-lfm3-1.7b', name: 'LFM3-1.7B', is_cached: false, is_active: false },
-          { tag: 'v0.2.0-model', name: 'v0.2.0-model', is_cached: false, is_active: false }
+          {
+            tag: 'liquidai-lfm3-1.7b',
+            name: 'LiquidAI/LFM3-1.7B',
+            size_bytes: 1099627808,
+            params: '1.7B',
+            ram_required_gb: '1.4 GB',
+            speed_tier: 'Ultra Fast',
+            recommended_for: 'Fast Edge Agent',
+            is_recommended: true,
+            is_cached: false,
+            is_active: false
+          },
+          {
+            tag: 'qwen3-1.7b-gguf',
+            name: 'Qwen3-1.7B-GGUF',
+            size_bytes: 1107409472,
+            params: '1.7B',
+            ram_required_gb: '1.4 GB',
+            speed_tier: 'Fast',
+            recommended_for: 'Strong Arabic & Reasoning',
+            is_recommended: true,
+            is_cached: false,
+            is_active: false
+          },
+          {
+            tag: 'v0.2.0-model',
+            name: 'Qwen2.5-1.5B',
+            size_bytes: 986000000,
+            params: '1.5B',
+            ram_required_gb: '1.2 GB',
+            speed_tier: 'Balanced',
+            recommended_for: 'Balanced Arabic Edge',
+            is_recommended: false,
+            is_cached: false,
+            is_active: false
+          }
         ];
 
-    select.innerHTML = '';
-    models.forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = `local:${m.tag}`;
+    const items = models.map(m => {
       const shortLabel = m.tag === 'qwen3-1.7b-gguf'
-        ? 'Qwen3-1.7B (GGUF)'
+        ? 'Qwen3-1.7B'
         : m.tag === 'liquidai-lfm3-1.7b'
-          ? 'LFM3-1.7B (GGUF)'
+          ? 'LFM3-1.7B'
           : m.tag;
-      opt.textContent = `${shortLabel} ${m.is_cached ? '✓' : '⬇'}`;
-      select.appendChild(opt);
+      const sizeMb = m.size_bytes ? `${(m.size_bytes / (1024 * 1024)).toFixed(0)} MB` : '';
+      const isSelected = AppState.backend === 'local_llama' && (
+        m.is_active || m.tag === AppState.activeModelTag || (!AppState.activeModelTag && m === models[0])
+      );
+      return {
+        value: `local:${m.tag}`,
+        title: shortLabel,
+        subtitle: m.recommended_for || m.name || '',
+        meta: [m.params, m.speed_tier, sizeMb].filter(Boolean).join(' • '),
+        ready: Boolean(m.is_cached),
+        recommended: Boolean(m.is_recommended),
+        selected: isSelected
+      };
     });
 
-    const ollamaOpt = document.createElement('option');
-    ollamaOpt.value = 'backend:ollama';
-    ollamaOpt.textContent = `Ollama (${AppState.ollama_model || 'local'})`;
-    select.appendChild(ollamaOpt);
+    items.push({
+      value: 'backend:ollama',
+      title: `Ollama (${AppState.ollama_model || 'local'})`,
+      subtitle: AppState.ollama_url || 'http://127.0.0.1:11434',
+      meta: 'Local Daemon',
+      ready: true,
+      recommended: false,
+      selected: AppState.backend === 'ollama'
+    });
 
-    const cloudOpt = document.createElement('option');
-    cloudOpt.value = 'backend:openai_compat';
-    cloudOpt.textContent = `Cloud API (${AppState.openai_api_model || 'OpenAI'})`;
-    select.appendChild(cloudOpt);
+    items.push({
+      value: 'backend:openai_compat',
+      title: `Cloud API (${AppState.openai_api_model || 'OpenAI'})`,
+      subtitle: AppState.openai_api_base || 'https://api.openai.com/v1',
+      meta: 'Cloud / Custom',
+      ready: Boolean(AppState.openai_api_key && AppState.openai_api_key.trim().length > 0) || Boolean(AppState.openai_api_base),
+      recommended: false,
+      selected: AppState.backend === 'openai_compat'
+    });
 
-    let isReady = true;
-    if (AppState.backend === 'ollama') {
-      select.value = 'backend:ollama';
-      isReady = true;
-    } else if (AppState.backend === 'openai_compat') {
-      select.value = 'backend:openai_compat';
-      isReady = Boolean(AppState.openai_api_key && AppState.openai_api_key.trim().length > 0) || Boolean(AppState.openai_api_base);
-    } else {
-      const activeObj = models.find(m => m.is_active) || models.find(m => m.tag === AppState.activeModelTag) || models[0];
-      if (activeObj) {
-        select.value = `local:${activeObj.tag}`;
-        isReady = Boolean(activeObj.is_cached);
-      } else {
-        isReady = false;
-      }
-    }
+    const selectedItem = items.find(i => i.selected) || items[0];
+    labelEl.textContent = selectedItem ? selectedItem.title : 'LFM3-1.7B';
 
+    popover.innerHTML = items.map(item => `
+      <button type="button" class="model-popover-item ${item.selected ? 'active' : ''}" data-value="${escapeHtml(item.value)}" role="option" aria-selected="${item.selected}">
+        <div class="popover-item-main">
+          <span class="popover-status-dot ${item.ready ? 'ready' : 'missing'}"></span>
+          <div class="popover-item-text">
+            <div class="popover-item-title">
+              <span>${escapeHtml(item.title)}</span>
+              ${item.recommended ? '<span class="popover-rec-tag">⭐</span>' : ''}
+            </div>
+            ${item.subtitle ? `<div class="popover-item-sub">${escapeHtml(item.subtitle)}</div>` : ''}
+          </div>
+        </div>
+        <div class="popover-item-right">
+          ${item.meta ? `<span class="popover-size-tag">${escapeHtml(item.meta)}</span>` : ''}
+        </div>
+      </button>
+    `).join('');
+
+    popover.querySelectorAll('.model-popover-item').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        popover.style.display = 'none';
+        const trigger = document.getElementById('headerModelTrigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        await handleHeaderModelSelection(btn.dataset.value);
+      });
+    });
+
+    const isReady = selectedItem ? selectedItem.ready : false;
     if (badge) {
       badge.textContent = isReady ? t.status_ready : t.status_not_downloaded;
       badge.className = `header-model-status ${isReady ? 'ready' : 'missing'}`;
+    }
+  }
+
+  async function handleHeaderModelSelection(val) {
+    if (!val) return;
+    if (val.startsWith('backend:')) {
+      AppState.backend = val.replace('backend:', '');
+      updateBackendDisplay();
+      renderHeaderModelSwitcher();
+      await saveCurrentConfig();
+      showToast(`${AppState.backend} active`);
+    } else if (val.startsWith('local:')) {
+      const tag = val.replace('local:', '');
+      const modelObj = (AppState.modelsCatalog || []).find(m => m.tag === tag);
+      AppState.backend = 'local_llama';
+      AppState.activeModelTag = tag;
+      updateBackendDisplay();
+      if (modelObj && modelObj.is_cached) {
+        try {
+          await invokeTauri('activate_model', { tag });
+          await refreshHeaderModelSwitcher();
+          showToast(`Activated ${tag}`);
+        } catch (e) {
+          showToast(String(e));
+        }
+      } else {
+        await saveCurrentConfig();
+        renderHeaderModelSwitcher();
+        switchView('models');
+        showToast(AppState.lang === 'ar' ? `يرجى تحميل النموذج ${tag} أولاً` : `Please download ${tag} first`);
+      }
     }
   }
 
@@ -1283,9 +1409,95 @@
       refreshHeaderModelSwitcher();
       renderBuiltInSkills();
       renderMcpPresets();
+      checkAppUpdateSilent();
+      registerUpdateProgressListener();
     } catch (e) {
       console.error('Init failed:', e);
     }
+  }
+
+  function renderUpdateBannerAndCard(res) {
+    const t = I18N[AppState.lang] || I18N.ar;
+    const topBadge = document.getElementById('topUpdateBadge');
+    const topBadgeText = document.getElementById('topUpdateBadgeText');
+    const box = document.getElementById('updateStatusMsg');
+
+    if (res && res.update_available) {
+      if (topBadge) {
+        topBadge.style.display = 'inline-flex';
+        if (topBadgeText) topBadgeText.textContent = res.latest_version;
+      }
+      if (box) {
+        box.style.display = 'block';
+        box.innerHTML = `
+          <div class="update-available-row">
+            <span>${escapeHtml(t.update_available)} <strong>${escapeHtml(res.latest_version)}</strong></span>
+            <button type="button" class="btn btn-primary btn-sm" id="installUpdateBtn">
+              <span>${escapeHtml(t.btn_install_update || '⬇️ Download & Install Update')}</span>
+            </button>
+          </div>
+          <div class="download-progress-wrap" id="updateProgressWrap" style="display: none; margin-top: 10px;">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="updateProgressFill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-stats-row">
+              <span id="updateProgressStats">0% • 0.0 MB/s</span>
+              <span id="updateProgressEta">ETA: --</span>
+            </div>
+          </div>
+        `;
+        const installBtn = document.getElementById('installUpdateBtn');
+        if (installBtn) {
+          installBtn.addEventListener('click', async () => {
+            installBtn.disabled = true;
+            const progWrap = document.getElementById('updateProgressWrap');
+            if (progWrap) progWrap.style.display = 'flex';
+            try {
+              await invokeTauri('install_desktop_update', { tag: res.tag_name });
+            } catch (err) {
+              installBtn.disabled = false;
+              showToast(`Update failed: ${err}`);
+            }
+          });
+        }
+      }
+    } else if (box) {
+      box.style.display = 'block';
+      box.textContent = t.update_latest;
+    }
+  }
+
+  async function checkAppUpdateSilent() {
+    try {
+      const res = await invokeTauri('check_app_update');
+      if (res && res.update_available) {
+        renderUpdateBannerAndCard(res);
+      }
+    } catch (_) {}
+  }
+
+  function registerUpdateProgressListener() {
+    const tauriEvents = window.__TAURI__ && window.__TAURI__.event;
+    if (!tauriEvents || !tauriEvents.listen) return;
+    tauriEvents.listen('update-progress', (event) => {
+      const p = event.payload || {};
+      const wrap = document.getElementById('updateProgressWrap');
+      const fill = document.getElementById('updateProgressFill');
+      const stats = document.getElementById('updateProgressStats');
+      const eta = document.getElementById('updateProgressEta');
+      if (wrap) wrap.style.display = 'flex';
+      if (fill) fill.style.width = `${Math.min(100, Math.max(0, p.percent || 0)).toFixed(1)}%`;
+      if (stats) {
+        const pct = (p.percent || 0).toFixed(1);
+        const spd = (p.speed_mbps || 0).toFixed(2);
+        stats.textContent = p.status === 'verifying'
+          ? 'Verifying SHA-256...'
+          : p.status === 'restarting'
+            ? 'Applying update & restarting...'
+            : `${pct}% • ${spd} MB/s`;
+      }
+      if (eta) eta.textContent = `ETA: ${p.eta_seconds || 0}s`;
+    });
   }
 
   function updateBackendDisplay() {
@@ -1363,39 +1575,28 @@
       });
     });
 
-    // Top-Bar Model & Backend Switcher
-    const headerModelSelect = document.getElementById('headerModelSelector');
-    if (headerModelSelect) {
-      headerModelSelect.addEventListener('change', async () => {
-        const val = headerModelSelect.value;
-        if (val.startsWith('backend:')) {
-          AppState.backend = val.replace('backend:', '');
-          updateBackendDisplay();
-          renderHeaderModelSwitcher();
-          await saveCurrentConfig();
-          showToast(`${AppState.backend} active`);
-        } else if (val.startsWith('local:')) {
-          const tag = val.replace('local:', '');
-          const modelObj = (AppState.modelsCatalog || []).find(m => m.tag === tag);
-          AppState.backend = 'local_llama';
-          AppState.activeModelTag = tag;
-          updateBackendDisplay();
-          if (modelObj && modelObj.is_cached) {
-            try {
-              await invokeTauri('activate_model', { tag });
-              await refreshHeaderModelSwitcher();
-              showToast(`Activated ${tag}`);
-            } catch (e) {
-              showToast(String(e));
-            }
-          } else {
-            await saveCurrentConfig();
-            renderHeaderModelSwitcher();
-            switchView('models');
-            showToast(AppState.lang === 'ar' ? `يرجى تحميل النموذج ${tag} أولاً` : `Please download ${tag} first`);
-          }
+    // Top-Bar Model & Backend Custom Popover Switcher
+    const headerModelTrigger = document.getElementById('headerModelTrigger');
+    const headerModelPopover = document.getElementById('headerModelPopover');
+    const headerModelSwitcher = document.getElementById('headerModelSwitcher');
+    if (headerModelTrigger && headerModelPopover) {
+      headerModelTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = headerModelPopover.style.display === 'block';
+        headerModelPopover.style.display = isOpen ? 'none' : 'block';
+        headerModelTrigger.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+      });
+      document.addEventListener('click', (e) => {
+        if (headerModelSwitcher && !headerModelSwitcher.contains(e.target)) {
+          headerModelPopover.style.display = 'none';
+          headerModelTrigger.setAttribute('aria-expanded', 'false');
         }
       });
+    }
+
+    const topUpdateBadge = document.getElementById('topUpdateBadge');
+    if (topUpdateBadge) {
+      topUpdateBadge.addEventListener('click', () => switchView('settings'));
     }
 
     const jumpToModelsBtn = document.getElementById('jumpToModelsBtn');
@@ -1650,11 +1851,7 @@
         showToast('Checking for updates...');
         try {
           const res = await invokeTauri('check_app_update');
-          const box = document.getElementById('updateStatusMsg');
-          if (box) {
-            box.style.display = 'block';
-            box.textContent = res.update_available ? `Update available: ${res.latest_version}` : 'You are on the latest release';
-          }
+          renderUpdateBannerAndCard(res);
         } catch (e) {
           showToast(`Check failed: ${e}`);
         }

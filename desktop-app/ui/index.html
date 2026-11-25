@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title data-i18n="app_title">SilentExec Desktop v1.1.0</title>
+  <title data-i18n="app_title">SilentExec Desktop v1.2.0</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,16 +17,26 @@
       <div class="sidebar-header">
         <div class="brand-box">
           <div class="brand-logo">
-            <svg viewBox="0 0 32 32" fill="none" class="brand-svg">
-              <rect width="32" height="32" rx="9" fill="#090D16" stroke="#10b981" stroke-width="1.5"/>
-              <path d="M7 10h18M7 6h18" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/>
-              <path d="M8 17l4 3-4 3" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <polygon points="20,12 14,20 18,20 15,26 24,18 19,18" fill="#10b981"/>
+            <svg viewBox="0 0 64 64" fill="none" class="brand-svg">
+              <defs>
+                <linearGradient id="seBg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#0F172A"/>
+                  <stop offset="100%" stop-color="#050810"/>
+                </linearGradient>
+                <linearGradient id="seSpark" x1="18" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#34D399"/>
+                  <stop offset="55%" stop-color="#10B981"/>
+                  <stop offset="100%" stop-color="#06B6D4"/>
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#seBg)" stroke="url(#seSpark)" stroke-width="2.2"/>
+              <path d="M16 23L25 32L16 41" stroke="#38BDF8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M38 14L27 33H35L31 50L47 29H38L42 14Z" fill="url(#seSpark)"/>
             </svg>
           </div>
           <div class="brand-text">
             <span class="brand-name">SilentExec</span>
-            <span class="brand-badge">v1.1.0</span>
+            <span class="brand-badge">v1.2.0</span>
           </div>
         </div>
         <button class="sidebar-toggle-btn" id="sidebarCollapseBtn" title="طي/توسيع القائمة">
@@ -107,15 +117,21 @@
           <span class="breadcrumb-current" id="viewTitleBreadcrumb">الوكيل الذكي</span>
         </div>
         <div class="header-badges">
+          <button class="badge-pill update-badge-top" id="topUpdateBadge" style="display: none;" title="تحديث متاح / Update Available">
+            <span>⬇</span>
+            <span id="topUpdateBadgeText">v1.2.0</span>
+          </button>
           <div class="header-model-switcher" id="headerModelSwitcher">
             <span class="pill-dot"></span>
-            <select id="headerModelSelector" class="header-model-select" aria-label="Active Model & Backend">
-              <option value="local:liquidai-lfm3-1.7b">LFM3-1.7B (Edge)</option>
-            </select>
+            <button type="button" id="headerModelTrigger" class="header-model-trigger" aria-haspopup="listbox" aria-expanded="false">
+              <span id="headerModelLabel">LFM3-1.7B (Edge)</span>
+              <span class="header-model-caret">▾</span>
+            </button>
             <span id="headerModelStatusBadge" class="header-model-status ready" data-i18n="status_ready">جاهز</span>
             <button class="btn btn-secondary btn-xs header-models-jump-btn" id="jumpToModelsBtn" title="النماذج والبيئة">
               <span data-i18n="btn_manage_models">النماذج</span>
             </button>
+            <div class="model-popover-menu" id="headerModelPopover" role="listbox" style="display: none;"></div>
           </div>
           <div class="badge-pill backend-pill" id="activeBackendPill">
             <span class="pill-dot"></span>
@@ -572,7 +588,7 @@
           <div class="card-header-with-action">
             <div>
               <h3 class="panel-title" data-i18n="update_title">تحديثات SilentExec Desktop</h3>
-              <p class="panel-desc" id="versionLabel" data-i18n="version_label">الإصدار الحالي: v1.1.0 (Windows x86_64)</p>
+              <p class="panel-desc" id="versionLabel" data-i18n="version_label">الإصدار الحالي: v1.2.0 (Windows x86_64)</p>
             </div>
             <button class="btn btn-secondary" id="checkUpdatesBtn">
               <span class="btn-icon">🔄</span>

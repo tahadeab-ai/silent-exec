@@ -28,6 +28,8 @@ pub struct StepInfo {
     pub description: String,
     pub action: Option<String>,
     pub details: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +263,8 @@ async fn execute_query(
                             description: "Blocked by Safety Gate".to_string(),
                             action: Some(action_type_to_str(cmd.action).to_string()),
                             details: Some(reason.clone()),
+
+                            thought: cmd.thought.clone(),
                         });
                         return Ok(ExecutionReport {
                             success: false,
@@ -281,6 +285,8 @@ async fn execute_query(
                                 description: "User confirmation required".to_string(),
                                 action: Some(action_type_to_str(cmd.action).to_string()),
                                 details: Some(reason.clone()),
+
+                                thought: cmd.thought.clone(),
                             });
                             return Ok(ExecutionReport {
                                 success: true,
@@ -394,6 +400,8 @@ async fn execute_query(
                                 description: "AI Backend Required".to_string(),
                                 action: None,
                                 details: Some(err_msg.clone()),
+
+                                thought: None,
                             });
                             return Ok(ExecutionReport {
                                 success: false,
@@ -423,6 +431,8 @@ async fn execute_query(
                             description: "AI Backend Required".to_string(),
                             action: None,
                             details: Some(err_msg.clone()),
+
+                            thought: None,
                         });
                         return Ok(ExecutionReport {
                             success: false,
@@ -919,7 +929,7 @@ async fn test_mcp_server(name: String) -> Result<Vec<McpTool>, String> {
 async fn check_app_update() -> Result<UpdateInfoDto, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let updater = SelfUpdater::default();
-        let info = updater.check_for_update()?;
+        let info = updater.check_for_desktop_update()?;
         Ok(UpdateInfoDto {
             current_version: info.current_version,
             latest_version: info.latest_version,
@@ -936,6 +946,79 @@ async fn check_app_update() -> Result<UpdateInfoDto, String> {
 #[tauri::command]
 async fn check_updates() -> Result<UpdateInfoDto, String> {
     check_app_update().await
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProgressEvent {
+    pub tag: String,
+    pub percent: f64,
+    pub speed_mbps: f64,
+    pub eta_seconds: u64,
+    pub status: String,
+}
+
+#[tauri::command]
+async fn install_desktop_update(tag: String, app: tauri::AppHandle) -> Result<(), String> {
+    let app_handle = app.clone();
+    let tag_clone = tag.clone();
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let updater = SelfUpdater::default();
+        let _ = app_handle.emit(
+            "update-progress",
+            UpdateProgressEvent {
+                tag: tag_clone.clone(),
+                percent: 0.0,
+                speed_mbps: 0.0,
+                eta_seconds: 0,
+                status: "downloading".to_string(),
+            },
+        );
+
+        let app_for_cb = app_handle.clone();
+        let tag_for_cb = tag_clone.clone();
+        updater.download_and_schedule_desktop_update(&tag_clone, cancel_flag, move |prog| {
+            let percent = if prog.total_bytes > 0 {
+                (prog.downloaded_bytes as f64 / prog.total_bytes as f64) * 100.0
+            } else {
+                0.0
+            };
+            let status_str = match prog.status {
+                silent_exec_pc::DownloadStatus::Downloading => "downloading",
+                silent_exec_pc::DownloadStatus::Paused => "paused",
+                silent_exec_pc::DownloadStatus::Verifying => "verifying",
+                silent_exec_pc::DownloadStatus::Completed => "restarting",
+                silent_exec_pc::DownloadStatus::Cancelled => "cancelled",
+            };
+            let _ = app_for_cb.emit(
+                "update-progress",
+                UpdateProgressEvent {
+                    tag: tag_for_cb.clone(),
+                    percent,
+                    speed_mbps: prog.speed_mbps,
+                    eta_seconds: prog.eta_seconds,
+                    status: status_str.to_string(),
+                },
+            );
+        })?;
+
+        let _ = app_handle.emit(
+            "update-progress",
+            UpdateProgressEvent {
+                tag: tag_clone,
+                percent: 100.0,
+                speed_mbps: 0.0,
+                eta_seconds: 0,
+                status: "restarting".to_string(),
+            },
+        );
+
+        app_handle.exit(0);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Update task failed: {}", e))?
 }
 
 #[tauri::command]
@@ -1147,6 +1230,7 @@ fn main() {
             toggle_lan_bridge,
             check_updates,
             check_app_update,
+            install_desktop_update,
             test_ai_backend,
             list_mcp_servers,
             save_mcp_server,

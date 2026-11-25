@@ -61,8 +61,27 @@ impl SelfUpdater {
         (t_maj, t_min, t_pat) > (c_maj, c_min, c_pat)
     }
 
-    /// Checks GitHub Releases API for the latest `v*-pc` release.
+    /// Checks GitHub Releases API for the latest `v*-pc` release targeting the CLI binary.
     pub fn check_for_update(&self) -> Result<UpdateInfo, String> {
+        let preferred = if cfg!(target_os = "windows") {
+            "silent-exec-pc.exe"
+        } else {
+            "silent-exec-pc"
+        };
+        self.check_for_asset_update(preferred, None)
+    }
+
+    /// Checks GitHub Releases API for the latest `v*-pc` release targeting the Desktop app binary.
+    pub fn check_for_desktop_update(&self) -> Result<UpdateInfo, String> {
+        self.check_for_asset_update("SilentExec-Desktop-x64.exe", None)
+    }
+
+    /// Checks GitHub Releases API for a `v*-pc` release (latest or matching `target_tag`) containing `asset_name`.
+    pub fn check_for_asset_update(
+        &self,
+        asset_name: &str,
+        target_tag: Option<&str>,
+    ) -> Result<UpdateInfo, String> {
         let current_version = env!("CARGO_PKG_VERSION").to_string();
         let api_url = format!("https://api.github.com/repos/{}/releases", self.repo);
 
@@ -92,12 +111,18 @@ impl SelfUpdater {
             .as_array()
             .ok_or_else(|| "Releases response is not an array".to_string())?;
 
-        // Find the latest release tagged like `v*-pc`
+        // Find the matching release tagged like `v*-pc`
         for release in releases {
             let tag = match release.get("tag_name").and_then(|t| t.as_str()) {
                 Some(t) => t,
                 None => continue,
             };
+
+            if let Some(wanted) = target_tag {
+                if tag != wanted {
+                    continue;
+                }
+            }
 
             if tag.starts_with('v') && tag.ends_with("-pc") {
                 let assets = release.get("assets").and_then(|a| a.as_array());
@@ -112,7 +137,9 @@ impl SelfUpdater {
                             .and_then(|u| u.as_str())
                             .unwrap_or("");
 
-                        if name == "silent-exec-pc.exe" || name == "silent-exec-pc" {
+                        if name == asset_name
+                            || (asset_name == "silent-exec-pc.exe" && name == "silent-exec-pc")
+                        {
                             exe_url = Some(d_url.to_string());
                         } else if name == "SHA256SUMS.txt" {
                             sha_url = Some(d_url.to_string());
@@ -142,6 +169,159 @@ impl SelfUpdater {
             sha256_url: String::new(),
             update_available: false,
         })
+    }
+
+    /// Returns `%LOCALAPPDATA%\silent-exec\updates` on Windows or `$HOME/.local/share/silent-exec/updates` on Unix.
+    pub fn default_updates_dir() -> PathBuf {
+        if cfg!(target_os = "windows") {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                return PathBuf::from(local_app_data)
+                    .join("silent-exec")
+                    .join("updates");
+            }
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("silent-exec")
+                .join("updates");
+        }
+        std::env::temp_dir().join("silent_exec_updates")
+    }
+
+    /// Downloads `SilentExec-Desktop-x64.exe` (resumable), verifies SHA-256 against `SHA256SUMS.txt`,
+    /// and spawns a hidden self-cleaning PowerShell swapper script on Windows to replace & relaunch.
+    pub fn download_and_schedule_desktop_update<F>(
+        &self,
+        tag: &str,
+        cancel_flag: Arc<AtomicBool>,
+        progress_cb: F,
+    ) -> Result<PathBuf, String>
+    where
+        F: FnMut(DownloadProgress),
+    {
+        let info = self.check_for_asset_update("SilentExec-Desktop-x64.exe", Some(tag))?;
+        if info.download_url.is_empty() || info.sha256_url.is_empty() {
+            return Err(format!(
+                "Release '{}' does not contain SilentExec-Desktop-x64.exe and SHA256SUMS.txt",
+                tag
+            ));
+        }
+
+        let updates_dir = Self::default_updates_dir();
+        fs::create_dir_all(&updates_dir).map_err(|e| {
+            format!(
+                "Failed to create updates directory {}: {}",
+                updates_dir.display(),
+                e
+            )
+        })?;
+
+        let asset_name = "SilentExec-Desktop-x64.exe";
+        let downloaded_exe = updates_dir.join(asset_name);
+        let downloaded_part = updates_dir.join(format!("{}.part", asset_name));
+        let downloaded_sums = updates_dir.join("SHA256SUMS.txt");
+
+        let sums_status = hidden_command("curl")
+            .args([
+                "-sSfL",
+                "-o",
+                downloaded_sums.to_str().unwrap_or_default(),
+                &info.sha256_url,
+            ])
+            .status()
+            .map_err(|e| format!("Failed to download SHA256SUMS.txt: {}", e))?;
+
+        if !sums_status.success() {
+            return Err("Failed to download SHA256SUMS.txt".to_string());
+        }
+
+        let sums_content = fs::read_to_string(&downloaded_sums)
+            .map_err(|e| format!("Failed to read SHA256SUMS.txt: {}", e))?;
+
+        let expected_sha256 = sums_content
+            .lines()
+            .find_map(|line| {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && (parts[1] == asset_name || parts[1].ends_with(asset_name)) {
+                    Some(parts[0].to_string())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                format!(
+                    "No SHA-256 hash found for {} in release {}",
+                    asset_name, info.tag_name
+                )
+            })?;
+
+        ModelManager::download_resumable_file(
+            &info.download_url,
+            &downloaded_part,
+            &downloaded_exe,
+            &expected_sha256,
+            cancel_flag,
+            progress_cb,
+        )?;
+
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("Failed to resolve current executable path: {}", e))?;
+
+        #[cfg(target_os = "windows")]
+        {
+            let pid = std::process::id();
+            let swap_script = updates_dir.join("apply_desktop_update.ps1");
+            let current_str = current_exe.to_string_lossy().replace('\'', "''");
+            let new_str = downloaded_exe.to_string_lossy().replace('\'', "''");
+            let sums_str = downloaded_sums.to_string_lossy().replace('\'', "''");
+
+            let ps_content = format!(
+                "$ErrorActionPreference = 'SilentlyContinue'\n\
+                 $pidToWait = {pid}\n\
+                 for ($i = 0; $i -lt 60; $i++) {{\n\
+                     if (-not (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue)) {{ break }}\n\
+                     Start-Sleep -Milliseconds 250\n\
+                 }}\n\
+                 for ($r = 0; $r -lt 10; $r++) {{\n\
+                     try {{\n\
+                         Copy-Item -LiteralPath '{new_str}' -Destination '{current_str}' -Force -ErrorAction Stop\n\
+                         break\n\
+                     }} catch {{\n\
+                         Start-Sleep -Milliseconds 300\n\
+                     }}\n\
+                 }}\n\
+                 Remove-Item -LiteralPath '{new_str}' -Force\n\
+                 Remove-Item -LiteralPath '{sums_str}' -Force\n\
+                 Start-Process -FilePath '{current_str}'\n\
+                 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force\n"
+            );
+
+            fs::write(&swap_script, ps_content)
+                .map_err(|e| format!("Failed to write update swapper script: {}", e))?;
+
+            hidden_command("powershell")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    swap_script.to_str().unwrap_or_default(),
+                ])
+                .spawn()
+                .map_err(|e| format!("Failed to launch update swapper: {}", e))?;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = fs::copy(&downloaded_exe, &current_exe);
+        }
+
+        Ok(downloaded_exe)
     }
 
     /// Computes the SHA256 checksum of a file.
