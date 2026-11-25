@@ -125,4 +125,33 @@
     <string name="update_error">Update check failed: %s</string>
     <string name="update_downloading">Downloading update: %d%%</string>
     <string name="update_ready_to_install">Update downloaded, launching installer...</string>
+
+    <!-- v1.0.0 UI Polish: Segmented Controls, Stream & Memory -->
+    <string name="lang_arabic_short">العربية</string>
+    <string name="lang_english_short">English</string>
+    <string name="mode_silent_short">Silent</string>
+    <string name="mode_interactive_short">Interactive</string>
+    <string name="mode_dry_run_short">Dry Run</string>
+    <string name="perm_enable">Enable</string>
+    <string name="perm_active">Active</string>
+    <string name="agent_stream_title">Agent Stream</string>
+    <string name="clear_btn">Clear</string>
+    <string name="stream_empty">Ask anything — SilentExec executes OS actions and writes answers.</string>
+    <string name="stream_thinking">Thinking &amp; planning…</string>
+    <string name="stream_completed">Completed</string>
+    <string name="stream_failed">Failed</string>
+    <string name="stream_details_show">Show Technical Details</string>
+    <string name="stream_details_hide">Hide Technical Details</string>
+    <string name="copy_btn">Copy</string>
+    <string name="copied_toast">Copied to clipboard</string>
+    <string name="memory_chip">Memory</string>
+    <string name="memory_title">Memories &amp; Skills</string>
+    <string name="memory_empty">No persistent memories saved yet.</string>
+    <string name="memory_add_title">Add Preference or Fact</string>
+    <string name="memory_key_hint">Key (e.g. projects_dir)</string>
+    <string name="memory_content_hint">Content / Instruction</string>
+    <string name="memory_category_hint">Category (e.g. work, general)</string>
+    <string name="memory_btn_save">Save Memory</string>
+    <string name="memory_btn_delete">Delete</string>
+    <string name="memory_saved_toast">Saved to persistent memory</string>
 </resources>

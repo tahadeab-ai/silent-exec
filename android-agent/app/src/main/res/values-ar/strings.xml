@@ -125,4 +125,33 @@
     <string name="update_error">فشل التحقق من التحديث: %s</string>
     <string name="update_downloading">جارٍ تحميل التحديث: %d%%</string>
     <string name="update_ready_to_install">تم تحميل التحديث، جارٍ تشغيل المثبت...</string>
+
+    <!-- v1.0.0 UI Polish: Segmented Controls, Stream & Memory -->
+    <string name="lang_arabic_short">العربية</string>
+    <string name="lang_english_short">English</string>
+    <string name="mode_silent_short">صامت</string>
+    <string name="mode_interactive_short">تفاعلي</string>
+    <string name="mode_dry_run_short">تجريبي</string>
+    <string name="perm_enable">تفعيل</string>
+    <string name="perm_active">نشط</string>
+    <string name="agent_stream_title">سجل الوكيل التفاعلي</string>
+    <string name="clear_btn">مسح</string>
+    <string name="stream_empty">اطلب أي شيء — يستطيع SilentExec تنفيذ أوامر النظام وتوليد الإجابات والملخصات.</string>
+    <string name="stream_thinking">جارٍ التفكير والتخطيط…</string>
+    <string name="stream_completed">مكتمل</string>
+    <string name="stream_failed">فشل</string>
+    <string name="stream_details_show">عرض التفاصيل الفنية</string>
+    <string name="stream_details_hide">إخفاء التفاصيل الفنية</string>
+    <string name="copy_btn">نسخ</string>
+    <string name="copied_toast">تم النسخ إلى الحافظة</string>
+    <string name="memory_chip">الذاكرة</string>
+    <string name="memory_title">الذاكرة والمهارات</string>
+    <string name="memory_empty">لا توجد ذكريات أو تفضيلات محفوظة بعد.</string>
+    <string name="memory_add_title">إضافة تفضيل أو مهارة</string>
+    <string name="memory_key_hint">المفتاح (مثال: مجلد_المشاريع)</string>
+    <string name="memory_content_hint">المحتوى / التعليمات</string>
+    <string name="memory_category_hint">التصنيف (مثال: عمل، عام)</string>
+    <string name="memory_btn_save">حفظ التفضيل</string>
+    <string name="memory_btn_delete">حذف</string>
+    <string name="memory_saved_toast">تم الحفظ في الذاكرة الدائمة</string>
 </resources>

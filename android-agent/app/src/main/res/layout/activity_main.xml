@@ -94,17 +94,30 @@
 
                             <TextView
                                 android:id="@+id/tvHeaderModel"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
+                                android:layout_marginEnd="8dp"
+                                android:layout_weight="1"
                                 android:background="@color/surface_variant"
                                 android:ellipsize="middle"
-                                android:maxWidth="200dp"
                                 android:paddingHorizontal="10dp"
                                 android:paddingVertical="4dp"
                                 android:singleLine="true"
                                 android:text="Model: Qwen2.5-0.5B"
                                 android:textColor="@color/text_primary"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btnMemorySheet"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:minHeight="0dp"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="0dp"
+                                android:text="@string/memory_chip"
                                 android:textSize="12sp" />
                         </LinearLayout>
                     </LinearLayout>
@@ -195,20 +208,12 @@
                         android:orientation="horizontal" />
                 </HorizontalScrollView>
 
-                <!-- Live Execution Step Timeline -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/live_timeline_title"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
+                <!-- Unified Agent Conversation & Action Stream -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="16dp"
                     app:cardBackgroundColor="@color/surface_dark"
                     app:cardCornerRadius="16dp"
                     app:cardElevation="1dp"
@@ -219,64 +224,53 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="12dp">
+                        android:padding="14dp">
 
-                        <TextView
-                            android:id="@+id/tvTimelineEmpty"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:paddingVertical="20dp"
-                            android:text="@string/live_timeline_empty"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="13sp" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                        <androidx.recyclerview.widget.RecyclerView
-                            android:id="@+id/rvStepTimeline"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:nestedScrollingEnabled="false"
-                            android:visibility="gone" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/agent_stream_title"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
 
-                <!-- Live Execution Step Feed -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/live_feed_title"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    app:cardBackgroundColor="@color/surface_dark"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="1dp"
-                    app:strokeColor="@color/surface_variant"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:id="@+id/layoutExecutionFeed"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:minHeight="120dp"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                            <Button
+                                android:id="@+id/btnClearStream"
+                                style="@style/Widget.Material3.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:minHeight="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="0dp"
+                                android:text="@string/clear_btn"
+                                android:textSize="12sp"
+                                android:visibility="gone" />
+                        </LinearLayout>
 
                         <TextView
-                            android:id="@+id/tvLiveFeedEmpty"
+                            android:id="@+id/tvStreamEmpty"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:gravity="center"
                             android:paddingVertical="32dp"
-                            android:text="@string/live_feed_empty"
+                            android:text="@string/stream_empty"
                             android:textColor="@color/text_secondary"
                             android:textSize="13sp" />
+
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/rvAgentStream"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:nestedScrollingEnabled="false"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
@@ -390,29 +384,34 @@
                             android:textSize="15sp"
                             android:textStyle="bold" />
 
-                        <RadioGroup
-                            android:id="@+id/rgLanguage"
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/toggleLanguage"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:orientation="horizontal">
+                            android:layout_marginTop="10dp"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
-                            <RadioButton
-                                android:id="@+id/rbLangAr"
+                            <Button
+                                android:id="@+id/btnLangAr"
+                                style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/lang_arabic"
-                                android:textColor="@color/text_primary" />
+                                android:singleLine="true"
+                                android:text="@string/lang_arabic_short"
+                                android:textSize="13sp" />
 
-                            <RadioButton
-                                android:id="@+id/rbLangEn"
+                            <Button
+                                android:id="@+id/btnLangEn"
+                                style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/lang_english"
-                                android:textColor="@color/text_primary" />
-                        </RadioGroup>
+                                android:singleLine="true"
+                                android:text="@string/lang_english_short"
+                                android:textSize="13sp" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -441,37 +440,44 @@
                             android:textSize="15sp"
                             android:textStyle="bold" />
 
-                        <RadioGroup
-                            android:id="@+id/rgThemeMode"
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/toggleThemeMode"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:orientation="horizontal">
+                            android:layout_marginTop="10dp"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
-                            <RadioButton
-                                android:id="@+id/rbThemeSystem"
+                            <Button
+                                android:id="@+id/btnThemeSystem"
+                                style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:singleLine="true"
                                 android:text="@string/theme_system"
-                                android:textColor="@color/text_primary" />
+                                android:textSize="13sp" />
 
-                            <RadioButton
-                                android:id="@+id/rbThemeDark"
+                            <Button
+                                android:id="@+id/btnThemeDark"
+                                style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:singleLine="true"
                                 android:text="@string/theme_dark"
-                                android:textColor="@color/text_primary" />
+                                android:textSize="13sp" />
 
-                            <RadioButton
-                                android:id="@+id/rbThemeLight"
+                            <Button
+                                android:id="@+id/btnThemeLight"
+                                style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
+                                android:singleLine="true"
                                 android:text="@string/theme_light"
-                                android:textColor="@color/text_primary" />
-                        </RadioGroup>
+                                android:textSize="13sp" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -548,33 +554,53 @@
                             android:textSize="15sp"
                             android:textStyle="bold" />
 
-                        <RadioGroup
-                            android:id="@+id/rgExecutionMode"
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/toggleExecutionMode"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp">
+                            android:layout_marginTop="10dp"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
-                            <RadioButton
-                                android:id="@+id/rbModeSilent"
-                                android:layout_width="match_parent"
+                            <Button
+                                android:id="@+id/btnModeSilent"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="@string/mode_silent"
-                                android:textColor="@color/text_primary" />
+                                android:layout_weight="1"
+                                android:singleLine="true"
+                                android:text="@string/mode_silent_short"
+                                android:textSize="13sp" />
 
-                            <RadioButton
-                                android:id="@+id/rbModeInteractive"
-                                android:layout_width="match_parent"
+                            <Button
+                                android:id="@+id/btnModeInteractive"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="@string/mode_interactive"
-                                android:textColor="@color/text_primary" />
+                                android:layout_weight="1"
+                                android:singleLine="true"
+                                android:text="@string/mode_interactive_short"
+                                android:textSize="13sp" />
 
-                            <RadioButton
-                                android:id="@+id/rbModeDryRun"
-                                android:layout_width="match_parent"
+                            <Button
+                                android:id="@+id/btnModeDryRun"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="@string/mode_dry_run"
-                                android:textColor="@color/text_primary" />
-                        </RadioGroup>
+                                android:layout_weight="1"
+                                android:singleLine="true"
+                                android:text="@string/mode_dry_run_short"
+                                android:textSize="13sp" />
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                        <TextView
+                            android:id="@+id/tvExecutionModeDesc"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/mode_silent_desc"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -873,20 +899,28 @@
                                 android:textSize="13sp" />
 
                             <TextView
-                                android:id="@+id/tvPermAccessibilityStatus"
+                                android:id="@+id/tvPermAccessibilityBadge"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginEnd="8dp"
-                                android:text="@string/perm_missing"
-                                android:textColor="@color/danger_red"
-                                android:textSize="12sp" />
+                                android:background="@drawable/badge_active"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="4dp"
+                                android:text="@string/perm_active"
+                                android:textColor="@color/bg_dark"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
 
                             <Button
                                 android:id="@+id/btnOpenAccessibilitySettings"
-                                style="@style/Widget.Material3.Button.TextButton"
+                                style="@style/Widget.Material3.Button.TonalButton"
                                 android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/perm_missing"
+                                android:layout_height="34dp"
+                                android:minHeight="0dp"
+                                android:paddingHorizontal="12dp"
+                                android:paddingVertical="0dp"
+                                android:text="@string/perm_enable"
+                                android:textColor="@color/warning_yellow"
                                 android:textSize="12sp" />
                         </LinearLayout>
                     </LinearLayout>

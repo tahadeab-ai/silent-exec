@@ -62,10 +62,11 @@ class ModelAdapter(
 
         fun bind(item: ModelReleaseItem, currentActive: String) {
             tvModelName.text = item.filename
+            val label = item.description?.takeIf { it.isNotBlank() } ?: item.tag
             tvModelDetails.text = String.format(
                 Locale.US,
                 "%s • %.1f MB",
-                item.tag,
+                label,
                 item.sizeMb
             )
 
@@ -82,14 +83,14 @@ class ModelAdapter(
 
             if (isDownloaded) {
                 btnModelDownload.visibility = View.GONE
-                btnModelActivate.visibility = View.VISIBLE
                 btnModelDelete.visibility = View.VISIBLE
 
                 if (isActive) {
                     tvModelActiveBadge.visibility = View.VISIBLE
-                    btnModelActivate.isEnabled = false
+                    btnModelActivate.visibility = View.GONE
                 } else {
                     tvModelActiveBadge.visibility = View.GONE
+                    btnModelActivate.visibility = View.VISIBLE
                     btnModelActivate.isEnabled = true
                 }
             } else {

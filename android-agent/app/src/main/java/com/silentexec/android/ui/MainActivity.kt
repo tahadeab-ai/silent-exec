@@ -4,12 +4,15 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -22,9 +25,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.silentexec.android.BuildConfig
 import com.silentexec.android.R
@@ -35,6 +40,8 @@ import com.silentexec.android.core.AppSettings
 import com.silentexec.android.core.ExecutionMode
 import com.silentexec.android.core.FastRuleRouter
 import com.silentexec.android.core.InferenceSource
+import com.silentexec.android.core.MemoryItem
+import com.silentexec.android.core.MemoryStore
 import com.silentexec.android.core.MultiStepPlan
 import com.silentexec.android.core.Platform
 import com.silentexec.android.core.SafetyDecision
@@ -94,15 +101,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvHeaderModel: TextView
     private lateinit var tvHeaderAccessibility: TextView
     private lateinit var dotAccessibility: View
+    private lateinit var btnMemorySheet: Button
     private lateinit var etCommand: EditText
     private lateinit var btnExecute: Button
     private lateinit var btnMic: Button
     private lateinit var layoutHistoryChips: LinearLayout
-    private lateinit var tvTimelineEmpty: TextView
-    private lateinit var rvStepTimeline: RecyclerView
-    private lateinit var stepTimelineAdapter: StepTimelineAdapter
-    private lateinit var layoutExecutionFeed: LinearLayout
-    private lateinit var tvLiveFeedEmpty: TextView
+    private lateinit var btnClearStream: Button
+    private lateinit var tvStreamEmpty: TextView
+    private lateinit var rvAgentStream: RecyclerView
+    private lateinit var agentStreamAdapter: AgentStreamAdapter
 
     // Tab 2 Views
     private lateinit var rvModels: RecyclerView
@@ -113,18 +120,19 @@ class MainActivity : AppCompatActivity() {
     private val modelItems = mutableListOf<ModelReleaseItem>()
 
     // Tab 3 Views
-    private lateinit var rgLanguage: RadioGroup
-    private lateinit var rbLangAr: RadioButton
-    private lateinit var rbLangEn: RadioButton
-    private lateinit var rgThemeMode: RadioGroup
-    private lateinit var rbThemeSystem: RadioButton
-    private lateinit var rbThemeDark: RadioButton
-    private lateinit var rbThemeLight: RadioButton
+    private lateinit var toggleLanguage: MaterialButtonToggleGroup
+    private lateinit var btnLangAr: Button
+    private lateinit var btnLangEn: Button
+    private lateinit var toggleThemeMode: MaterialButtonToggleGroup
+    private lateinit var btnThemeSystem: Button
+    private lateinit var btnThemeDark: Button
+    private lateinit var btnThemeLight: Button
     private lateinit var swFloatingBubble: MaterialSwitch
-    private lateinit var rgExecutionMode: RadioGroup
-    private lateinit var rbModeSilent: RadioButton
-    private lateinit var rbModeInteractive: RadioButton
-    private lateinit var rbModeDryRun: RadioButton
+    private lateinit var toggleExecutionMode: MaterialButtonToggleGroup
+    private lateinit var btnModeSilent: Button
+    private lateinit var btnModeInteractive: Button
+    private lateinit var btnModeDryRun: Button
+    private lateinit var tvExecutionModeDesc: TextView
     private lateinit var rgInferenceSource: RadioGroup
     private lateinit var rbEngineOffline: RadioButton
     private lateinit var rbEngineBridge: RadioButton
@@ -144,7 +152,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnTestCloud: Button
     private lateinit var btnSaveCloud: Button
     private lateinit var tvCloudTestStatus: TextView
-    private lateinit var tvPermAccessibilityStatus: TextView
+    private lateinit var tvPermAccessibilityBadge: TextView
     private lateinit var btnOpenAccessibilitySettings: Button
     private lateinit var tvAppVersion: TextView
     private lateinit var btnCheckAppUpdates: Button
@@ -158,6 +166,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_RECORD_AUDIO = 101
+        private const val KEY_ACTIVE_TAB_ID = "active_tab_id"
         const val ACTION_EXECUTE_COMMAND = "com.silentexec.android.ACTION_EXECUTE_COMMAND"
         const val ACTION_TRIGGER_MIC = "com.silentexec.android.ACTION_TRIGGER_MIC"
         const val EXTRA_COMMAND = "extra_command"
@@ -172,8 +181,10 @@ class MainActivity : AppCompatActivity() {
         settings = AppSettings(this)
         settings.applyLocale()
         settings.applyTheme()
+        MemoryStore.init(this)
 
         setContentView(R.layout.activity_main)
+        applySystemBarAppearance()
 
         executor = AndroidActionExecutor(this)
         modelDownloader = ModelDownloader(this)
@@ -195,9 +206,33 @@ class MainActivity : AppCompatActivity() {
         setupModelsTab()
         setupSettingsTab()
 
+        val activeTabId = savedInstanceState?.getInt(KEY_ACTIVE_TAB_ID) ?: R.id.nav_execute
+        selectTab(activeTabId)
+
         updateHeaderStatus()
         loadActiveModelIfAvailable()
         handleIncomingIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::bottomNav.isInitialized) {
+            outState.putInt(KEY_ACTIVE_TAB_ID, bottomNav.selectedItemId)
+        }
+    }
+
+    private fun applySystemBarAppearance() {
+        val isDarkTheme = when (settings.themeMode) {
+            ThemeMode.DARK -> true
+            ThemeMode.LIGHT -> false
+            ThemeMode.SYSTEM -> {
+                val nightModeFlags = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                nightModeFlags == Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.isAppearanceLightStatusBars = !isDarkTheme
+        controller.isAppearanceLightNavigationBars = !isDarkTheme
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -257,18 +292,18 @@ class MainActivity : AppCompatActivity() {
         tvHeaderModel = findViewById(R.id.tvHeaderModel)
         tvHeaderAccessibility = findViewById(R.id.tvHeaderAccessibility)
         dotAccessibility = findViewById(R.id.dotAccessibility)
+        btnMemorySheet = findViewById(R.id.btnMemorySheet)
         etCommand = findViewById(R.id.etCommand)
         btnExecute = findViewById(R.id.btnExecute)
         btnMic = findViewById(R.id.btnMic)
         layoutHistoryChips = findViewById(R.id.layoutHistoryChips)
-        tvTimelineEmpty = findViewById(R.id.tvTimelineEmpty)
-        rvStepTimeline = findViewById(R.id.rvStepTimeline)
-        layoutExecutionFeed = findViewById(R.id.layoutExecutionFeed)
-        tvLiveFeedEmpty = findViewById(R.id.tvLiveFeedEmpty)
+        btnClearStream = findViewById(R.id.btnClearStream)
+        tvStreamEmpty = findViewById(R.id.tvStreamEmpty)
+        rvAgentStream = findViewById(R.id.rvAgentStream)
 
-        stepTimelineAdapter = StepTimelineAdapter()
-        rvStepTimeline.layoutManager = LinearLayoutManager(this)
-        rvStepTimeline.adapter = stepTimelineAdapter
+        agentStreamAdapter = AgentStreamAdapter()
+        rvAgentStream.layoutManager = LinearLayoutManager(this)
+        rvAgentStream.adapter = agentStreamAdapter
 
         // Tab 2
         rvModels = findViewById(R.id.rvModels)
@@ -277,18 +312,19 @@ class MainActivity : AppCompatActivity() {
         tvModelsEmpty = findViewById(R.id.tvModelsEmpty)
 
         // Tab 3
-        rgLanguage = findViewById(R.id.rgLanguage)
-        rbLangAr = findViewById(R.id.rbLangAr)
-        rbLangEn = findViewById(R.id.rbLangEn)
-        rgThemeMode = findViewById(R.id.rgThemeMode)
-        rbThemeSystem = findViewById(R.id.rbThemeSystem)
-        rbThemeDark = findViewById(R.id.rbThemeDark)
-        rbThemeLight = findViewById(R.id.rbThemeLight)
+        toggleLanguage = findViewById(R.id.toggleLanguage)
+        btnLangAr = findViewById(R.id.btnLangAr)
+        btnLangEn = findViewById(R.id.btnLangEn)
+        toggleThemeMode = findViewById(R.id.toggleThemeMode)
+        btnThemeSystem = findViewById(R.id.btnThemeSystem)
+        btnThemeDark = findViewById(R.id.btnThemeDark)
+        btnThemeLight = findViewById(R.id.btnThemeLight)
         swFloatingBubble = findViewById(R.id.swFloatingBubble)
-        rgExecutionMode = findViewById(R.id.rgExecutionMode)
-        rbModeSilent = findViewById(R.id.rbModeSilent)
-        rbModeInteractive = findViewById(R.id.rbModeInteractive)
-        rbModeDryRun = findViewById(R.id.rbModeDryRun)
+        toggleExecutionMode = findViewById(R.id.toggleExecutionMode)
+        btnModeSilent = findViewById(R.id.btnModeSilent)
+        btnModeInteractive = findViewById(R.id.btnModeInteractive)
+        btnModeDryRun = findViewById(R.id.btnModeDryRun)
+        tvExecutionModeDesc = findViewById(R.id.tvExecutionModeDesc)
         rgInferenceSource = findViewById(R.id.rgInferenceSource)
         rbEngineOffline = findViewById(R.id.rbEngineOffline)
         rbEngineBridge = findViewById(R.id.rbEngineBridge)
@@ -308,7 +344,7 @@ class MainActivity : AppCompatActivity() {
         btnTestCloud = findViewById(R.id.btnTestCloud)
         btnSaveCloud = findViewById(R.id.btnSaveCloud)
         tvCloudTestStatus = findViewById(R.id.tvCloudTestStatus)
-        tvPermAccessibilityStatus = findViewById(R.id.tvPermAccessibilityStatus)
+        tvPermAccessibilityBadge = findViewById(R.id.tvPermAccessibilityBadge)
         btnOpenAccessibilitySettings = findViewById(R.id.btnOpenAccessibilitySettings)
         tvAppVersion = findViewById(R.id.tvAppVersion)
         btnCheckAppUpdates = findViewById(R.id.btnCheckAppUpdates)
@@ -319,30 +355,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupBottomNavigation() {
         bottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_execute -> {
-                    layoutTabExecute.visibility = View.VISIBLE
-                    layoutTabModels.visibility = View.GONE
-                    layoutTabSettings.visibility = View.GONE
-                    true
-                }
-                R.id.nav_models -> {
-                    layoutTabExecute.visibility = View.GONE
-                    layoutTabModels.visibility = View.VISIBLE
-                    layoutTabSettings.visibility = View.GONE
-                    if (modelItems.isEmpty()) {
-                        fetchGitHubModels()
-                    }
-                    true
-                }
-                R.id.nav_settings -> {
-                    layoutTabExecute.visibility = View.GONE
-                    layoutTabModels.visibility = View.GONE
-                    layoutTabSettings.visibility = View.VISIBLE
-                    true
-                }
-                else -> false
-            }
+            selectTabLayout(item.itemId)
+            true
+        }
+    }
+
+    private fun selectTab(tabId: Int) {
+        if (bottomNav.selectedItemId != tabId) {
+            bottomNav.selectedItemId = tabId
+        }
+        selectTabLayout(tabId)
+    }
+
+    private fun selectTabLayout(tabId: Int) {
+        layoutTabExecute.visibility = if (tabId == R.id.nav_execute) View.VISIBLE else View.GONE
+        layoutTabModels.visibility = if (tabId == R.id.nav_models) View.VISIBLE else View.GONE
+        layoutTabSettings.visibility = if (tabId == R.id.nav_settings) View.VISIBLE else View.GONE
+        if (tabId == R.id.nav_models && modelItems.isEmpty()) {
+            fetchGitHubModels()
         }
     }
 
@@ -431,6 +461,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnMemorySheet.setOnClickListener {
+            showMemorySheetDialog()
+        }
+
+        btnClearStream.setOnClickListener {
+            agentStreamAdapter.clear()
+            tvStreamEmpty.visibility = View.VISIBLE
+            rvAgentStream.visibility = View.GONE
+            btnClearStream.visibility = View.GONE
+        }
+
         populateHistoryChips()
     }
 
@@ -455,8 +496,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var currentStepActionType: ActionType? = null
+
     private fun handleCommand(rawInput: String) {
         recordHistory(rawInput)
+        currentStepActionType = null
+
+        tvStreamEmpty.visibility = View.GONE
+        rvAgentStream.visibility = View.VISIBLE
+        btnClearStream.visibility = View.VISIBLE
+
+        val timeStr = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+        agentStreamAdapter.addUserPrompt(rawInput)
+        agentStreamAdapter.startAgentCard(
+            goal = rawInput,
+            timestamp = timeStr,
+            initialStatus = getString(R.string.stream_thinking)
+        )
+        rvAgentStream.scrollToPosition(agentStreamAdapter.itemCount - 1)
 
         overlayController.show(
             initialText = rawInput,
@@ -491,37 +548,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleAgentStepUpdate(update: AgentStepUpdate) {
+        val card = agentStreamAdapter.getCurrentAgentCard()
+
         when (update) {
             is AgentStepUpdate.Understanding -> {
+                card?.statusText = getString(R.string.stage_understanding)
                 addFeedItem(getString(R.string.stage_understanding), R.color.text_secondary)
             }
             is AgentStepUpdate.FastRuleMatched -> {
+                currentStepActionType = update.command.action
+                val label = "${update.command.action.wireName}${update.command.target?.let { ": $it" } ?: ""}"
+                card?.stepPills?.add(
+                    AgentStepPill(1, 1, label, PillState.RUNNING)
+                )
                 addFeedItem(getString(R.string.stage_routing_fast, update.command.action.wireName), R.color.accent_blue)
             }
             is AgentStepUpdate.PlanResolved -> {
-                tvTimelineEmpty.visibility = View.GONE
-                rvStepTimeline.visibility = View.VISIBLE
-                val items = update.steps.mapIndexed { i, cmd ->
-                    TimelineStep(
-                        stepIndex = i + 1,
-                        totalSteps = update.totalSteps,
-                        actionName = cmd.action.wireName,
-                        target = cmd.target,
-                        tierName = cmd.action.tier.name.replace("TIER_", "Tier "),
-                        status = if (settings.executionMode == ExecutionMode.DRY_RUN) StepStatus.DRY_RUN else StepStatus.PENDING,
-                        isDryRun = settings.executionMode == ExecutionMode.DRY_RUN
-                    )
+                if (card != null) {
+                    card.stepPills.clear()
+                    val isDryRun = settings.executionMode == ExecutionMode.DRY_RUN
+                    update.steps.forEachIndexed { i, cmd ->
+                        val label = "${cmd.action.wireName}${cmd.target?.let { ": $it" } ?: ""}"
+                        card.stepPills.add(
+                            AgentStepPill(
+                                stepIndex = i + 1,
+                                totalSteps = update.totalSteps,
+                                actionLabel = label,
+                                state = if (isDryRun) PillState.DRY_RUN else PillState.PENDING
+                            )
+                        )
+                    }
                 }
-                stepTimelineAdapter.setItems(items)
                 addFeedItem(getString(R.string.stage_planned, update.totalSteps), R.color.accent_blue)
                 FloatingBubbleService.updateProgress("⚡ 1/${update.totalSteps} ${update.steps[0].action.wireName}") {
                     agentLoopRunner.cancel()
                 }
             }
             is AgentStepUpdate.StepStarted -> {
+                currentStepActionType = update.command.action
                 val stepNum = update.stepIndex
                 val total = update.totalSteps
-                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.RUNNING, getString(R.string.status_running))
+                if (card != null) {
+                    val existing = card.stepPills.getOrNull(stepNum - 1)
+                    if (existing != null) {
+                        existing.state = PillState.RUNNING
+                    } else {
+                        val label = "${update.command.action.wireName}${update.command.target?.let { ": $it" } ?: ""}"
+                        card.stepPills.add(AgentStepPill(stepNum, total, label, PillState.RUNNING))
+                    }
+                    card.statusText = getString(R.string.stage_step_running, stepNum, total, update.command.action.wireName)
+                }
                 addFeedItem(getString(R.string.stage_step_running, stepNum, total, update.command.action.wireName), R.color.accent_blue)
                 FloatingBubbleService.updateProgress("⚡ $stepNum/$total ${update.command.action.wireName}") {
                     agentLoopRunner.cancel()
@@ -529,40 +605,76 @@ class MainActivity : AppCompatActivity() {
             }
             is AgentStepUpdate.AwaitingConfirmation -> {
                 val stepNum = update.stepIndex
-                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.AWAITING_CONFIRM, update.reason)
+                card?.stepPills?.getOrNull(stepNum - 1)?.let {
+                    it.state = PillState.PENDING
+                    it.detail = update.reason
+                }
             }
             is AgentStepUpdate.StepCompleted -> {
                 val stepNum = update.stepIndex
-                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.COMPLETED, update.details)
+                card?.stepPills?.getOrNull(stepNum - 1)?.let {
+                    it.state = PillState.DONE
+                    it.detail = update.details
+                }
+                if (currentStepActionType == ActionType.REPLY && update.details.isNotBlank()) {
+                    card?.replyText = update.details
+                }
                 addFeedItem(getString(R.string.stage_step_done, stepNum, update.totalSteps, update.details), R.color.accent_green)
             }
             is AgentStepUpdate.StepSkipped -> {
                 val stepNum = update.stepIndex
-                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.SKIPPED, getString(R.string.stage_step_skipped, stepNum, update.totalSteps))
+                card?.stepPills?.getOrNull(stepNum - 1)?.state = PillState.SKIPPED
                 addFeedItem(getString(R.string.stage_step_skipped, stepNum, update.totalSteps), R.color.text_secondary)
             }
             is AgentStepUpdate.StepFailed -> {
                 val stepNum = update.stepIndex
-                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.FAILED, update.error)
+                if (card != null) {
+                    val pill = card.stepPills.getOrNull(stepNum - 1)
+                    if (pill != null) {
+                        pill.state = PillState.FAILED
+                        pill.detail = update.error
+                    } else {
+                        card.replyText = update.error
+                    }
+                    card.isRunning = false
+                    card.isFailed = true
+                    card.statusText = getString(R.string.stream_failed)
+                }
                 addFeedItem(getString(R.string.stage_step_failed, stepNum, update.totalSteps, update.error), R.color.danger_red)
                 FloatingBubbleService.resetToBubble()
             }
             is AgentStepUpdate.DryRunValidated -> {
                 val stepNum = update.stepIndex
-                stepTimelineAdapter.updateStep(stepNum - 1, StepStatus.DRY_RUN, update.note)
+                card?.stepPills?.getOrNull(stepNum - 1)?.let {
+                    it.state = PillState.DRY_RUN
+                    it.detail = update.note
+                }
                 addFeedItem(getString(R.string.stage_dry_run, "${update.command.action.wireName} -> ${update.note}"), R.color.warning_yellow)
             }
             is AgentStepUpdate.AllCompleted -> {
+                if (card != null) {
+                    card.isRunning = false
+                    if (!card.isFailed) {
+                        card.statusText = getString(R.string.stream_completed)
+                    }
+                }
                 addFeedItem(getString(R.string.stage_all_done), R.color.accent_green)
                 etCommand.text.clear()
                 FloatingBubbleService.updateProgress("✓ All steps completed")
                 mainHandler.postDelayed({ FloatingBubbleService.resetToBubble() }, 2000)
             }
             is AgentStepUpdate.Aborted -> {
+                if (card != null) {
+                    card.isRunning = false
+                    card.isFailed = true
+                    card.statusText = update.reason
+                }
                 addFeedItem("⏹ ${update.reason}", R.color.warning_yellow)
                 FloatingBubbleService.resetToBubble()
             }
         }
+
+        agentStreamAdapter.notifyCurrentAgentCardChanged()
     }
 
     private fun showInteractiveStepDialog(
@@ -601,18 +713,74 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addFeedItem(message: String, colorRes: Int) {
-        tvLiveFeedEmpty.visibility = View.GONE
         val timeStr = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
-
         overlayController.update(message)
 
-        val tv = TextView(this).apply {
-            text = "[$timeStr] $message"
-            setTextColor(ContextCompat.getColor(context, colorRes))
-            textSize = 13f
-            setPadding(0, 4, 0, 4)
+        val card = agentStreamAdapter.getCurrentAgentCard()
+        if (card != null) {
+            card.technicalLogs.add("[$timeStr] $message")
+            agentStreamAdapter.notifyCurrentAgentCardChanged()
+        } else {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
-        layoutExecutionFeed.addView(tv, 0)
+    }
+
+    private fun showMemorySheetDialog() {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_memory_sheet, null)
+        val rvMemories = view.findViewById<RecyclerView>(R.id.rvMemories)
+        val tvMemoryEmpty = view.findViewById<TextView>(R.id.tvMemoryEmpty)
+        val etMemoryKey = view.findViewById<EditText>(R.id.etMemoryKey)
+        val etMemoryContent = view.findViewById<EditText>(R.id.etMemoryContent)
+        val btnSaveMemory = view.findViewById<Button>(R.id.btnSaveMemory)
+
+        val memoryList = MemoryStore.listMemories().toMutableList()
+        fun syncEmptyState() {
+            tvMemoryEmpty.visibility = if (memoryList.isEmpty()) View.VISIBLE else View.GONE
+            rvMemories.visibility = if (memoryList.isEmpty()) View.GONE else View.VISIBLE
+        }
+        syncEmptyState()
+
+        val adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            override fun getItemCount(): Int = memoryList.size
+            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+                val itemView = LayoutInflater.from(parent.context).inflate(R.layout.item_memory, parent, false)
+                return object : RecyclerView.ViewHolder(itemView) {}
+            }
+            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+                val item = memoryList[position]
+                holder.itemView.findViewById<TextView>(R.id.tvMemKey).text = item.key
+                holder.itemView.findViewById<TextView>(R.id.tvMemContent).text = item.content
+                holder.itemView.findViewById<Button>(R.id.btnDeleteMemory).setOnClickListener {
+                    MemoryStore.deleteMemory(item.id)
+                    memoryList.clear()
+                    memoryList.addAll(MemoryStore.listMemories())
+                    notifyDataSetChanged()
+                    syncEmptyState()
+                }
+            }
+        }
+        rvMemories.layoutManager = LinearLayoutManager(this)
+        rvMemories.adapter = adapter
+
+        btnSaveMemory.setOnClickListener {
+            val k = etMemoryKey.text.toString().trim()
+            val c = etMemoryContent.text.toString().trim()
+            if (k.isNotEmpty() && c.isNotEmpty()) {
+                MemoryStore.saveMemory(k, c)
+                etMemoryKey.text.clear()
+                etMemoryContent.text.clear()
+                memoryList.clear()
+                memoryList.addAll(MemoryStore.listMemories())
+                adapter.notifyDataSetChanged()
+                syncEmptyState()
+                Toast.makeText(this, R.string.memory_saved_toast, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        AlertDialog.Builder(this)
+            .setView(view)
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun recordHistory(cmd: String) {
@@ -802,13 +970,14 @@ class MainActivity : AppCompatActivity() {
     private fun setupSettingsTab() {
         // 1. Language Toggle
         if (settings.language == "en") {
-            rbLangEn.isChecked = true
+            toggleLanguage.check(R.id.btnLangEn)
         } else {
-            rbLangAr.isChecked = true
+            toggleLanguage.check(R.id.btnLangAr)
         }
 
-        rgLanguage.setOnCheckedChangeListener { _, checkedId ->
-            val newLang = if (checkedId == R.id.rbLangEn) "en" else "ar"
+        toggleLanguage.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val newLang = if (checkedId == R.id.btnLangEn) "en" else "ar"
             if (newLang != settings.language) {
                 settings.setLanguageAndApply(newLang)
                 recreate()
@@ -817,20 +986,22 @@ class MainActivity : AppCompatActivity() {
 
         // 2. Theme Mode Toggle (System, Dark, Light)
         when (settings.themeMode) {
-            ThemeMode.SYSTEM -> rbThemeSystem.isChecked = true
-            ThemeMode.DARK -> rbThemeDark.isChecked = true
-            ThemeMode.LIGHT -> rbThemeLight.isChecked = true
+            ThemeMode.SYSTEM -> toggleThemeMode.check(R.id.btnThemeSystem)
+            ThemeMode.DARK -> toggleThemeMode.check(R.id.btnThemeDark)
+            ThemeMode.LIGHT -> toggleThemeMode.check(R.id.btnThemeLight)
         }
 
-        rgThemeMode.setOnCheckedChangeListener { _, checkedId ->
+        toggleThemeMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
             val newTheme = when (checkedId) {
-                R.id.rbThemeDark -> ThemeMode.DARK
-                R.id.rbThemeLight -> ThemeMode.LIGHT
+                R.id.btnThemeDark -> ThemeMode.DARK
+                R.id.btnThemeLight -> ThemeMode.LIGHT
                 else -> ThemeMode.SYSTEM
             }
             if (settings.themeMode != newTheme) {
                 settings.themeMode = newTheme
                 settings.applyTheme()
+                applySystemBarAppearance()
             }
         }
 
@@ -857,20 +1028,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 4. Execution Mode
-        when (settings.executionMode) {
-            ExecutionMode.SILENT -> rbModeSilent.isChecked = true
-            ExecutionMode.INTERACTIVE -> rbModeInteractive.isChecked = true
-            ExecutionMode.DRY_RUN -> rbModeDryRun.isChecked = true
+        fun updateModeDesc(mode: ExecutionMode) {
+            tvExecutionModeDesc.text = when (mode) {
+                ExecutionMode.SILENT -> getString(R.string.mode_silent_desc)
+                ExecutionMode.INTERACTIVE -> getString(R.string.mode_interactive_desc)
+                ExecutionMode.DRY_RUN -> getString(R.string.mode_dry_run_desc)
+            }
         }
 
-        rgExecutionMode.setOnCheckedChangeListener { _, checkedId ->
+        when (settings.executionMode) {
+            ExecutionMode.SILENT -> toggleExecutionMode.check(R.id.btnModeSilent)
+            ExecutionMode.INTERACTIVE -> toggleExecutionMode.check(R.id.btnModeInteractive)
+            ExecutionMode.DRY_RUN -> toggleExecutionMode.check(R.id.btnModeDryRun)
+        }
+        updateModeDesc(settings.executionMode)
+
+        toggleExecutionMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
             val newMode = when (checkedId) {
-                R.id.rbModeSilent -> ExecutionMode.SILENT
-                R.id.rbModeInteractive -> ExecutionMode.INTERACTIVE
-                R.id.rbModeDryRun -> ExecutionMode.DRY_RUN
+                R.id.btnModeSilent -> ExecutionMode.SILENT
+                R.id.btnModeInteractive -> ExecutionMode.INTERACTIVE
+                R.id.btnModeDryRun -> ExecutionMode.DRY_RUN
                 else -> ExecutionMode.SILENT
             }
             settings.executionMode = newMode
+            updateModeDesc(newMode)
             updateHeaderStatus()
         }
 
@@ -1027,12 +1209,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateAccessibilityCard() {
         val isGranted = SilentExecAccessibilityService.get() != null
         if (isGranted) {
-            tvPermAccessibilityStatus.text = getString(R.string.perm_granted)
-            tvPermAccessibilityStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            tvPermAccessibilityBadge.visibility = View.VISIBLE
             btnOpenAccessibilitySettings.visibility = View.GONE
         } else {
-            tvPermAccessibilityStatus.text = getString(R.string.perm_missing)
-            tvPermAccessibilityStatus.setTextColor(ContextCompat.getColor(this, R.color.danger_red))
+            tvPermAccessibilityBadge.visibility = View.GONE
             btnOpenAccessibilitySettings.visibility = View.VISIBLE
         }
     }
