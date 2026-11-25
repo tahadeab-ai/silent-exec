@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SilentExec Desktop v1.0.0</title>
+  <title data-i18n="app_title">SilentExec Desktop v1.1.0</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,7 +26,7 @@
           </div>
           <div class="brand-text">
             <span class="brand-name">SilentExec</span>
-            <span class="brand-badge">v1.0.0</span>
+            <span class="brand-badge">v1.1.0</span>
           </div>
         </div>
         <button class="sidebar-toggle-btn" id="sidebarCollapseBtn" title="طي/توسيع القائمة">
@@ -107,6 +107,16 @@
           <span class="breadcrumb-current" id="viewTitleBreadcrumb">الوكيل الذكي</span>
         </div>
         <div class="header-badges">
+          <div class="header-model-switcher" id="headerModelSwitcher">
+            <span class="pill-dot"></span>
+            <select id="headerModelSelector" class="header-model-select" aria-label="Active Model & Backend">
+              <option value="local:liquidai-lfm3-1.7b">LFM3-1.7B (Edge)</option>
+            </select>
+            <span id="headerModelStatusBadge" class="header-model-status ready" data-i18n="status_ready">جاهز</span>
+            <button class="btn btn-secondary btn-xs header-models-jump-btn" id="jumpToModelsBtn" title="النماذج والبيئة">
+              <span data-i18n="btn_manage_models">النماذج</span>
+            </button>
+          </div>
           <div class="badge-pill backend-pill" id="activeBackendPill">
             <span class="pill-dot"></span>
             <span id="backendBadgeText">Local llama-server</span>
@@ -350,7 +360,19 @@
           </div>
         </div>
 
-        <!-- External MCP Servers Management -->
+        <!-- Built-In Skills & MCP Marketplace Presets -->
+        <div class="panel-card mcp-card">
+          <div class="mcp-header">
+            <div>
+              <h3 class="panel-title" data-i18n="built_in_skills_title">المهارات المدمجة (Built-In Native Skills)</h3>
+              <p class="panel-desc" data-i18n="built_in_skills_desc">مهارات حتمية سريعة مفعّلة افتراضياً (مستوحاة من Hermes Agent و Goose).</p>
+            </div>
+            <span class="status-pill ready" data-i18n="skills_active_badge">مفعّلة افتراضياً</span>
+          </div>
+          <div class="skills-presets-grid" id="builtInSkillsGrid"></div>
+        </div>
+
+        <!-- External MCP Servers Management & 1-Click Presets -->
         <div class="panel-card mcp-card">
           <div class="mcp-header">
             <div>
@@ -361,6 +383,12 @@
               <span class="btn-icon">+</span>
               <span data-i18n="btn_add_mcp">إضافة خادم MCP</span>
             </button>
+          </div>
+
+          <!-- 1-Click Official MCP Presets -->
+          <div style="margin-top: 10px;">
+            <h4 class="form-title" style="margin-bottom: 4px;" data-i18n="mcp_presets_title">إضافات MCP الرسمية (تفعيل بنقرة واحدة)</h4>
+            <div class="skills-presets-grid" id="mcpPresetsGrid"></div>
           </div>
 
           <!-- Add / Edit MCP Form (Hidden by default) -->
@@ -404,8 +432,8 @@
               <span class="setting-subtitle" data-i18n="setting_lang_desc">تغيير اتجاه ولغة العرض بين العربية (RTL) والإنجليزية (LTR)</span>
             </div>
             <div class="segment-group" id="langSelectorGroup">
-              <button class="segment-btn active" data-val="ar">العربية (RTL)</button>
-              <button class="segment-btn" data-val="en">English (LTR)</button>
+              <button class="segment-btn active" id="langAr" data-val="ar">العربية (RTL)</button>
+              <button class="segment-btn" id="langEn" data-val="en">English (LTR)</button>
             </div>
           </div>
 
@@ -415,8 +443,8 @@
               <span class="setting-subtitle" data-i18n="setting_theme_desc">التبديل بين مظهر السواد الداكن المريح والنقاء الفاتح</span>
             </div>
             <div class="segment-group" id="themeSelectorGroup">
-              <button class="segment-btn active" data-val="dark" data-i18n="theme_dark">داكن (Obsidian)</button>
-              <button class="segment-btn" data-val="light" data-i18n="theme_light">فاتح (Crisp)</button>
+              <button class="segment-btn active" id="themeDark" data-val="dark" data-i18n="theme_dark">داكن (Obsidian)</button>
+              <button class="segment-btn" id="themeLight" data-val="light" data-i18n="theme_light">فاتح (Crisp)</button>
             </div>
           </div>
         </div>
@@ -544,7 +572,7 @@
           <div class="card-header-with-action">
             <div>
               <h3 class="panel-title" data-i18n="update_title">تحديثات SilentExec Desktop</h3>
-              <p class="panel-desc" id="versionLabel">الإصدار الحالي: v1.0.0 (Windows x86_64)</p>
+              <p class="panel-desc" id="versionLabel" data-i18n="version_label">الإصدار الحالي: v1.1.0 (Windows x86_64)</p>
             </div>
             <button class="btn btn-secondary" id="checkUpdatesBtn">
               <span class="btn-icon">🔄</span>

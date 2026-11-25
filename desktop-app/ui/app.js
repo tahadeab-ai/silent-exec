@@ -10,7 +10,18 @@
   // --- Complete Localization Dictionaries ---
   const I18N = {
     ar: {
-      app_title: 'SilentExec Desktop v1.0.0',
+      app_title: 'SilentExec Desktop v1.1.0',
+      version_label: 'الإصدار الحالي: v1.1.0 (Windows x86_64)',
+      status_ready: 'جاهز',
+      status_not_downloaded: 'غير محمّل',
+      btn_manage_models: 'النماذج',
+      built_in_skills_title: 'المهارات المدمجة (Built-In Native Skills)',
+      built_in_skills_desc: 'مهارات حتمية سريعة مفعّلة افتراضياً (مستوحاة من Hermes Agent و Goose).',
+      skills_active_badge: 'مفعّلة افتراضياً',
+      mcp_presets_title: 'إضافات MCP الرسمية (تفعيل بنقرة واحدة)',
+      btn_enable_preset: '+ تفعيل',
+      btn_enabled_preset: 'مفعّل ✓',
+      btn_test_mcp: 'اختبار',
       nav_agent: 'الوكيل الذكي',
       nav_models: 'النماذج والبيئة',
       nav_memory: 'الذاكرة والمهارات',
@@ -136,7 +147,18 @@
       quick_ex_5: 'ارجع'
     },
     en: {
-      app_title: 'SilentExec Desktop v1.0.0',
+      app_title: 'SilentExec Desktop v1.1.0',
+      version_label: 'Current Version: v1.1.0 (Windows x86_64)',
+      status_ready: 'Ready',
+      status_not_downloaded: 'Not Downloaded',
+      btn_manage_models: 'Models',
+      built_in_skills_title: 'Built-In Native Skills (Active)',
+      built_in_skills_desc: 'Deterministic fast skills enabled by default (inspired by Hermes Agent & Goose).',
+      skills_active_badge: 'Active by Default',
+      mcp_presets_title: 'Official MCP Presets (1-Click Enable)',
+      btn_enable_preset: '+ Enable',
+      btn_enabled_preset: 'Enabled ✓',
+      btn_test_mcp: 'Test',
       nav_agent: 'Smart Agent',
       nav_models: 'Models & Runtime',
       nav_memory: 'Memory & Skills',
@@ -277,6 +299,8 @@
     openai_api_key: '',
     fastRouterEnabled: true,
     activeModelTag: null,
+    modelsCatalog: [],
+    mcpServers: [],
     isExecuting: false,
     downloadState: {}
   };
@@ -329,20 +353,28 @@
     if (cmd === 'list_models') {
       return [
         {
-          tag: 'v0.3.0-model',
-          name: 'Qwen2.5 1.5B Instruct Q4_K_M',
+          tag: 'qwen3-1.7b-gguf',
+          name: 'unsloth/Qwen3-1.7B-GGUF (Strong Arabic & Reasoning)',
+          filename: 'Qwen3-1.7B-Q4_K_M.gguf',
+          size_bytes: 1107409472,
+          is_cached: false,
+          is_active: false
+        },
+        {
+          tag: 'liquidai-lfm3-1.7b',
+          name: 'LiquidAI/LFM3-1.7B (Fast Edge Agent)',
+          filename: 'LFM3-1.7B-Q4_K_M.gguf',
+          size_bytes: 1099627808,
+          is_cached: false,
+          is_active: false
+        },
+        {
+          tag: 'v0.2.0-model',
+          name: 'SilentExec v0.2.0 (Fine-Tuned Arabic Edge)',
           filename: 'Qwen2.5-1.5B-Instruct.Q4_K_M.gguf',
           size_bytes: 986000000,
           is_cached: true,
           is_active: true
-        },
-        {
-          tag: 'v0.2.0-model',
-          name: 'Qwen2.5 3B Instruct Q4_K_M',
-          filename: 'Qwen2.5-3B-Instruct.Q4_K_M.gguf',
-          size_bytes: 1980000000,
-          is_cached: false,
-          is_active: false
         }
       ];
     }
@@ -426,8 +458,9 @@
 
   // Apply Theme
   function applyTheme(theme) {
-    AppState.theme = theme;
-    if (theme === 'light') {
+    AppState.theme = theme === 'light' ? 'light' : 'dark';
+    try { localStorage.setItem('silentexec_theme', AppState.theme); } catch (_) {}
+    if (AppState.theme === 'light') {
       document.body.classList.remove('theme-dark');
       document.body.classList.add('theme-light');
       const icon = document.getElementById('themeIcon');
@@ -440,18 +473,19 @@
     }
 
     document.querySelectorAll('#themeSelectorGroup .segment-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.val === theme);
+      btn.classList.toggle('active', btn.dataset.val === AppState.theme);
     });
   }
 
   // Apply Language & Full RTL/LTR Symmetry
   function applyLanguage(lang) {
-    AppState.lang = lang;
-    const isRtl = lang === 'ar';
-    document.documentElement.lang = lang;
+    AppState.lang = lang === 'en' ? 'en' : 'ar';
+    const isRtl = AppState.lang === 'ar';
+    document.documentElement.lang = AppState.lang;
     document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
 
-    const t = I18N[lang] || I18N.ar;
+    const t = I18N[AppState.lang] || I18N.ar;
+    document.title = t.app_title;
 
     // Update all text nodes with data-i18n
     document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -470,11 +504,24 @@
     if (langBadge) langBadge.textContent = isRtl ? 'EN' : 'عربي';
 
     document.querySelectorAll('#langSelectorGroup .segment-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.val === lang);
+      btn.classList.toggle('active', btn.dataset.val === AppState.lang);
     });
+
+    const topModeText = document.getElementById('topModeBadgeText');
+    if (topModeText) {
+      const modeMap = { silent: t.mode_silent, interactive: t.mode_interactive, dry_run: t.mode_dry_run };
+      topModeText.textContent = modeMap[AppState.mode] || AppState.mode;
+    }
 
     renderQuickChips();
     updateViewBreadcrumb();
+    renderHeaderModelSwitcher();
+    renderBuiltInSkills();
+    renderMcpPresets();
+
+    if (AppState.currentView === 'models') loadModels();
+    if (AppState.currentView === 'memory') loadMemories();
+    if (AppState.currentView === 'tools') loadMcpServers();
   }
 
   function updateViewBreadcrumb() {
@@ -954,15 +1001,139 @@
     }
   }
 
+  // --- Built-In Native Skills & 1-Click Official MCP Presets ---
+  const BUILT_IN_SKILLS = [
+    {
+      id: 'youtube_web_search',
+      icon: '🔍',
+      arName: 'بحث يوتيوب والويب',
+      enName: 'YouTube & Web Search',
+      arDesc: 'فتح يوتيوب أو جوجل والبحث الفوري بالعربية والإنجليزية.',
+      enDesc: 'Instant YouTube & Google search routing in Arabic and English.'
+    },
+    {
+      id: 'file_workspace_notes',
+      icon: '📁',
+      arName: 'الملفات والملاحظات',
+      enName: 'File Workspace & Notes',
+      arDesc: 'قراءة وكتابة الملفات وإنشاء الملاحظات السريعة بأمان.',
+      enDesc: 'Safe workspace file reading/writing and quick note creation.'
+    },
+    {
+      id: 'system_volume_apps',
+      icon: '🖥️',
+      arName: 'الصوت والتطبيقات',
+      enName: 'System Volume & Apps',
+      arDesc: 'تشغيل التطبيقات وضبط مستوى الصوت والتنقل السريع.',
+      enDesc: 'Launch desktop apps, adjust volume, and navigate system UI.'
+    },
+    {
+      id: 'hermes_memory',
+      icon: '🧠',
+      arName: 'ذاكرة Hermes الدائمة',
+      enName: 'Hermes Persistent Memory',
+      arDesc: 'حفظ التفضيلات والحقائق تلقائياً في memory.json.',
+      enDesc: 'Persist user preferences and facts automatically in memory.json.'
+    },
+    {
+      id: 'custom_routines',
+      icon: '⚡',
+      arName: 'الروتينات المخصصة',
+      enName: 'Custom Routines (skills.json)',
+      arDesc: 'تشغيل مهام متعددة الخطوات مثل وضع الدراسة أو العمل.',
+      enDesc: 'Reusable multi-step routines such as Study or Work Mode.'
+    }
+  ];
+
+  const OFFICIAL_MCP_PRESETS = [
+    {
+      name: 'Filesystem MCP',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      arDesc: 'الوصول المنظم للمجلدات والملفات المحلية.',
+      enDesc: 'Structured local directory and file operations.'
+    },
+    {
+      name: 'Fetch Web MCP',
+      command: 'uvx',
+      args: ['mcp-server-fetch'],
+      arDesc: 'جلب صفحات الويب وتحويلها إلى Markdown نظيف.',
+      enDesc: 'Fetch web pages and extract clean Markdown content.'
+    },
+    {
+      name: 'Memory Graph MCP',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-memory'],
+      arDesc: 'مخطط معرفة دائم عبر الجلسات.',
+      enDesc: 'Persistent knowledge graph memory across sessions.'
+    },
+    {
+      name: 'Git MCP',
+      command: 'uvx',
+      args: ['mcp-server-git'],
+      arDesc: 'فحص المستودعات، الفروقات، وسجل الالتزامات.',
+      enDesc: 'Inspect Git repositories, diffs, and commit history.'
+    }
+  ];
+
+  function renderBuiltInSkills() {
+    const grid = document.getElementById('builtInSkillsGrid');
+    if (!grid) return;
+    const isAr = AppState.lang === 'ar';
+    grid.innerHTML = BUILT_IN_SKILLS.map(skill => `
+      <div class="skill-preset-card">
+        <div class="skill-preset-top">
+          <span class="skill-preset-name">${skill.icon} ${isAr ? skill.arName : skill.enName}</span>
+          <span class="status-pill ready" style="font-size: 10px;">${isAr ? 'مفعّل' : 'Active'}</span>
+        </div>
+        <p class="skill-preset-desc">${isAr ? skill.arDesc : skill.enDesc}</p>
+      </div>
+    `).join('');
+  }
+
+  function renderMcpPresets() {
+    const grid = document.getElementById('mcpPresetsGrid');
+    if (!grid) return;
+    const t = I18N[AppState.lang] || I18N.ar;
+    const isAr = AppState.lang === 'ar';
+    const configuredNames = new Set((AppState.mcpServers || []).map(s => (s.name || '').toLowerCase()));
+
+    grid.innerHTML = OFFICIAL_MCP_PRESETS.map(preset => {
+      const isInstalled = configuredNames.has(preset.name.toLowerCase());
+      const cmdPreview = `${preset.command} ${preset.args.join(' ')}`;
+      return `
+        <div class="skill-preset-card">
+          <div class="skill-preset-top">
+            <span class="skill-preset-name">🔌 ${escapeHtml(preset.name)}</span>
+          </div>
+          <p class="skill-preset-desc">${isAr ? preset.arDesc : preset.enDesc}</p>
+          <div class="skill-preset-cmd" title="${escapeHtml(cmdPreview)}">${escapeHtml(cmdPreview)}</div>
+          <div class="skill-preset-actions">
+            ${isInstalled
+              ? `<span class="status-pill ready">${t.btn_enabled_preset}</span>
+                 <button class="btn btn-secondary btn-xs" onclick="window.silentExec.testMcp('${escapeHtml(preset.name)}')">${t.btn_test_mcp}</button>`
+              : `<button class="btn btn-primary btn-xs" onclick="window.silentExec.enableMcpPreset('${escapeHtml(preset.name)}')">${t.btn_enable_preset}</button>`
+            }
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   // --- MCP Tool Servers Management ---
   async function loadMcpServers() {
+    renderBuiltInSkills();
     const list = document.getElementById('mcpServersList');
     if (!list) return;
+    const t = I18N[AppState.lang] || I18N.ar;
     try {
       const servers = await invokeTauri('list_mcp_servers');
+      AppState.mcpServers = servers || [];
+      renderMcpPresets();
+
       list.innerHTML = '';
       if (!servers || servers.length === 0) {
-        list.innerHTML = `<div class="empty-state-box"><p>No external MCP servers configured.</p></div>`;
+        list.innerHTML = `<div class="empty-state-box"><p>${AppState.lang === 'ar' ? 'اختر إضافة MCP من الأعلى لتفعيلها بنقرة واحدة أو أضف خادماً مخصصاً.' : 'Enable an official MCP preset above in 1 click or add a custom server.'}</p></div>`;
         return;
       }
 
@@ -971,20 +1142,90 @@
         row.className = 'mcp-server-row';
         row.innerHTML = `
           <div>
-            <span style="font-weight: 700; font-size: 13.5px;">${s.name}</span>
+            <span style="font-weight: 700; font-size: 13.5px;">${escapeHtml(s.name)}</span>
             <div style="font-size: 11.5px; color: var(--text-dim); margin-top: 2px;">
-              <code>${s.command} ${(s.args || []).join(' ')}</code>
+              <code>${escapeHtml(s.command)} ${escapeHtml((s.args || []).join(' '))}</code>
             </div>
           </div>
           <div style="display: flex; gap: 6px;">
-            <button class="btn btn-secondary btn-xs" onclick="window.silentExec.testMcp('${s.name}')">Test tools/list</button>
-            <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteMcp('${s.name}')">Delete</button>
+            <button class="btn btn-secondary btn-xs" onclick="window.silentExec.testMcp('${escapeHtml(s.name)}')">${t.btn_test_mcp}</button>
+            <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteMcp('${escapeHtml(s.name)}')">${t.btn_delete}</button>
           </div>
         `;
         list.appendChild(row);
       });
     } catch (e) {
-      list.innerHTML = `<div class="empty-state-box"><p>${e}</p></div>`;
+      list.innerHTML = `<div class="empty-state-box"><p>${escapeHtml(String(e))}</p></div>`;
+    }
+  }
+
+  async function refreshHeaderModelSwitcher() {
+    try {
+      const models = await invokeTauri('list_models');
+      if (Array.isArray(models)) {
+        AppState.modelsCatalog = models;
+      }
+    } catch (_) {}
+    renderHeaderModelSwitcher();
+  }
+
+  function renderHeaderModelSwitcher() {
+    const select = document.getElementById('headerModelSelector');
+    const badge = document.getElementById('headerModelStatusBadge');
+    if (!select) return;
+
+    const t = I18N[AppState.lang] || I18N.ar;
+    const models = AppState.modelsCatalog && AppState.modelsCatalog.length > 0
+      ? AppState.modelsCatalog
+      : [
+          { tag: 'qwen3-1.7b-gguf', name: 'Qwen3-1.7B', is_cached: false, is_active: false },
+          { tag: 'liquidai-lfm3-1.7b', name: 'LFM3-1.7B', is_cached: false, is_active: false },
+          { tag: 'v0.2.0-model', name: 'v0.2.0-model', is_cached: false, is_active: false }
+        ];
+
+    select.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = `local:${m.tag}`;
+      const shortLabel = m.tag === 'qwen3-1.7b-gguf'
+        ? 'Qwen3-1.7B (GGUF)'
+        : m.tag === 'liquidai-lfm3-1.7b'
+          ? 'LFM3-1.7B (GGUF)'
+          : m.tag;
+      opt.textContent = `${shortLabel} ${m.is_cached ? '✓' : '⬇'}`;
+      select.appendChild(opt);
+    });
+
+    const ollamaOpt = document.createElement('option');
+    ollamaOpt.value = 'backend:ollama';
+    ollamaOpt.textContent = `Ollama (${AppState.ollama_model || 'local'})`;
+    select.appendChild(ollamaOpt);
+
+    const cloudOpt = document.createElement('option');
+    cloudOpt.value = 'backend:openai_compat';
+    cloudOpt.textContent = `Cloud API (${AppState.openai_api_model || 'OpenAI'})`;
+    select.appendChild(cloudOpt);
+
+    let isReady = true;
+    if (AppState.backend === 'ollama') {
+      select.value = 'backend:ollama';
+      isReady = true;
+    } else if (AppState.backend === 'openai_compat') {
+      select.value = 'backend:openai_compat';
+      isReady = Boolean(AppState.openai_api_key && AppState.openai_api_key.trim().length > 0) || Boolean(AppState.openai_api_base);
+    } else {
+      const activeObj = models.find(m => m.is_active) || models.find(m => m.tag === AppState.activeModelTag) || models[0];
+      if (activeObj) {
+        select.value = `local:${activeObj.tag}`;
+        isReady = Boolean(activeObj.is_cached);
+      } else {
+        isReady = false;
+      }
+    }
+
+    if (badge) {
+      badge.textContent = isReady ? t.status_ready : t.status_not_downloaded;
+      badge.className = `header-model-status ${isReady ? 'ready' : 'missing'}`;
     }
   }
 
@@ -1003,8 +1244,11 @@
       AppState.fastRouterEnabled = cfg.fast_router_enabled !== false;
       AppState.activeModelTag = cfg.active_model_tag;
 
+      let savedTheme = 'dark';
+      try { savedTheme = localStorage.getItem('silentexec_theme') || 'dark'; } catch (_) {}
+
       applyLanguage(AppState.lang);
-      applyTheme('dark');
+      applyTheme(savedTheme);
 
       // Update backend badges
       updateBackendDisplay();
@@ -1024,8 +1268,21 @@
       const frToggle = document.getElementById('fastRouterToggle');
       if (frToggle) frToggle.checked = AppState.fastRouterEnabled;
 
-      // Setup Listeners
+      const bridgeToggle = document.getElementById('lanBridgeToggle');
+      const bridgeDetails = document.getElementById('bridgeDetailsBox');
+      if (bridgeToggle) bridgeToggle.checked = Boolean(cfg.bridge_running);
+      if (bridgeDetails) bridgeDetails.style.display = cfg.bridge_running ? 'block' : 'none';
+
+      // Sync mode buttons
+      document.querySelectorAll('.composer-mode-switcher .mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === AppState.mode);
+      });
+
+      // Setup Listeners & initial header switcher
       setupEventListeners();
+      refreshHeaderModelSwitcher();
+      renderBuiltInSkills();
+      renderMcpPresets();
     } catch (e) {
       console.error('Init failed:', e);
     }
@@ -1081,7 +1338,69 @@
     if (themeToggleBtn) {
       themeToggleBtn.addEventListener('click', () => {
         applyTheme(AppState.theme === 'dark' ? 'light' : 'dark');
+        saveCurrentConfig();
       });
+    }
+
+    // Settings Language & Theme Segment Buttons (langAr, langEn, themeDark, themeLight)
+    document.querySelectorAll('#langSelectorGroup .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.val;
+        if (val) {
+          applyLanguage(val);
+          saveCurrentConfig();
+        }
+      });
+    });
+
+    document.querySelectorAll('#themeSelectorGroup .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.val;
+        if (val) {
+          applyTheme(val);
+          saveCurrentConfig();
+        }
+      });
+    });
+
+    // Top-Bar Model & Backend Switcher
+    const headerModelSelect = document.getElementById('headerModelSelector');
+    if (headerModelSelect) {
+      headerModelSelect.addEventListener('change', async () => {
+        const val = headerModelSelect.value;
+        if (val.startsWith('backend:')) {
+          AppState.backend = val.replace('backend:', '');
+          updateBackendDisplay();
+          renderHeaderModelSwitcher();
+          await saveCurrentConfig();
+          showToast(`${AppState.backend} active`);
+        } else if (val.startsWith('local:')) {
+          const tag = val.replace('local:', '');
+          const modelObj = (AppState.modelsCatalog || []).find(m => m.tag === tag);
+          AppState.backend = 'local_llama';
+          AppState.activeModelTag = tag;
+          updateBackendDisplay();
+          if (modelObj && modelObj.is_cached) {
+            try {
+              await invokeTauri('activate_model', { tag });
+              await refreshHeaderModelSwitcher();
+              showToast(`Activated ${tag}`);
+            } catch (e) {
+              showToast(String(e));
+            }
+          } else {
+            await saveCurrentConfig();
+            renderHeaderModelSwitcher();
+            switchView('models');
+            showToast(AppState.lang === 'ar' ? `يرجى تحميل النموذج ${tag} أولاً` : `Please download ${tag} first`);
+          }
+        }
+      });
+    }
+
+    const jumpToModelsBtn = document.getElementById('jumpToModelsBtn');
+    if (jumpToModelsBtn) {
+      jumpToModelsBtn.addEventListener('click', () => switchView('models'));
     }
 
     // Mode Selector in Composer
@@ -1110,6 +1429,21 @@
 
     const runBtn = document.getElementById('runBtn');
     if (runBtn) runBtn.addEventListener('click', runAgent);
+
+    const stopBtn = document.getElementById('stopBtn');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        AppState.isExecuting = false;
+        stopBtn.disabled = true;
+        if (runBtn) runBtn.disabled = false;
+        const thinkingEl = document.getElementById('agentThinkingCard');
+        if (thinkingEl) thinkingEl.remove();
+        const counterLabel = document.getElementById('stepCounterLabel');
+        const t = I18N[AppState.lang] || I18N.ar;
+        if (counterLabel) counterLabel.textContent = t.status_idle;
+        showToast(AppState.lang === 'ar' ? 'تم إيقاف التنفيذ' : 'Execution stopped');
+      });
+    }
 
     // Confirmation Actions
     const confirmProceedBtn = document.getElementById('confirmProceedBtn');
@@ -1197,6 +1531,58 @@
       frToggle.addEventListener('change', () => {
         AppState.fastRouterEnabled = frToggle.checked;
         saveCurrentConfig();
+      });
+    }
+
+    // Persist Backend Input Changes
+    ['ollamaUrlInput', 'ollamaModelInput', 'openaiBaseUrlInput', 'openaiModelInput', 'openaiKeyInput'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('change', () => {
+          saveCurrentConfig();
+          renderHeaderModelSwitcher();
+        });
+      }
+    });
+
+    // LAN Bridge Toggle & Copy Controls
+    const lanBridgeToggle = document.getElementById('lanBridgeToggle');
+    if (lanBridgeToggle) {
+      lanBridgeToggle.addEventListener('change', async () => {
+        const enable = lanBridgeToggle.checked;
+        try {
+          const res = await invokeTauri('toggle_lan_bridge', { enable });
+          const statusEl = document.getElementById('bridgeStatusText');
+          const detailsBox = document.getElementById('bridgeDetailsBox');
+          const addrVal = document.getElementById('bridgeAddressVal');
+          const tokenVal = document.getElementById('bridgeTokenVal');
+          const t = I18N[AppState.lang] || I18N.ar;
+          if (statusEl) statusEl.textContent = res.is_running ? t.bridge_status_running : t.bridge_status_stopped;
+          if (detailsBox) detailsBox.style.display = res.is_running ? 'block' : 'none';
+          if (addrVal && res.address) addrVal.textContent = res.address;
+          if (tokenVal && res.token) tokenVal.textContent = res.token;
+        } catch (e) {
+          lanBridgeToggle.checked = !enable;
+          showToast(String(e));
+        }
+      });
+    }
+
+    const copyBridgeAddrBtn = document.getElementById('copyBridgeAddrBtn');
+    if (copyBridgeAddrBtn) {
+      copyBridgeAddrBtn.addEventListener('click', () => {
+        const val = document.getElementById('bridgeAddressVal')?.textContent || '';
+        navigator.clipboard.writeText(val);
+        showToast((I18N[AppState.lang] || I18N.ar).copied_toast);
+      });
+    }
+
+    const copyBridgeTokenBtn = document.getElementById('copyBridgeTokenBtn');
+    if (copyBridgeTokenBtn) {
+      copyBridgeTokenBtn.addEventListener('click', () => {
+        const val = document.getElementById('bridgeTokenVal')?.textContent || '';
+        navigator.clipboard.writeText(val);
+        showToast((I18N[AppState.lang] || I18N.ar).copied_toast);
       });
     }
 
@@ -1385,7 +1771,10 @@
       try {
         await invokeTauri('activate_model', { tag });
         AppState.activeModelTag = tag;
+        AppState.backend = 'local_llama';
+        updateBackendDisplay();
         showToast(`Model ${tag} activated`);
+        await refreshHeaderModelSwitcher();
         loadModels();
       } catch (e) {
         showToast(e);
@@ -1422,6 +1811,22 @@
       const drawer = document.getElementById(`${turnId}_drawer`);
       if (drawer) {
         drawer.style.display = drawer.style.display === 'none' ? 'flex' : 'none';
+      }
+    },
+    enableMcpPreset: async (name) => {
+      const preset = OFFICIAL_MCP_PRESETS.find(p => p.name === name);
+      if (!preset) return;
+      try {
+        await invokeTauri('save_mcp_server', {
+          name: preset.name,
+          command: preset.command,
+          args: preset.args,
+          enabled: true
+        });
+        showToast(`${preset.name} enabled`);
+        loadMcpServers();
+      } catch (e) {
+        showToast(`Failed: ${e}`);
       }
     },
     testMcp: async (name) => {
