@@ -2,10 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
-use silent_exec_core::{
-    action_type_to_str as core_action_type_to_str, ActionCommand, ExecutionMode, MultiStepPlan,
-    SafetyDecision, SafetyGate,
-};
+use silent_exec_core::{ActionCommand, ExecutionMode, MultiStepPlan, SafetyDecision, SafetyGate};
 use silent_exec_pc::{
     action_type_to_str, hidden_command, parse_plan, resolve_clause, split_compound_prompt,
     start_bridge_server, AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter,
@@ -778,9 +775,11 @@ async fn resume_model_download(
 
 #[tauri::command]
 async fn cancel_model_download(tag: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut cancellations = state.download_cancellations.lock().unwrap();
-    if let Some(flag) = cancellations.remove(&tag) {
-        flag.store(true, Ordering::SeqCst);
+    {
+        let mut cancellations = state.download_cancellations.lock().unwrap();
+        if let Some(flag) = cancellations.remove(&tag) {
+            flag.store(true, Ordering::SeqCst);
+        }
     }
 
     tauri::async_runtime::spawn_blocking(move || {
