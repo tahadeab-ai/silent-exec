@@ -4,26 +4,21 @@
 [![Android CI](https://github.com/tahadeab-ai/silent-exec/actions/workflows/android-ci.yml/badge.svg)](https://github.com/tahadeab-ai/silent-exec/actions/workflows/android-ci.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tahadeab-ai/silent-exec/blob/main/nlp-training/train_silent_exec_qlora.ipynb)
 [![Model Release](https://img.shields.io/badge/Model_Release-v0.2.0--model-brightgreen.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model)
-[![PC Release](https://img.shields.io/badge/PC_Release-v1.0.0--pc-blue.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.0.0-pc)
-[![Android Release](https://img.shields.io/badge/Android_Release-v1.0.0--android-green.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.0.0-android)
+[![PC Release](https://img.shields.io/badge/PC_Release-v1.1.0--pc-blue.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.1.0-pc)
+[![Android Release](https://img.shields.io/badge/Android_Release-v1.1.0--android-green.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.1.0-android)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **SilentExec** is a high-performance, zero-chatter OS and GUI execution agent engineered for PC (Windows & Linux) and Android. Rather than generating verbose conversational text or streaming multi-paragraph responses, SilentExec translates multilingual user intent (Arabic and English) directly into deterministic, strictly schema-validated system and GUI actions, backed by Hermes-style persistent memory and MCP tool integration.
 
 ---
 
-## 🚀 What's New in v1.0.0
+## 🚀 What's New in v1.1.0
 
-- **Hermes-Style Persistent Memory (`MemoryStore`)**: Bounded local memory store (`memory.json` on PC & Android) automatically injects relevant user preferences, paths, and facts into agent prompts, supports autonomous `memory_save` actions, and includes 1-click UI management (Sidebar tab on Desktop, Memory Sheet on Android).
-- **25-Action Schema & Self-Healing Agent**: Expanded from 21 to 25 actions with `reply` (Tier 1 Silent), `read_file` (Tier 1 Silent), `write_file` (Tier 2 Confirm), and `memory_save` (Tier 1 Silent). Added lenient `Platform` deserialization (safely mapping unknown LLM strings like `"YouTube"` or `"Windows"`) and 1-retry self-healing ReAct recovery on Android with native YouTube search intent support.
-- **Zero-Freeze Async Desktop & Zero Black Console Popups**: All Tauri v2 backend commands run asynchronously via `tauri::async_runtime::spawn_blocking`, and all Windows subprocesses (`curl.exe`, `llama-server.exe`) use `CREATE_NO_WINDOW` (`0x08000000`) via `hidden_command`.
-- **Production Android UI/UX & Accuracy Fixes**:
-  - Crisp Light/Dark status & navigation bar contrast via `WindowInsetsControllerCompat` and synced bottom navigation state across theme/locale recreates.
-  - Material 3 `MaterialButtonToggleGroup` segmented controls for Language, Theme, and Execution Mode, plus single-control Accessibility status badge/enable button.
-  - Unified **Agent Conversation & Action Stream** (`RecyclerView`) with user prompt bubbles, live step progress pills, formatted `reply` cards with 1-tap copy, and expandable technical details.
-  - Accurate `0..100` percentage volume scaling (`Math.round((pct / 100.0) * maxVolume)`), Arabic/English mute rules (`"اطفئ الصوت"`, `"mute"`), and strict JNI error boundaries when no local model is loaded.
-- **Curated Edge Models & Upgraded QLoRA Pipeline**: Integrated `LiquidAI/LFM3-1.7B` (Fast Edge Agent) and `Qwen/Qwen3-1.7B-GGUF` (Strong Arabic & Reasoning) into PC and Android model catalogs alongside `tahadeab-ai/silent-exec` GitHub Releases, and updated `nlp-training/train_silent_exec_qlora.ipynb` to support `LiquidAI/LFM3-1.7B`, `Qwen/Qwen3-1.7B`, and `Qwen/Qwen2.5-1.5B-Instruct`.
-- **Model Context Protocol (MCP) Tool Bridge**: Built-in client supporting external MCP tool servers on PC (`tools/list`, stdio transport, dynamic tool calling) seamlessly integrated with the 3-Tier deterministic Safety Gate.
+- **Native `llama_jni.cpp` SIGSEGV Fix & Lazy Background Loading**: Replaced fragile partial KV-cache slicing with `std::mutex`-guarded model/context/vocab state, full `llama_kv_cache_clear`, context budget validation (`n_tokens < n_ctx - max_tokens`), safe GBNF grammar fallback, and lazy background `.gguf` loading in `OnDeviceLlamaEngine` (`>= 5 MB` validation).
+- **Verified Hugging Face GGUF Discovery**: Integrated live Hugging Face tree API discovery for `LiquidAI/LFM3-1.7B-GGUF` (`LFM3-1.7B-Q4_K_M.gguf`) and exact verified downloads for `unsloth/Qwen3-1.7B-GGUF` (`Qwen3-1.7B-Q4_K_M.gguf`) across both Android and Rust PC, with byte-size verification when `SHA256SUMS.txt` is absent.
+- **Built-In Skills Engine & Custom Routines (`skills.json`)**: Added deterministic Compound & Built-In Skills Routers (`BuiltInSkills.kt` on Android, `skills.rs` on PC) resolving YouTube Search, Web Search, and user-saved routines before falling back to small local weights, plus duplicate-step & empty-target loop guards in `AgentLoopRunner`.
+- **Desktop v1.1.0 UX & 1-Click MCP Presets**: Fixed Settings Language/Theme controls with instant full RTL/LTR re-rendering, added a live Top-Bar Model & Backend Switcher, and shipped Built-In Native Skills alongside 1-click Official MCP Presets (`Filesystem MCP`, `Fetch Web MCP`, `Memory Graph MCP`, `Git MCP`).
+- **Android v1.1.0 UX Polish**: Added a tappable Execute-header Model & Backend Quick-Switcher bottom sheet, Material 3 Built-In Skills & Routines quick-launcher chips, and smooth RTL/LTR alignment.
 
 ---
 
@@ -32,8 +27,8 @@
 ### 🖥️ PC Agent (Windows x86_64)
 
 #### Option A: Modern Desktop GUI App (Tauri v2)
-1. Download [`SilentExec-Desktop-x64.exe`](https://github.com/tahadeab-ai/silent-exec/releases/download/v1.0.0-pc/SilentExec-Desktop-x64.exe) from the official `v1.0.0-pc` release.
-2. Double-click to launch the sleek non-blocking GUI window with live Agent Session Stream, Models Hub, Memory & Skills tab, MCP Tools, and dark/light mode.
+1. Download [`SilentExec-Desktop-x64.exe`](https://github.com/tahadeab-ai/silent-exec/releases/download/v1.1.0-pc/SilentExec-Desktop-x64.exe) from the official `v1.1.0-pc` release.
+2. Double-click to launch the sleek non-blocking GUI window with live Agent Session Stream, Top-Bar Model Switcher, Models Hub, Memory & Skills tab, 1-Click MCP Presets, and dark/light mode.
 
 #### Option B: Minimal CLI & Floating Command Bar
 ```bash
@@ -50,9 +45,9 @@ silent-exec-pc update --check
 ```
 
 ### 📱 Android Agent (`arm64-v8a`)
-1. **Install APK**: Download [`silent-exec-android-arm64.apk`](https://github.com/tahadeab-ai/silent-exec/releases/download/v1.0.0-android/silent-exec-android-arm64.apk) from the official `v1.0.0-android` release (`adb install -r silent-exec-android-arm64.apk`).
-2. **Download Model**: Open the app, navigate to the **Models (`النماذج`)** tab, and tap **`Download`** on `Qwen2.5-1.5B-Instruct.Q4_K_M.gguf`, `LFM-1.7B-Q4_K_M.gguf`, or `qwen3-1.7b-instruct-q4_k_m.gguf` with byte-range pause/resume.
-3. **Execute**: Tap **🎤** or type natural voice/text commands in Arabic or English — actions execute silently on-device via native `llama.cpp` JNI with unified Agent Stream and floating pill feedback!
+1. **Install APK**: Download [`silent-exec-android-arm64.apk`](https://github.com/tahadeab-ai/silent-exec/releases/download/v1.1.0-android/silent-exec-android-arm64.apk) from the official `v1.1.0-android` release (`adb install -r silent-exec-android-arm64.apk`).
+2. **Download Model**: Open the app, navigate to the **Models (`النماذج`)** tab, and tap **`Download`** on `LFM3-1.7B-Q4_K_M.gguf`, `Qwen3-1.7B-Q4_K_M.gguf`, or `Qwen2.5-1.5B-Instruct.Q4_K_M.gguf` with byte-range pause/resume.
+3. **Execute**: Tap **🎤**, tap a Built-In Skill chip, or type natural voice/text commands in Arabic or English — actions execute silently on-device via native `llama.cpp` JNI with unified Agent Stream and floating pill feedback!
 
 ---
 
@@ -64,9 +59,9 @@ silent-exec-pc update --check
 
 | Component | Target Platform | Release Tag | Asset Name | Size | SHA-256 Checksum | Quick Download Command |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Android Execution Agent** | Android (`arm64-v8a`) | [`v1.0.0-android`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.0.0-android) | `silent-exec-android-arm64.apk` | **7.67 MB** | `5e68bef2f657af5c4776889df7d8d4ea45ca39ead39b9ab21b4fe8efb69017ad` | `gh release download v1.0.0-android -R tahadeab-ai/silent-exec -p "*.apk"` |
-| **Desktop GUI App (Tauri v2)** | Windows x86_64 | [`v1.0.0-pc`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.0.0-pc) | `SilentExec-Desktop-x64.exe` | **10.63 MB** | `5e6f5ee848da42136a18a50c528d3761437c632fcf130ce73dd9172e4caedf11` | `gh release download v1.0.0-pc -R tahadeab-ai/silent-exec -p "*Desktop*.exe"` |
-| **PC CLI & Floating Bar** | Windows x86_64 | [`v1.0.0-pc`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.0.0-pc) | `silent-exec-pc.exe` | **1.09 MB** | `108815bdc533e4f92b36221a4c4fe068026b00733c2a7674f1efe4343d822f95` | `gh release download v1.0.0-pc -R tahadeab-ai/silent-exec -p "silent-exec-pc.exe"` |
+| **Android Execution Agent** | Android (`arm64-v8a`) | [`v1.1.0-android`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.1.0-android) | `silent-exec-android-arm64.apk` | **7.69 MB** | `0b6d6958c8e903de142683182ea9d86f6bcdd8085f01ca48a2800df120dc69ad` | `gh release download v1.1.0-android -R tahadeab-ai/silent-exec -p "*.apk"` |
+| **Desktop GUI App (Tauri v2)** | Windows x86_64 | [`v1.1.0-pc`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.1.0-pc) | `SilentExec-Desktop-x64.exe` | **10.64 MB** | `c277775e8ce34b53ca31dd25bdb9a9ec9a1afbfe7463a246399aecc594b37f7c` | `gh release download v1.1.0-pc -R tahadeab-ai/silent-exec -p "*Desktop*.exe"` |
+| **PC CLI & Floating Bar** | Windows x86_64 | [`v1.1.0-pc`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v1.1.0-pc) | `silent-exec-pc.exe` | **1.16 MB** | `c6e3128de1833bbea8554664b3c24023c04283ef06a0975735c8ab52c87edd83` | `gh release download v1.1.0-pc -R tahadeab-ai/silent-exec -p "silent-exec-pc.exe"` |
 | **Edge NLP Model (Recommended)** | GGUF (`q4_k_m`) | [`v0.2.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model) | `Qwen2.5-1.5B-Instruct.Q4_K_M.gguf` | **940.37 MB** | `e636822696ecd8b9fb7fbcf2c8cc4ab12c04e681edf6308368a589eb219a0251` | `gh release download v0.2.0-model -R tahadeab-ai/silent-exec -p "*.gguf"` |
 | **Edge NLP Model (Baseline)** | GGUF (`q4_k_m`) | [`v0.1.0-model`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.1.0-model) | `Qwen2.5-0.5B-Instruct.Q4_K_M.gguf` | **379.38 MB** | `5dd97b1269d01f77067fe6766f69a6e8b731efb2b5ba7ae05fce5d3580eb260b` | `gh release download v0.1.0-model -R tahadeab-ai/silent-exec -p "*.gguf"` |
 
@@ -173,8 +168,8 @@ SilentExec enforces a multi-step safety policy:
 
 All tests execute in automated GitHub Actions cloud CI pipelines across Ubuntu and Windows runners:
 
-- **Core Rust**: **104 unit tests** across `silent-exec-core` (28 tests) and `silent-exec-pc` (76 tests) (`CARGO_BUILD_JOBS=2 cargo test --workspace`).
-- **Android Agent**: **91 JVM unit tests** across `CoreSafetyTest`, `OfflineLlamaTest`, `UpdateAndModelsTest`, `GuiAgentAndRouterTest`, `AgentLoopAndThemeTest`, `ResumableAndBackendTest`, and `HermesAgentAndBugfixTest`.
+- **Core Rust**: **107 unit tests** across `silent-exec-core` (28 tests) and `silent-exec-pc` (79 tests) (`CARGO_BUILD_JOBS=2 cargo test --workspace`).
+- **Android Agent**: **96 JVM unit tests** across `CoreSafetyTest`, `OfflineLlamaTest`, `UpdateAndModelsTest`, `GuiAgentAndRouterTest`, `AgentLoopAndThemeTest`, `ResumableAndBackendTest`, `HermesAgentAndBugfixTest`, and `BuiltInSkillsAndHfTest`.
 - **Golden Evaluation**: **250 evaluation cases** ([evals/golden_eval.jsonl](evals/golden_eval.jsonl)).
 - **Schema & Policy Alignment**: 25-action JSON Schema validation, Draft 2020-12 compliance, and GBNF grammar verification.
 - **Native NDK Verification**: Cloud CI confirms `libllama_jni.so` is bundled and validated inside the `arm64-v8a` APK.
