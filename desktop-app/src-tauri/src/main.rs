@@ -245,6 +245,7 @@ async fn execute_query(
             if let Some(cmd) = FastRuleRouter::route(trimmed) {
                 let target_str = cmd.target.as_deref().unwrap_or("").to_string();
                 steps_out.push(StepInfo {
+                    thought: cmd.thought.clone(),
                     step_index: 1,
                     total_steps: 1,
                     stage: "understanding".to_string(),
@@ -304,6 +305,7 @@ async fn execute_query(
                 if exec_mode == ExecutionMode::Interactive {
                     *pending_exec.lock().unwrap() = Some((cmd.clone(), exec_mode));
                     steps_out.push(StepInfo {
+                        thought: cmd.thought.clone(),
                         step_index: 1,
                         total_steps: 1,
                         stage: "awaiting_confirm".to_string(),
@@ -326,6 +328,7 @@ async fn execute_query(
                 let (stage, details) = format_execution_result(result);
 
                 steps_out.push(StepInfo {
+                    thought: cmd.thought.clone(),
                     step_index: 1,
                     total_steps: 1,
                     stage,
@@ -449,6 +452,7 @@ async fn execute_query(
 
         let total = plan.steps.len();
         steps_out.push(StepInfo {
+            thought: None,
             step_index: 1,
             total_steps: total,
             stage: "planned".to_string(),
@@ -463,6 +467,7 @@ async fn execute_query(
             match decision {
                 SafetyDecision::Block { reason } => {
                     steps_out.push(StepInfo {
+                        thought: step.thought.clone(),
                         step_index: step_num,
                         total_steps: total,
                         stage: "blocked".to_string(),
@@ -483,6 +488,7 @@ async fn execute_query(
                     if exec_mode != ExecutionMode::DryRun {
                         *pending_exec.lock().unwrap() = Some((step.clone(), exec_mode));
                         steps_out.push(StepInfo {
+                            thought: step.thought.clone(),
                             step_index: step_num,
                             total_steps: total,
                             stage: "awaiting_confirm".to_string(),
@@ -507,6 +513,7 @@ async fn execute_query(
                 let target_str = step.target.as_deref().unwrap_or("").to_string();
                 *pending_exec.lock().unwrap() = Some((step.clone(), exec_mode));
                 steps_out.push(StepInfo {
+                    thought: step.thought.clone(),
                     step_index: step_num,
                     total_steps: total,
                     stage: "awaiting_confirm".to_string(),
@@ -529,6 +536,7 @@ async fn execute_query(
             let (stage, details) = format_execution_result(res);
 
             steps_out.push(StepInfo {
+                thought: step.thought.clone(),
                 step_index: step_num,
                 total_steps: total,
                 stage,
@@ -576,6 +584,7 @@ async fn confirm_step(
         let mut steps_out = Vec::new();
         if !proceed {
             steps_out.push(StepInfo {
+                thought: cmd.thought.clone(),
                 step_index,
                 total_steps: step_index,
                 stage: "failed".to_string(),
@@ -599,6 +608,7 @@ async fn confirm_step(
         let (stage, details) = format_execution_result(res);
 
         steps_out.push(StepInfo {
+            thought: cmd.thought.clone(),
             step_index,
             total_steps: step_index,
             stage,
