@@ -29,6 +29,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.silentexec.android.BuildConfig
@@ -871,7 +872,7 @@ class MainActivity : AppCompatActivity() {
         val btnBridge = com.google.android.material.button.MaterialButton(
             this,
             null,
-            com.google.android.material.R.attr.materialButtonTonalStyle
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
             text = bridgeLabel
             isAllCaps = false
@@ -901,7 +902,7 @@ class MainActivity : AppCompatActivity() {
         val btnCloud = com.google.android.material.button.MaterialButton(
             this,
             null,
-            com.google.android.material.R.attr.materialButtonTonalStyle
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
             text = cloudLabel
             isAllCaps = false
