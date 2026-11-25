@@ -3,7 +3,7 @@
 
 root ::= action-command | multi-step-plan
 
-action-command ::= "{" ws "\"action\"" ws ":" ws action-val ws "," ws (target-field ws ",")? (folder-field ws ",")? (args-field ws ",")? "\"platform\"" ws ":" ws platform-val ws "," ws "\"confidence\"" ws ":" ws confidence-val ws "}"
+action-command ::= "{" ws (thought-field ws "," ws)? "\"action\"" ws ":" ws action-val ws "," ws (target-field ws ",")? (folder-field ws ",")? (args-field ws ",")? "\"platform\"" ws ":" ws platform-val ws "," ws "\"confidence\"" ws ":" ws confidence-val ws "}"
 
 multi-step-plan ::= "{" ws "\"steps\"" ws ":" ws "[" ws action-command (ws "," ws action-command)* ws "]" ws "}"
 
@@ -37,9 +37,10 @@ platform-val ::= "\"pc\"" | "\"android\"" | "\"any\""
 
 confidence-val ::= "1.0" | "1" | "0" ("." [0-9]+)?
 
-target-field ::= "\"target\"" ws ":" ws json-string
-folder-field ::= "\"folder\"" ws ":" ws json-string
-args-field   ::= "\"args\"" ws ":" ws json-object
+thought-field ::= "\"thought\"" ws ":" ws json-string
+target-field  ::= "\"target\"" ws ":" ws json-string
+folder-field  ::= "\"folder\"" ws ":" ws json-string
+args-field    ::= "\"args\"" ws ":" ws json-object
 
 json-string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
 

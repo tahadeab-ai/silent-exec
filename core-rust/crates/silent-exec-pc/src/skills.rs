@@ -194,6 +194,38 @@ impl BuiltInSkills {
         None
     }
 
+    fn has_chained_followup_actions(norm_text: &str) -> bool {
+        let padded = format!(" {} ", norm_text);
+        const CHAINED_MARKERS: &[&str] = &[
+            " وافتح ",
+            " و افتح ",
+            " واضغط ",
+            " و اضغط ",
+            " واكتب ",
+            " و اكتب ",
+            " وانزل ",
+            " و انزل ",
+            " وارسل ",
+            " و ارسل ",
+            " ولايك ",
+            " و لايك ",
+            " وشغل ",
+            " و شغل ",
+            " ثم ",
+            " بعدين ",
+            " بعدها ",
+            " and open ",
+            " and click ",
+            " and tap ",
+            " and like ",
+            " and type ",
+            " and scroll ",
+            " and send ",
+            " then ",
+        ];
+        CHAINED_MARKERS.iter().any(|m| padded.contains(m))
+    }
+
     #[must_use]
     pub fn resolve(query: &str) -> Option<Vec<ActionCommand>> {
         let store = SkillStore::load_from(&SkillStore::default_path()).ok();
@@ -220,6 +252,11 @@ impl BuiltInSkills {
         }
 
         let norm = Self::normalize_text(trimmed);
+
+        // Compound-intent guard: let the Thinking ReAct Agent Loop handle multi-step goals
+        if Self::has_chained_followup_actions(&norm) {
+            return None;
+        }
 
         // 2. YouTube Search Skill
         let yt_prefixes = [
@@ -253,6 +290,7 @@ impl BuiltInSkills {
                 Self::url_encode(&q)
             );
             return Some(vec![ActionCommand {
+                thought: None,
                 action: ActionType::OpenUrl,
                 target: Some(url),
                 folder: None,
@@ -289,6 +327,7 @@ impl BuiltInSkills {
         if let Some(q) = Self::extract_query_after_prefix(&norm, &web_prefixes) {
             let url = format!("https://www.google.com/search?q={}", Self::url_encode(&q));
             return Some(vec![ActionCommand {
+                thought: None,
                 action: ActionType::OpenUrl,
                 target: Some(url),
                 folder: None,

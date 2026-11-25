@@ -180,7 +180,8 @@ data class ActionCommand(
     val folder: String? = null,
     val args: JsonElement? = null,
     val platform: Platform = Platform.ANDROID,
-    val confidence: Double = 0.85
+    val confidence: Double = 0.85,
+    val thought: String? = null
 ) {
     init {
         require(confidence in 0.0..1.0) {

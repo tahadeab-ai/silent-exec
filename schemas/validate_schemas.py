@@ -98,6 +98,7 @@ def main() -> int:
             "confidence": 0.75
         },
         {
+            "thought": "Need to click the send button visible on screen",
             "action": "ui_click",
             "target": "زر ارسال",
             "platform": "android",

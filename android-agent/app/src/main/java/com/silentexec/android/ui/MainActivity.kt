@@ -594,18 +594,32 @@ class MainActivity : AppCompatActivity() {
                 currentStepActionType = update.command.action
                 val stepNum = update.stepIndex
                 val total = update.totalSteps
+                val thought = update.command.thought?.trim().orEmpty()
                 if (card != null) {
                     val existing = card.stepPills.getOrNull(stepNum - 1)
                     if (existing != null) {
                         existing.state = PillState.RUNNING
+                        if (thought.isNotEmpty()) existing.thought = thought
                     } else {
                         val label = "${update.command.action.wireName}${update.command.target?.let { ": $it" } ?: ""}"
-                        card.stepPills.add(AgentStepPill(stepNum, total, label, PillState.RUNNING))
+                        card.stepPills.add(AgentStepPill(stepNum, total, label, PillState.RUNNING, thought = thought.ifEmpty { null }))
                     }
-                    card.statusText = getString(R.string.stage_step_running, stepNum, total, update.command.action.wireName)
+                    card.statusText = if (thought.isNotEmpty()) {
+                        "💭 التفكير: $thought"
+                    } else {
+                        getString(R.string.stage_step_running, stepNum, total, update.command.action.wireName)
+                    }
+                }
+                if (thought.isNotEmpty()) {
+                    addFeedItem("💭 التفكير: $thought", R.color.text_secondary)
                 }
                 addFeedItem(getString(R.string.stage_step_running, stepNum, total, update.command.action.wireName), R.color.accent_blue)
-                FloatingBubbleService.updateProgress("⚡ $stepNum/$total ${update.command.action.wireName}") {
+                val bubbleText = if (thought.isNotEmpty()) {
+                    "💭 $thought\n⚡ $stepNum/$total ${update.command.action.wireName}"
+                } else {
+                    "⚡ $stepNum/$total ${update.command.action.wireName}"
+                }
+                FloatingBubbleService.updateProgress(bubbleText) {
                     agentLoopRunner.cancel()
                 }
             }
@@ -677,6 +691,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 addFeedItem("⏹ ${update.reason}", R.color.warning_yellow)
                 FloatingBubbleService.resetToBubble()
+            }
+            is AgentStepUpdate.ModelTip -> {
+                card?.tipText = update.message
+                addFeedItem(update.message, R.color.warning_yellow)
             }
         }
 

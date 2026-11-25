@@ -118,6 +118,7 @@ impl FastRuleRouter {
         // 1. UI Back
         if Self::is_back_command(&normalized, &tokens) {
             return Some(ActionCommand {
+                thought: None,
                 action: ActionType::UiBack,
                 target: None,
                 folder: None,
@@ -130,6 +131,7 @@ impl FastRuleRouter {
         // 2. UI Home / Desktop
         if Self::is_home_command(&normalized, &tokens) {
             return Some(ActionCommand {
+                thought: None,
                 action: ActionType::UiHome,
                 target: None,
                 folder: None,
@@ -142,6 +144,7 @@ impl FastRuleRouter {
         // 3. UI Scroll
         if let Some(direction) = Self::is_scroll_command(&normalized, &tokens) {
             return Some(ActionCommand {
+                thought: None,
                 action: ActionType::UiScroll,
                 target: None,
                 folder: None,
@@ -154,6 +157,7 @@ impl FastRuleRouter {
         // 4. Set Volume
         if let Some(level) = Self::is_volume_command(&normalized, &tokens) {
             return Some(ActionCommand {
+                thought: None,
                 action: ActionType::SetVolume,
                 target: None,
                 folder: None,
@@ -166,6 +170,7 @@ impl FastRuleRouter {
         // 5. Open Folder
         if let Some(folder_target) = Self::is_open_folder_command(&normalized, &tokens) {
             return Some(ActionCommand {
+                thought: None,
                 action: ActionType::OpenFolder,
                 target: Some(folder_target),
                 folder: None,

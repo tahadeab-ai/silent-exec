@@ -15,6 +15,10 @@
     "ActionCommand": {
       "type": "object",
       "properties": {
+        "thought": {
+          "type": "string",
+          "description": "Short 1-sentence reasoning explaining the current step"
+        },
         "action": {
           "type": "string",
           "enum": [

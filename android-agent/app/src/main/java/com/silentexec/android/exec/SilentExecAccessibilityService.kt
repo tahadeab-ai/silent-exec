@@ -27,12 +27,13 @@ data class UiElementInfo(
             isEditable -> "input field"
             else -> className.substringAfterLast('.')
         }
-        val types = mutableListOf<String>()
-        if (isEditable) types.add("editable")
-        if (isClickable) types.add("clickable")
-        if (isScrollable) types.add("scrollable")
-        val typeStr = if (types.isNotEmpty()) types.joinToString(", ") else "view"
-        return "[$index] $label ($typeStr)"
+        val role = when {
+            isEditable -> "input"
+            isClickable -> "button"
+            isScrollable -> "list"
+            else -> className.substringAfterLast('.').ifBlank { "view" }
+        }
+        return "[$index] $role: $label"
     }
 }
 
@@ -65,7 +66,7 @@ class SilentExecAccessibilityService : AccessibilityService() {
         var counter = 0
 
         fun traverse(node: AccessibilityNodeInfo?) {
-            if (node == null) return
+            if (node == null || elements.size >= 35) return
             if (!node.isVisibleToUser) return
 
             val text = node.text?.toString()?.trim() ?: ""

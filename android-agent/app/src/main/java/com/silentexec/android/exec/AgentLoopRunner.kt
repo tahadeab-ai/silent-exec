@@ -44,6 +44,7 @@ sealed class AgentStepUpdate {
     ) : AgentStepUpdate()
     data class AllCompleted(val totalSteps: Int) : AgentStepUpdate()
     data class Aborted(val reason: String) : AgentStepUpdate()
+    data class ModelTip(val message: String) : AgentStepUpdate()
 }
 
 enum class StepDecision {
@@ -134,8 +135,18 @@ class AgentLoopRunner(
         }
 
         // 3. Multi-Step Screen-Aware ReAct Loop
+        if (settings.inferenceSource == InferenceSource.OFFLINE &&
+            settings.activeModelFile.contains("0.5B", ignoreCase = true)
+        ) {
+            onUpdate(
+                AgentStepUpdate.ModelTip(
+                    "💡 نصيحة: النموذج الحالي Qwen2.5-0.5B خفيف؛ للمهام متعددة الخطوات يُفضل التبديل إلى Qwen3-1.7B أو LFM3-1.7B أو Cloud API."
+                )
+            )
+        }
+
         val stepHistory = mutableListOf<String>()
-        val maxSteps = 6
+        val maxSteps = 8
 
         var currentStepIndex = 1
         var isLoopFinished = false
@@ -237,8 +248,12 @@ class AgentLoopRunner(
                     stepHistory.add("Step $currentStepIndex: ${cmd.action.wireName}(${cmd.target ?: ""}) -> OK")
                     currentStepIndex++
 
+                    val settleMs = when (cmd.action) {
+                        ActionType.OPEN_URL, ActionType.OPEN_ANDROID_APP, ActionType.UI_CLICK -> maxOf(stepDelayMs, 1200L)
+                        else -> stepDelayMs
+                    }
                     if (stepDelayMs > 0 && currentStepIndex <= maxSteps && !isCancelled) {
-                        try { Thread.sleep(stepDelayMs) } catch (_: InterruptedException) {}
+                        try { Thread.sleep(settleMs) } catch (_: InterruptedException) {}
                     }
                 }
             }

@@ -227,6 +227,7 @@ mod tests {
         let executor = PcExecutor::new(indexer, true);
 
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFile,
             target: Some("cmd.exe && calc".to_string()),
             folder: None,
@@ -252,6 +253,7 @@ mod tests {
         let executor = PcExecutor::new(indexer, true);
 
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::DeleteFile,
             target: Some("test.log".to_string()),
             folder: None,
@@ -278,6 +280,7 @@ mod tests {
         let executor = PcExecutor::new(indexer, true);
 
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::DeleteFile,
             target: Some("test.log".to_string()),
             folder: None,
@@ -307,6 +310,7 @@ mod tests {
 
         let executor = PcExecutor::new(indexer, true);
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFolder,
             target: Some("Downloads".to_string()),
             folder: None,
@@ -338,6 +342,7 @@ mod tests {
         let executor = PcExecutor::new(indexer, true).with_notes_dir(guard.path.join("MyNotes"));
 
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::CreateNote,
             target: Some("Meeting Agenda".to_string()),
             folder: None,
@@ -1415,6 +1420,7 @@ mod tests {
 
         let gui_cmds = [
             ActionCommand {
+                thought: None,
                 action: ActionType::UiClick,
                 target: Some("submit_button".to_string()),
                 folder: None,
@@ -1423,6 +1429,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiType,
                 target: Some("search_bar".to_string()),
                 folder: None,
@@ -1431,6 +1438,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiScroll,
                 target: None,
                 folder: None,
@@ -1439,6 +1447,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiBack,
                 target: None,
                 folder: None,
@@ -1447,6 +1456,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiHome,
                 target: None,
                 folder: None,
@@ -1477,6 +1487,7 @@ mod tests {
         let executor = PcExecutor::new(indexer, false); // live mode
 
         let cmd_home = ActionCommand {
+            thought: None,
             action: ActionType::UiHome,
             target: None,
             folder: None,
@@ -1602,6 +1613,7 @@ mod tests {
         // 3. Test blocked step in plan stops execution
         let dangerous_plan = MultiStepPlan::new(vec![
             ActionCommand {
+                thought: None,
                 action: ActionType::UiBack,
                 target: None,
                 folder: None,
@@ -1610,6 +1622,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::OpenFile,
                 target: Some("../../etc/shadow".to_string()),
                 folder: None,
@@ -1883,6 +1896,7 @@ mod tests {
 
         // 1. Reply tool (DryRun & Live)
         let reply_cmd = ActionCommand {
+            thought: None,
             action: ActionType::Reply,
             target: Some("Answer: 42".to_string()),
             folder: None,
@@ -1901,6 +1915,7 @@ mod tests {
         // 2. WriteFile tool (Tier-2 Confirmation required if false, executes when true)
         let test_file = guard.path.join("output.txt");
         let write_cmd = ActionCommand {
+            thought: None,
             action: ActionType::WriteFile,
             target: Some(test_file.to_string_lossy().to_string()),
             folder: None,
@@ -1919,6 +1934,7 @@ mod tests {
 
         // 3. ReadFile tool (Live)
         let read_cmd = ActionCommand {
+            thought: None,
             action: ActionType::ReadFile,
             target: Some(test_file.to_string_lossy().to_string()),
             folder: None,
@@ -1934,6 +1950,7 @@ mod tests {
 
         // 4. MemorySave tool (Live)
         let mem_cmd = ActionCommand {
+            thought: None,
             action: ActionType::MemorySave,
             target: Some("user_theme".to_string()),
             folder: None,
@@ -1985,6 +2002,7 @@ mod tests {
         let mut store = SkillStore::load_from(&skills_file).unwrap();
 
         let step1 = ActionCommand {
+            thought: None,
             action: ActionType::SetVolume,
             target: None,
             folder: None,
@@ -1993,6 +2011,7 @@ mod tests {
             confidence: 1.0,
         };
         let step2 = ActionCommand {
+            thought: None,
             action: ActionType::OpenUrl,
             target: Some("https://github.com".to_string()),
             folder: None,
@@ -2043,5 +2062,27 @@ mod tests {
             parsed.download_url.as_deref(),
             Some("https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true")
         );
+    }
+
+    #[test]
+    fn test_78_compound_intent_guard_does_not_hijack_multistep_prompts() {
+        let multi_ar = "افتح اليوتيوب و ابحث عن nlp و افتح اول فيديو و اضغط لايك";
+        assert!(BuiltInSkills::resolve_with_store(multi_ar, None).is_none());
+
+        let multi_en = "open youtube and search for nlp and open first video and click like";
+        assert!(BuiltInSkills::resolve_with_store(multi_en, None).is_none());
+
+        let single = BuiltInSkills::resolve_with_store("افتح اليوتيوب و ابحث عن nlp", None);
+        assert!(single.is_some());
+    }
+
+    #[test]
+    fn test_79_action_command_deserializes_thought_field() {
+        let json = r##"{"thought":"Open first video result","action":"ui_click","target":"#0","platform":"pc","confidence":0.91}"##;
+        let cmd =
+            ActionCommand::from_json(json).expect("Should deserialize ActionCommand with thought");
+        assert_eq!(cmd.thought.as_deref(), Some("Open first video result"));
+        assert_eq!(cmd.action, ActionType::UiClick);
+        assert_eq!(cmd.target.as_deref(), Some("#0"));
     }
 }

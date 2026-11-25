@@ -224,6 +224,7 @@ impl McpClient {
     ) -> Result<ExecutionResult, String> {
         // Construct synthetic ActionCommand for SafetyGate evaluation
         let synthetic_cmd = ActionCommand {
+            thought: None,
             action: ActionType::LaunchApp,
             target: Some(format!("{}:{}", self.config.name, tool_name)),
             folder: None,

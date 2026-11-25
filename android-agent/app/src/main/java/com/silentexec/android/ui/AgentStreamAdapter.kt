@@ -29,7 +29,8 @@ data class AgentStepPill(
     val totalSteps: Int,
     val actionLabel: String,
     var state: PillState = PillState.PENDING,
-    var detail: String? = null
+    var detail: String? = null,
+    var thought: String? = null
 )
 
 sealed class AgentStreamItem {
@@ -42,6 +43,7 @@ sealed class AgentStreamItem {
         var isFailed: Boolean = false,
         val stepPills: MutableList<AgentStepPill> = mutableListOf(),
         var replyText: String? = null,
+        var tipText: String? = null,
         val technicalLogs: MutableList<String> = mutableListOf(),
         var isDetailsExpanded: Boolean = false
     ) : AgentStreamItem()
@@ -153,9 +155,27 @@ class AgentStreamAdapter(
 
             // Render step pills cleanly
             layoutStepPills.removeAllViews()
-            if (card.stepPills.isNotEmpty()) {
+            if (!card.tipText.isNullOrBlank() || card.stepPills.isNotEmpty()) {
                 layoutStepPills.visibility = View.VISIBLE
+                if (!card.tipText.isNullOrBlank()) {
+                    val tvTip = TextView(ctx).apply {
+                        text = card.tipText
+                        setTextColor(ContextCompat.getColor(ctx, R.color.warning_yellow))
+                        textSize = 11.5f
+                        setPadding(0, 2, 0, 6)
+                    }
+                    layoutStepPills.addView(tvTip)
+                }
                 for (pill in card.stepPills) {
+                    if (!pill.thought.isNullOrBlank()) {
+                        val tvThought = TextView(ctx).apply {
+                            text = "💭 التفكير: ${pill.thought}"
+                            setTextColor(ContextCompat.getColor(ctx, R.color.text_secondary))
+                            textSize = 11.5f
+                            setPadding(0, 4, 0, 1)
+                        }
+                        layoutStepPills.addView(tvThought)
+                    }
                     val icon = when (pill.state) {
                         PillState.PENDING -> "⏳"
                         PillState.RUNNING -> "⚡"

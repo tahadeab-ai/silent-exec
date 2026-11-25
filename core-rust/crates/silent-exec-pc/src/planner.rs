@@ -54,6 +54,7 @@ pub fn resolve_clause(clause: &str) -> Option<ActionCommand> {
                 .collect();
             let url = format!("https://www.google.com/search?q={}", encoded);
             return Some(ActionCommand {
+                thought: None,
                 action: ActionType::OpenUrl,
                 target: Some(url),
                 folder: None,
@@ -126,6 +127,7 @@ pub fn resolve_clause(clause: &str) -> Option<ActionCommand> {
             if candidate == alias || candidate == norm_alias || norm == alias || norm == norm_alias
             {
                 return Some(ActionCommand {
+                    thought: None,
                     action: ActionType::LaunchApp,
                     target: Some(target_app.to_string()),
                     folder: None,

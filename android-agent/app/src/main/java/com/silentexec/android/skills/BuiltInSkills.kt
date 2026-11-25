@@ -214,9 +214,43 @@ object BuiltInSkills {
         return WHITESPACE_REGEX.replace(sb.toString().trim(), " ")
     }
 
+    private val CHAINED_ACTION_MARKERS = listOf(
+        " وافتح ",
+        " و افتح ",
+        " واضغط ",
+        " و اضغط ",
+        " واكتب ",
+        " و اكتب ",
+        " وانزل ",
+        " و انزل ",
+        " وارسل ",
+        " و ارسل ",
+        " ولايك ",
+        " و لايك ",
+        " وشغل ",
+        " و شغل ",
+        " ثم ",
+        " بعدين ",
+        " بعدها ",
+        " and open ",
+        " and click ",
+        " and tap ",
+        " and like ",
+        " and type ",
+        " and scroll ",
+        " and send ",
+        " then "
+    )
+
+    private fun hasChainedFollowupActions(normText: String): Boolean {
+        val padded = " $normText "
+        return CHAINED_ACTION_MARKERS.any { padded.contains(it) }
+    }
+
     /**
      * Resolves a user query into deterministic ActionCommands if a built-in or custom skill matches.
-     * Returns null if no skill matches (falling back to LLM / planner).
+     * Returns null if no skill matches or if the prompt contains chained follow-up actions
+     * (so the Thinking ReAct Agent Loop handles multi-step goals).
      */
     fun resolve(query: String): List<ActionCommand>? {
         val trimmed = query.trim()
@@ -230,6 +264,11 @@ object BuiltInSkills {
         }
 
         val norm = normalizeText(trimmed)
+
+        // Compound-intent guard: let the Thinking ReAct Agent Loop handle multi-step goals
+        if (hasChainedFollowupActions(norm)) {
+            return null
+        }
 
         // 2. YouTube Search Skill
         extractQueryAfterPrefix(norm, YOUTUBE_PREFIXES)?.let { searchQuery ->

@@ -166,4 +166,26 @@ class BuiltInSkillsAndHfTest {
         assertTrue(err!!.contains("5"))
         assertFalse(engine.loadModel(tinyFile))
     }
+
+    @Test
+    fun test06_compoundIntentGuardDoesNotHijackMultiStepReActPrompts() {
+        val multiStepAr = "افتح اليوتيوب و ابحث عن nlp و افتح اول فيديو و اضغط لايك"
+        org.junit.Assert.assertNull(BuiltInSkills.resolve(multiStepAr))
+
+        val multiStepEn = "open youtube and search for nlp and open first video and click like"
+        org.junit.Assert.assertNull(BuiltInSkills.resolve(multiStepEn))
+
+        val singleIntent = BuiltInSkills.resolve("افتح اليوتيوب و ابحث عن nlp")
+        assertNotNull(singleIntent)
+        assertEquals(1, singleIntent!!.size)
+    }
+
+    @Test
+    fun test07_actionCommandDeserializesThoughtField() {
+        val json = """{"thought":"Tap the first video result","action":"ui_click","target":"#0","platform":"android","confidence":0.93}"""
+        val cmd = com.silentexec.android.core.ActionJson.fromJson(json)
+        assertEquals("Tap the first video result", cmd.thought)
+        assertEquals(ActionType.UI_CLICK, cmd.action)
+        assertEquals("#0", cmd.target)
+    }
 }

@@ -112,6 +112,8 @@ pub fn default_confidence() -> f64 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActionCommand {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought: Option<String>,
     pub action: ActionType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
@@ -532,6 +534,7 @@ mod tests {
     #[test]
     fn test_06_path_traversal_target_blocked() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFile,
             target: Some("../../secret.env".to_string()),
             folder: None,
@@ -550,6 +553,7 @@ mod tests {
     #[test]
     fn test_07_path_traversal_folder_blocked() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFolder,
             target: Some("safe.txt".to_string()),
             folder: Some("../../../Windows".to_string()),
@@ -575,6 +579,7 @@ mod tests {
         ];
         for path in paths {
             let cmd = ActionCommand {
+                thought: None,
                 action: ActionType::OpenFile,
                 target: Some(path.to_string()),
                 folder: None,
@@ -603,6 +608,7 @@ mod tests {
         ];
         for path in paths {
             let cmd = ActionCommand {
+                thought: None,
                 action: ActionType::OpenFile,
                 target: Some(path.to_string()),
                 folder: None,
@@ -622,6 +628,7 @@ mod tests {
     #[test]
     fn test_10_shell_injection_and_operator_blocked() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::LaunchApp,
             target: Some("calc && notepad".to_string()),
             folder: None,
@@ -640,6 +647,7 @@ mod tests {
     #[test]
     fn test_11_shell_injection_pipe_blocked() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::LaunchApp,
             target: Some("echo test | sh".to_string()),
             folder: None,
@@ -658,6 +666,7 @@ mod tests {
     #[test]
     fn test_12_shell_injection_subshell_blocked() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFile,
             target: Some("$(cat /etc/passwd)".to_string()),
             folder: None,
@@ -677,6 +686,7 @@ mod tests {
     fn test_13_shell_injection_backtick_and_semicolon_blocked() {
         for meta_payload in ["`id`", "file.txt; rm -rf /"] {
             let cmd = ActionCommand {
+                thought: None,
                 action: ActionType::OpenFile,
                 target: Some(meta_payload.to_string()),
                 folder: None,
@@ -696,6 +706,7 @@ mod tests {
     #[test]
     fn test_14_tier_2_delete_and_move_require_confirmation() {
         let delete_cmd = ActionCommand {
+            thought: None,
             action: ActionType::DeleteFile,
             target: Some("notes.txt".to_string()),
             folder: None,
@@ -711,6 +722,7 @@ mod tests {
         }
 
         let move_cmd = ActionCommand {
+            thought: None,
             action: ActionType::MoveFile,
             target: Some("file.txt".to_string()),
             folder: Some("archive".to_string()),
@@ -729,6 +741,7 @@ mod tests {
     #[test]
     fn test_15_tier_2_system_power_and_android_actions_require_confirm() {
         let power_cmd = ActionCommand {
+            thought: None,
             action: ActionType::SystemPower,
             target: Some("reboot".to_string()),
             folder: None,
@@ -744,6 +757,7 @@ mod tests {
         }
 
         let send_cmd = ActionCommand {
+            thought: None,
             action: ActionType::SendMessage,
             target: Some("+123456789".to_string()),
             folder: None,
@@ -759,6 +773,7 @@ mod tests {
         }
 
         let toggle_cmd = ActionCommand {
+            thought: None,
             action: ActionType::ToggleSetting,
             target: Some("wifi".to_string()),
             folder: None,
@@ -777,6 +792,7 @@ mod tests {
     #[test]
     fn test_16_low_confidence_downgrade_to_confirm() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFile,
             target: Some("document.pdf".to_string()),
             folder: None,
@@ -795,6 +811,7 @@ mod tests {
     #[test]
     fn test_17_boundary_confidence_at_threshold_allows_silent() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFile,
             target: Some("document.pdf".to_string()),
             folder: None,
@@ -808,6 +825,7 @@ mod tests {
     #[test]
     fn test_18_out_of_bounds_confidence_blocked() {
         let cmd = ActionCommand {
+            thought: None,
             action: ActionType::OpenFile,
             target: Some("document.pdf".to_string()),
             folder: None,
@@ -919,6 +937,7 @@ mod tests {
 
         for target in dangerous_targets {
             let cmd = ActionCommand {
+                thought: None,
                 action: ActionType::UiType,
                 target: Some(target.to_string()),
                 folder: None,
@@ -959,6 +978,7 @@ mod tests {
 
         for args in dangerous_args {
             let cmd = ActionCommand {
+                thought: None,
                 action: ActionType::UiType,
                 target: Some("search_input".to_string()),
                 folder: None,
@@ -989,6 +1009,7 @@ mod tests {
     fn test_23_multi_step_plan_all_silent() {
         let plan = MultiStepPlan::new(vec![
             ActionCommand {
+                thought: None,
                 action: ActionType::UiClick,
                 target: Some("search_bar".to_string()),
                 folder: None,
@@ -997,6 +1018,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiType,
                 target: Some("search_bar".to_string()),
                 folder: None,
@@ -1005,6 +1027,7 @@ mod tests {
                 confidence: 0.92,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiScroll,
                 target: None,
                 folder: None,
@@ -1028,6 +1051,7 @@ mod tests {
     fn test_24_multi_step_plan_blocked_step() {
         let plan = MultiStepPlan::new(vec![
             ActionCommand {
+                thought: None,
                 action: ActionType::UiClick,
                 target: Some("button_login".to_string()),
                 folder: None,
@@ -1036,6 +1060,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiType,
                 target: Some("password_field".to_string()),
                 folder: None,
@@ -1044,6 +1069,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiClick,
                 target: Some("button_submit".to_string()),
                 folder: None,
@@ -1073,6 +1099,7 @@ mod tests {
     fn test_25_multi_step_plan_require_confirm() {
         let plan = MultiStepPlan::new(vec![
             ActionCommand {
+                thought: None,
                 action: ActionType::UiClick,
                 target: Some("open_dialog".to_string()),
                 folder: None,
@@ -1081,6 +1108,7 @@ mod tests {
                 confidence: 0.95,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::DeleteFile,
                 target: Some("obsolete_cache.tmp".to_string()),
                 folder: None,
@@ -1089,6 +1117,7 @@ mod tests {
                 confidence: 0.99,
             },
             ActionCommand {
+                thought: None,
                 action: ActionType::UiBack,
                 target: None,
                 folder: None,
@@ -1117,6 +1146,7 @@ mod tests {
     #[test]
     fn test_26_done_action_tier_and_safety() {
         let done_cmd = ActionCommand {
+            thought: None,
             action: ActionType::Done,
             target: None,
             folder: None,
@@ -1142,6 +1172,7 @@ mod tests {
         // > 6 steps rejected
         let seven_steps = (0..7)
             .map(|_| ActionCommand {
+                thought: None,
                 action: ActionType::UiBack,
                 target: None,
                 folder: None,

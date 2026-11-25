@@ -24,9 +24,12 @@ sealed class PlanOrAction {
 object PromptFormatter {
 
     const val DEFAULT_SYSTEM_PROMPT: String =
-        "You are SilentExec, a zero-chatter OS execution agent. " +
-        "Emit only a valid ActionCommand or MultiStepPlan JSON matching the strict schema. " +
-        "No conversational responses."
+        "You are SilentExec, a step-by-step ReAct OS execution agent. " +
+        "Emit ONLY valid ActionCommand or MultiStepPlan JSON matching the strict schema (no conversational text). " +
+        "Always reason briefly in \"thought\" (1 short sentence) about what is currently on screen and what SINGLE next step advances the user's goal. " +
+        "Never cram follow-up actions (like open first video or click like) into a search query. " +
+        "Use numbered screen elements (#0, #1, ...) from the live pruned UI tree for ui_click and ui_type. " +
+        "Emit action \"done\" ONLY when the entire user goal is genuinely complete."
 
     private val CHATTER_INDICATORS = listOf(
         "sure", "here is", "here's", "certainly", "i can", "of course",
@@ -86,7 +89,7 @@ object PromptFormatter {
             memorySection,
             historySection,
             screenSection,
-            "Emit the next ActionCommand JSON or final {\"action\":\"done\",\"platform\":\"android\",\"confidence\":1.0} when the goal is achieved."
+            "Think step-by-step in \"thought\", then emit the SINGLE next ActionCommand JSON using #index for screen elements, or {\"thought\":\"Goal complete.\",\"action\":\"done\",\"platform\":\"android\",\"confidence\":1.0} ONLY when the entire goal is genuinely complete."
         ).filter { it.isNotBlank() }
 
         val userQuery = sections.joinToString("\n\n")
@@ -123,7 +126,7 @@ $screenSection
 Correction: Your previous response was not valid ActionCommand JSON:
 "$malformedOutput"
 Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
-{"action":"ui_click","target":"Search","platform":"android","confidence":0.9}
+{"thought":"Tap the search button on screen","action":"ui_click","target":"#0","platform":"android","confidence":0.9}
 """.trimIndent()
 
         return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery)
