@@ -132,7 +132,7 @@ class BuiltInSkillsAndHfTest {
         )
 
         val updates1 = mutableListOf<AgentStepUpdate>()
-        runner1.run("افتح الملاحظات ثم افعل شيئا") { updates1.add(it) }
+        runner1.run("افتح الملاحظات ثم افعل شيئا", onUpdate = { updates1.add(it) })
         val failed1 = updates1.filterIsInstance<AgentStepUpdate.StepFailed>().lastOrNull()
         assertNotNull(failed1)
         assertTrue(failed1!!.error.contains("Qwen3-1.7B"))
@@ -149,7 +149,7 @@ class BuiltInSkillsAndHfTest {
             }
         )
         val updates2 = mutableListOf<AgentStepUpdate>()
-        runner2.run("كرر فتح اليوتيوب") { updates2.add(it) }
+        runner2.run("كرر فتح اليوتيوب", onUpdate = { updates2.add(it) })
         val failed2 = updates2.filterIsInstance<AgentStepUpdate.StepFailed>().lastOrNull()
         assertNotNull(failed2)
         assertTrue(failed2!!.error.contains("Qwen3-1.7B"))
