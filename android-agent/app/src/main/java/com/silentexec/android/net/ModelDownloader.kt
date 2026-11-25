@@ -243,6 +243,11 @@ class ModelDownloader(val modelsDir: File) {
                 onStateUpdate(DownloadState(size, size, 0.0, 0, DownloadStatus.COMPLETED))
                 return@runCatching targetFile
             }
+            if (expectedHash == null && item.sizeBytes > 0 && targetFile.exists() && targetFile.length() == item.sizeBytes) {
+                val size = targetFile.length()
+                onStateUpdate(DownloadState(size, size, 0.0, 0, DownloadStatus.COMPLETED))
+                return@runCatching targetFile
+            }
 
             downloadResumableFile(item.downloadUrl, partFile, expectedHash, downloadId, pauseFlag, cancelFlag, onStateUpdate)
 
@@ -252,6 +257,13 @@ class ModelDownloader(val modelsDir: File) {
                     val computed = computeSha256(partFile)
                     partFile.delete()
                     throw IllegalStateException("SHA256 mismatch for ${item.filename}: expected $expectedHash, got $computed")
+                }
+            } else if (item.sizeBytes > 0) {
+                onStateUpdate(DownloadState(partFile.length(), item.sizeBytes, 0.0, 0, DownloadStatus.VERIFYING))
+                if (partFile.length() != item.sizeBytes) {
+                    val actualSize = partFile.length()
+                    partFile.delete()
+                    throw IllegalStateException("File size mismatch for ${item.filename}: expected ${item.sizeBytes} bytes, got $actualSize bytes")
                 }
             }
 

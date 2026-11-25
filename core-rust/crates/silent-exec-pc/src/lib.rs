@@ -12,6 +12,7 @@ pub mod model_manager;
 pub mod planner;
 pub mod process_helper;
 pub mod runtime_manager;
+pub mod skills;
 pub mod ui_win32;
 pub mod updater;
 
@@ -44,6 +45,7 @@ pub use runtime_manager::{
     check_health_http, ensure_llama_server_running, parse_health_url, run_setup,
     select_llama_asset, select_llama_asset_for_platform, ReleaseAsset, RuntimeManager, SetupResult,
 };
+pub use skills::{BuiltInSkills, SkillDefinition, SkillStore};
 pub use ui_win32::{
     map_result_to_ui_outcome, run_command_bar, string_to_utf16, utf16_to_string, UiActionOutcome,
 };
@@ -1945,5 +1947,101 @@ mod tests {
         };
         let live_mem = executor.execute(&mem_cmd, false);
         assert!(matches!(live_mem, ExecutionResult::Success { .. }));
+    }
+
+    #[test]
+    fn test_75_built_in_skills_youtube_and_web_search() {
+        let ar_steps = BuiltInSkills::resolve_with_store("افتح اليوتيوب و ابحث عن nlp", None)
+            .expect("Should resolve Arabic YouTube search skill");
+        assert_eq!(ar_steps.len(), 1);
+        assert_eq!(ar_steps[0].action, ActionType::OpenUrl);
+        assert_eq!(
+            ar_steps[0].target.as_deref(),
+            Some("https://www.youtube.com/results?search_query=nlp")
+        );
+
+        let en_steps = BuiltInSkills::resolve_with_store("open YouTube and search for nlp", None)
+            .expect("Should resolve English YouTube search skill");
+        assert_eq!(en_steps.len(), 1);
+        assert_eq!(en_steps[0].action, ActionType::OpenUrl);
+        assert_eq!(
+            en_steps[0].target.as_deref(),
+            Some("https://www.youtube.com/results?search_query=nlp")
+        );
+
+        let web_steps = BuiltInSkills::resolve_with_store("افتح المتصفح وابحث عن rust lang", None)
+            .expect("Should resolve Arabic web search skill");
+        assert_eq!(web_steps[0].action, ActionType::OpenUrl);
+        assert_eq!(
+            web_steps[0].target.as_deref(),
+            Some("https://www.google.com/search?q=rust+lang")
+        );
+    }
+
+    #[test]
+    fn test_76_custom_skill_store_persistence() {
+        let guard = TempDirGuard::new("skills_test");
+        let skills_file = guard.path.join("skills.json");
+        let mut store = SkillStore::load_from(&skills_file).unwrap();
+
+        let step1 = ActionCommand {
+            action: ActionType::SetVolume,
+            target: None,
+            folder: None,
+            args: Some(serde_json::json!({ "level": 30 })),
+            platform: Platform::Pc,
+            confidence: 1.0,
+        };
+        let step2 = ActionCommand {
+            action: ActionType::OpenUrl,
+            target: Some("https://github.com".to_string()),
+            folder: None,
+            args: None,
+            platform: Platform::Pc,
+            confidence: 1.0,
+        };
+
+        store
+            .save_skill(
+                "وضع الدراسة",
+                vec!["Work Mode".to_string()],
+                vec![step1, step2],
+                "Lowers volume and opens workspace",
+            )
+            .unwrap();
+
+        let reloaded = SkillStore::load_from(&skills_file).unwrap();
+        let resolved = BuiltInSkills::resolve_with_store("Work Mode", Some(&reloaded))
+            .expect("Should resolve custom skill by trigger");
+        assert_eq!(resolved.len(), 2);
+        assert_eq!(resolved[0].action, ActionType::SetVolume);
+        assert_eq!(resolved[1].action, ActionType::OpenUrl);
+    }
+
+    #[test]
+    fn test_77_huggingface_tree_json_parsing_lfm3() {
+        let guard = TempDirGuard::new("hf_tree_test");
+        let sample_hf_tree = r#"[
+            {"type":"file","size":3466626336,"path":"LFM3-1.7B-BF16.gguf"},
+            {"type":"file","size":1099627808,"path":"LFM3-1.7B-Q4_K_M.gguf"},
+            {"type":"file","size":1258663200,"path":"LFM3-1.7B-Q5_K_M.gguf"}
+        ]"#;
+
+        let parsed = ModelManager::parse_huggingface_tree_q4km(
+            "LiquidAI/LFM3-1.7B-GGUF",
+            sample_hf_tree,
+            "liquidai-lfm3-1.7b",
+            "LiquidAI/LFM3-1.7B (Fast Edge Agent)",
+            &guard.path,
+            None,
+        )
+        .expect("Should parse Q4_K_M entry from HF tree JSON");
+
+        assert_eq!(parsed.filename, "LFM3-1.7B-Q4_K_M.gguf");
+        assert_eq!(parsed.size_bytes, 1_099_627_808);
+        assert_eq!(
+            parsed.download_url.as_deref(),
+            Some("https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true")
+        );
     }
 }

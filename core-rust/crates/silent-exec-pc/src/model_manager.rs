@@ -181,11 +181,66 @@ impl ModelManager {
         }
     }
 
-    /// Fetches model information and downloads the .gguf binary from GitHub Releases.
+    /// Fetches model information and downloads the .gguf binary from GitHub Releases
+    /// or direct Hugging Face curated URLs.
     pub fn download_model(
         &self,
         tag: &str,
     ) -> Result<ModelDownloadInfo, Box<dyn std::error::Error>> {
+        // Check if tag maps to a curated Hugging Face / direct URL model first
+        let available = self
+            .list_available_models(None)
+            .unwrap_or_else(|_| Self::curated_community_models(&self.cache_dir, None));
+        if let Some(curated) = available.into_iter().find(|m| m.tag == tag) {
+            if let Some(direct_url) = curated.download_url {
+                let target_path = self.cache_dir.join(&curated.filename);
+                if target_path.exists() {
+                    let actual_size = fs::metadata(&target_path)?.len();
+                    if curated.size_bytes == 0 || actual_size == curated.size_bytes {
+                        println!("Verified valid cached model at: {}", target_path.display());
+                        return Ok(ModelDownloadInfo {
+                            tag: tag.to_string(),
+                            filename: curated.filename,
+                            path: target_path,
+                            sha256: "SKIP".to_string(),
+                            size_bytes: actual_size,
+                            already_cached: true,
+                        });
+                    }
+                }
+
+                let part_path = self.cache_dir.join(format!("{}.part", curated.filename));
+                let cancel_flag = Arc::new(AtomicBool::new(false));
+                Self::download_resumable_file(
+                    &direct_url,
+                    &part_path,
+                    &target_path,
+                    "SKIP",
+                    cancel_flag,
+                    |_| {},
+                )?;
+
+                let size_bytes = fs::metadata(&target_path)?.len();
+                if curated.size_bytes > 0 && size_bytes != curated.size_bytes {
+                    let _ = fs::remove_file(&target_path);
+                    return Err(format!(
+                        "File size mismatch for {}: expected {} bytes, got {} bytes",
+                        curated.filename, curated.size_bytes, size_bytes
+                    )
+                    .into());
+                }
+
+                return Ok(ModelDownloadInfo {
+                    tag: tag.to_string(),
+                    filename: curated.filename,
+                    path: target_path,
+                    sha256: "SKIP".to_string(),
+                    size_bytes,
+                    already_cached: false,
+                });
+            }
+        }
+
         let base_url = format!("https://github.com/{}/releases/download/{}", self.repo, tag);
         let checksums_url = format!("{}/SHA256SUMS.txt", base_url);
 
@@ -464,6 +519,81 @@ impl ModelManager {
         Ok(())
     }
 
+    /// Parses Hugging Face `/api/models/<repo_id>/tree/main` JSON to find the exact `*Q4_K_M*.gguf` file and byte size.
+    pub fn parse_huggingface_tree_q4km(
+        repo_id: &str,
+        json_text: &str,
+        tag: &str,
+        display_name: &str,
+        cache_dir: &Path,
+        active_tag: Option<&str>,
+    ) -> Result<ModelReleaseInfo, String> {
+        let entries: serde_json::Value = serde_json::from_str(json_text)
+            .map_err(|e| format!("Failed to parse Hugging Face tree JSON: {}", e))?;
+        let arr = entries
+            .as_array()
+            .ok_or_else(|| "Hugging Face tree response is not a JSON array".to_string())?;
+
+        for entry in arr {
+            let entry_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            if entry_type != "file" {
+                continue;
+            }
+            let path = entry.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            let lower = path.to_lowercase();
+            if lower.ends_with(".gguf") && lower.contains("q4_k_m") {
+                let size_bytes = entry.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                let filename = path.rsplit('/').next().unwrap_or(path).to_string();
+                let download_url = format!(
+                    "https://huggingface.co/{}/resolve/main/{}?download=true",
+                    repo_id, path
+                );
+                let is_cached = cache_dir.join(&filename).exists();
+                let is_active = active_tag == Some(tag);
+                return Ok(ModelReleaseInfo {
+                    tag: tag.to_string(),
+                    name: display_name.to_string(),
+                    filename,
+                    size_bytes,
+                    is_cached,
+                    is_active,
+                    download_url: Some(download_url),
+                });
+            }
+        }
+
+        Err(format!("No *Q4_K_M*.gguf file found in {}", repo_id))
+    }
+
+    /// Queries Hugging Face tree API for the exact `*Q4_K_M*.gguf` path and byte size.
+    pub fn fetch_huggingface_q4km(
+        repo_id: &str,
+        tag: &str,
+        display_name: &str,
+        cache_dir: &Path,
+        active_tag: Option<&str>,
+    ) -> Result<ModelReleaseInfo, String> {
+        let api_url = format!("https://huggingface.co/api/models/{}/tree/main", repo_id);
+        let output = hidden_command("curl")
+            .args(["-sSfL", "-H", "User-Agent: silent-exec-pc", &api_url])
+            .output()
+            .map_err(|e| format!("Failed to invoke curl for Hugging Face API: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!("Hugging Face API request failed for {}", repo_id));
+        }
+
+        let json_text = String::from_utf8_lossy(&output.stdout);
+        Self::parse_huggingface_tree_q4km(
+            repo_id,
+            &json_text,
+            tag,
+            display_name,
+            cache_dir,
+            active_tag,
+        )
+    }
+
     /// Curated Community Edge Models direct GGUF entries
     pub fn curated_community_models(
         cache_dir: &Path,
@@ -473,16 +603,16 @@ impl ModelManager {
             (
                 "liquidai-lfm3-1.7b",
                 "LiquidAI/LFM3-1.7B (Fast Edge Agent)",
-                "LFM3-1.7B-Instruct.Q4_K_M.gguf",
-                1_080_000_000u64,
-                Some("https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Instruct.Q4_K_M.gguf".to_string()),
+                "LFM3-1.7B-Q4_K_M.gguf",
+                1_099_627_808u64,
+                Some("https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true".to_string()),
             ),
             (
                 "qwen3-1.7b-gguf",
-                "Qwen/Qwen3-1.7B-GGUF (Strong Arabic + Reasoning)",
-                "Qwen3-1.7B-Instruct.Q4_K_M.gguf",
-                1_180_000_000u64,
-                Some("https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Instruct.Q4_K_M.gguf".to_string()),
+                "unsloth/Qwen3-1.7B-GGUF (Strong Arabic & Multi-Step Reasoning)",
+                "Qwen3-1.7B-Q4_K_M.gguf",
+                1_107_409_472u64,
+                Some("https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true".to_string()),
             ),
             (
                 "v0.2.0-model",
@@ -518,12 +648,24 @@ impl ModelManager {
             .collect()
     }
 
-    /// Lists all available models: curated community edge models + GitHub releases.
+    /// Lists all available models: curated community edge models (with live HF tree resolution) + GitHub releases.
     pub fn list_available_models(
         &self,
         active_tag: Option<&str>,
     ) -> Result<Vec<ModelReleaseInfo>, String> {
         let mut models = Self::curated_community_models(&self.cache_dir, active_tag);
+
+        if let Ok(live_lfm3) = Self::fetch_huggingface_q4km(
+            "LiquidAI/LFM3-1.7B-GGUF",
+            "liquidai-lfm3-1.7b",
+            "LiquidAI/LFM3-1.7B (Fast Edge Agent)",
+            &self.cache_dir,
+            active_tag,
+        ) {
+            if let Some(slot) = models.iter_mut().find(|m| m.tag == "liquidai-lfm3-1.7b") {
+                *slot = live_lfm3;
+            }
+        }
 
         let api_url = format!("https://api.github.com/repos/{}/releases", self.repo);
 

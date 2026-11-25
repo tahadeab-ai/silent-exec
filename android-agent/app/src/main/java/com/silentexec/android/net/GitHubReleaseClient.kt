@@ -106,16 +106,88 @@ class GitHubReleaseClient(
     }
 
     fun getAllCatalogModels(jsonText: String? = null): List<ModelReleaseItem> {
+        return getAllCatalogModels(jsonText, resolveHuggingFace = false)
+    }
+
+    fun getAllCatalogModels(
+        jsonText: String? = null,
+        resolveHuggingFace: Boolean
+    ): List<ModelReleaseItem> {
         val releases = if (!jsonText.isNullOrBlank()) {
             parseModelReleases(jsonText, includeCurated = false)
         } else emptyList()
         val result = releases.toMutableList()
-        for (curated in CURATED_EDGE_MODELS) {
+
+        val dynamicLfm3 = if (resolveHuggingFace) {
+            fetchHuggingFaceQ4KM(
+                repoId = "LiquidAI/LFM3-1.7B-GGUF",
+                description = "LiquidAI/LFM3-1.7B (Fast Edge Agent)"
+            ).getOrNull()
+        } else null
+
+        val curatedList = if (dynamicLfm3 != null) {
+            CURATED_EDGE_MODELS.map { item ->
+                if (item.downloadUrl.contains("LiquidAI/LFM3-1.7B-GGUF")) dynamicLfm3 else item
+            }
+        } else {
+            CURATED_EDGE_MODELS
+        }
+
+        for (curated in curatedList) {
             if (result.none { it.filename.equals(curated.filename, ignoreCase = true) }) {
                 result.add(curated)
             }
         }
         return result
+    }
+
+    fun fetchHuggingFaceQ4KM(
+        repoId: String,
+        description: String? = null
+    ): Result<ModelReleaseItem> = runCatching {
+        val endpoint = "https://huggingface.co/api/models/$repoId/tree/main"
+        val connection = URL(endpoint).openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 10000
+        connection.readTimeout = 12000
+        connection.setRequestProperty("User-Agent", "SilentExec-Android")
+        connection.setRequestProperty("Accept", "application/json")
+
+        val code = connection.responseCode
+        if (code !in 200..299) {
+            throw IllegalStateException("Hugging Face API returned HTTP $code for $repoId")
+        }
+
+        val body = connection.inputStream.bufferedReader().use { it.readText() }
+        parseHuggingFaceTreeQ4KM(repoId, body, description)
+            ?: throw IllegalStateException("No *Q4_K_M*.gguf file found in $repoId")
+    }
+
+    fun parseHuggingFaceTreeQ4KM(
+        repoId: String,
+        jsonText: String,
+        description: String? = null
+    ): ModelReleaseItem? {
+        val root = json.parseToJsonElement(jsonText).jsonArray
+        for (el in root) {
+            val obj = el.jsonObject
+            val type = obj["type"]?.jsonPrimitive?.content ?: continue
+            if (type != "file") continue
+            val path = obj["path"]?.jsonPrimitive?.content ?: continue
+            if (path.endsWith(".gguf", ignoreCase = true) && path.contains("Q4_K_M", ignoreCase = true)) {
+                val size = obj["size"]?.jsonPrimitive?.longOrNull ?: 0L
+                val filename = path.substringAfterLast('/')
+                return ModelReleaseItem(
+                    tag = "curated-edge",
+                    filename = filename,
+                    sizeBytes = size,
+                    downloadUrl = "https://huggingface.co/$repoId/resolve/main/$path?download=true",
+                    checksumsUrl = null,
+                    description = description ?: repoId
+                )
+            }
+        }
+        return null
     }
 
     fun parseLatestAppRelease(jsonText: String): AppReleaseItem? {
@@ -167,19 +239,19 @@ class GitHubReleaseClient(
         val CURATED_EDGE_MODELS = listOf(
             ModelReleaseItem(
                 tag = "curated-edge",
-                filename = "LFM-1.7B-Q4_K_M.gguf",
-                sizeBytes = 1_120_000_000L,
-                downloadUrl = "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM-1.7B-Q4_K_M.gguf",
+                filename = "LFM3-1.7B-Q4_K_M.gguf",
+                sizeBytes = 1_099_627_808L,
+                downloadUrl = "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true",
                 checksumsUrl = null,
                 description = "LiquidAI/LFM3-1.7B (Fast Edge Agent)"
             ),
             ModelReleaseItem(
                 tag = "curated-edge",
-                filename = "qwen3-1.7b-instruct-q4_k_m.gguf",
-                sizeBytes = 1_180_000_000L,
-                downloadUrl = "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/qwen3-1.7b-instruct-q4_k_m.gguf",
+                filename = "Qwen3-1.7B-Q4_K_M.gguf",
+                sizeBytes = 1_107_409_472L,
+                downloadUrl = "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
                 checksumsUrl = null,
-                description = "Qwen/Qwen3-1.7B-GGUF (Strong Arabic & Reasoning)"
+                description = "unsloth/Qwen3-1.7B-GGUF (Strong Arabic & Multi-Step Reasoning)"
             )
         )
 

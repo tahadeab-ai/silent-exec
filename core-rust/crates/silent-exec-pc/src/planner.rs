@@ -475,6 +475,13 @@ impl PlanEngine {
             return Err("Empty prompt".to_string());
         }
 
+        if let Some(skill_steps) = crate::skills::BuiltInSkills::resolve(trimmed) {
+            if !skill_steps.is_empty() {
+                let plan = MultiStepPlan::new(skill_steps);
+                return Self::execute_plan(executor, &plan, mode, callback);
+            }
+        }
+
         let clauses = split_compound_prompt(trimmed);
         if clauses.is_empty() {
             callback(StepEvent::Failed);

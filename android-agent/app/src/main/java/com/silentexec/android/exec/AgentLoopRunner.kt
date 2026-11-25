@@ -16,6 +16,7 @@ import com.silentexec.android.nlp.CloudApiClient
 import com.silentexec.android.nlp.OnDeviceLlamaEngine
 import com.silentexec.android.nlp.PlanOrAction
 import com.silentexec.android.nlp.PromptFormatter
+import com.silentexec.android.skills.BuiltInSkills
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import java.util.Locale
@@ -102,6 +103,18 @@ class AgentLoopRunner(
             }
         }
 
+        // 1.5. Built-In & Custom Skills Router (runs BEFORE weak 0.5B single-step weights)
+        val skillSteps = BuiltInSkills.resolve(cleanGoal)
+        if (!skillSteps.isNullOrEmpty()) {
+            if (skillSteps.size == 1) {
+                onUpdate(AgentStepUpdate.FastRuleMatched(skillSteps[0]))
+                executeSingleStep(skillSteps[0], 1, 1, onUpdate, onConfirmStep)
+            } else {
+                executeMultiStepPlan(skillSteps, onUpdate, onConfirmStep)
+            }
+            return
+        }
+
         // 2. Direct JSON check
         val directPlanOrAction = runCatching {
             PromptFormatter.parsePlanOrSingleAction(cleanGoal)
@@ -126,6 +139,7 @@ class AgentLoopRunner(
 
         var currentStepIndex = 1
         var isLoopFinished = false
+        var lastExecutedCommand: ActionCommand? = null
 
         while (currentStepIndex <= maxSteps && !isLoopFinished && !isCancelled) {
             val screenElements = uiObserver?.invoke()
@@ -186,11 +200,40 @@ class AgentLoopRunner(
                         break
                     }
 
+                    // Guard against small local models emitting empty target on open_android_app or repeating Step 1 identically
+                    if (cmd.action == ActionType.OPEN_ANDROID_APP && cmd.target.isNullOrBlank()) {
+                        onUpdate(
+                            AgentStepUpdate.StepFailed(
+                                currentStepIndex,
+                                maxSteps,
+                                "توقف النموذج المحلي عند الخطوة $currentStepIndex بسبب هدف فارغ. يُنصح بتحميل Qwen3-1.7B أو LFM3-1.7B أو استخدام Cloud API للحصول على دقة أعلى."
+                            )
+                        )
+                        return
+                    }
+
+                    val prev = lastExecutedCommand
+                    if (prev != null &&
+                        prev.action == cmd.action &&
+                        (prev.target ?: "").trim().equals((cmd.target ?: "").trim(), ignoreCase = true) &&
+                        prev.args == cmd.args
+                    ) {
+                        onUpdate(
+                            AgentStepUpdate.StepFailed(
+                                currentStepIndex,
+                                maxSteps,
+                                "تم إيقاف التكرار التلقائي للخطوة (${cmd.action.wireName}). يُنصح باستخدام Qwen3-1.7B أو LFM3-1.7B أو Cloud API للمهام متعددة الخطوات."
+                            )
+                        )
+                        return
+                    }
+
                     val stepSuccess = executeStepInLoop(cmd, currentStepIndex, maxSteps, onUpdate, onConfirmStep)
                     if (!stepSuccess) {
                         return
                     }
 
+                    lastExecutedCommand = cmd
                     stepHistory.add("Step $currentStepIndex: ${cmd.action.wireName}(${cmd.target ?: ""}) -> OK")
                     currentStepIndex++
 

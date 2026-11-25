@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <mutex>
 #include <android/log.h>
 #include "llama.h"
 
@@ -9,9 +10,23 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
+static std::mutex g_llama_mutex;
 static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
-static std::vector<llama_token> g_cached_tokens;
+static const llama_model* g_vocab = nullptr;
+
+static void release_llama_state_locked() {
+    if (g_ctx != nullptr) {
+        llama_kv_cache_clear(g_ctx);
+        llama_free(g_ctx);
+        g_ctx = nullptr;
+    }
+    if (g_model != nullptr) {
+        llama_free_model(g_model);
+        g_model = nullptr;
+    }
+    g_vocab = nullptr;
+}
 
 extern "C" {
 
@@ -22,33 +37,40 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     jstring model_path,
     jint threads
 ) {
-    if (g_model != nullptr) {
-        LOGI("Model already loaded, releasing previous context");
-        if (g_ctx) {
-            llama_kv_cache_clear(g_ctx);
-            llama_free(g_ctx);
-            g_ctx = nullptr;
-        }
-        if (g_model) {
-            llama_free_model(g_model);
-            g_model = nullptr;
-        }
-        g_cached_tokens.clear();
+    if (env == nullptr || model_path == nullptr) {
+        return JNI_FALSE;
     }
 
     const char* path_chars = env->GetStringUTFChars(model_path, nullptr);
-    if (!path_chars) return JNI_FALSE;
+    if (!path_chars) {
+        return JNI_FALSE;
+    }
+    std::string path_str(path_chars);
+    env->ReleaseStringUTFChars(model_path, path_chars);
+
+    if (path_str.empty()) {
+        LOGE("Model path is empty");
+        return JNI_FALSE;
+    }
+
+    std::lock_guard<std::mutex> lock(g_llama_mutex);
+
+    if (g_model != nullptr || g_ctx != nullptr) {
+        LOGI("Model already loaded, releasing previous context");
+        release_llama_state_locked();
+    }
 
     llama_backend_init();
 
     llama_model_params model_params = llama_model_default_params();
-    g_model = llama_load_model_from_file(path_chars, model_params);
-    env->ReleaseStringUTFChars(model_path, path_chars);
+    g_model = llama_load_model_from_file(path_str.c_str(), model_params);
 
-    if (!g_model) {
-        LOGE("Failed to load llama model from file");
+    if (g_model == nullptr) {
+        LOGE("Failed to load llama model from file: %s", path_str.c_str());
+        g_vocab = nullptr;
         return JNI_FALSE;
     }
+    g_vocab = g_model;
 
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = 1024;
@@ -56,41 +78,32 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     ctx_params.n_threads_batch = ctx_params.n_threads;
 
     g_ctx = llama_new_context_with_model(g_model, ctx_params);
-    if (!g_ctx) {
+    if (g_ctx == nullptr) {
         LOGE("Failed to create llama context with model");
-        llama_free_model(g_model);
-        g_model = nullptr;
+        release_llama_state_locked();
         return JNI_FALSE;
     }
 
-    g_cached_tokens.clear();
     LOGI("Model loaded successfully with %d threads", ctx_params.n_threads);
     return JNI_TRUE;
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeIsLoaded(
-    JNIEnv* env,
+    JNIEnv* /* env */,
     jobject /* this */
 ) {
-    return (g_model != nullptr && g_ctx != nullptr) ? JNI_TRUE : JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_llama_mutex);
+    return (g_model != nullptr && g_ctx != nullptr && g_vocab != nullptr) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
 Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeUnload(
-    JNIEnv* env,
+    JNIEnv* /* env */,
     jobject /* this */
 ) {
-    if (g_ctx) {
-        llama_kv_cache_clear(g_ctx);
-        llama_free(g_ctx);
-        g_ctx = nullptr;
-    }
-    if (g_model) {
-        llama_free_model(g_model);
-        g_model = nullptr;
-    }
-    g_cached_tokens.clear();
+    std::lock_guard<std::mutex> lock(g_llama_mutex);
+    release_llama_state_locked();
     llama_backend_free();
     LOGI("Model unloaded successfully");
 }
@@ -103,98 +116,156 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     jstring grammar_text,
     jint max_tokens
 ) {
-    if (!g_model || !g_ctx) {
-        return env->NewStringUTF("{\"error\":\"Model not loaded\"}");
+    if (env == nullptr) {
+        return nullptr;
+    }
+    if (prompt == nullptr) {
+        return env->NewStringUTF("{\"error\":\"Invalid prompt\"}");
     }
 
     const char* prompt_str = env->GetStringUTFChars(prompt, nullptr);
-    if (!prompt_str) return env->NewStringUTF("{\"error\":\"Invalid prompt\"}");
-
-    const char* grammar_str = grammar_text ? env->GetStringUTFChars(grammar_text, nullptr) : nullptr;
-
+    if (!prompt_str) {
+        return env->NewStringUTF("{\"error\":\"Invalid prompt\"}");
+    }
     std::string prompt_text(prompt_str);
-    int n_tokens = -llama_tokenize(g_model, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), NULL, 0, true, true);
+    env->ReleaseStringUTFChars(prompt, prompt_str);
+
+    std::string grammar_copy;
+    if (grammar_text != nullptr) {
+        const char* grammar_str = env->GetStringUTFChars(grammar_text, nullptr);
+        if (grammar_str != nullptr) {
+            grammar_copy.assign(grammar_str);
+            env->ReleaseStringUTFChars(grammar_text, grammar_str);
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(g_llama_mutex);
+
+    if (g_model == nullptr || g_ctx == nullptr || g_vocab == nullptr) {
+        return env->NewStringUTF("{\"error\":\"Model not loaded\"}");
+    }
+
+    if (prompt_text.empty()) {
+        return env->NewStringUTF("{\"error\":\"Empty prompt\"}");
+    }
+
+    // Clear KV cache completely before each generation to avoid stale/invalid state crashes
+    llama_kv_cache_clear(g_ctx);
+
+    const int limit = max_tokens > 0 ? max_tokens : 160;
+    const uint32_t n_ctx = llama_n_ctx(g_ctx);
+    if (n_ctx == 0 || static_cast<uint32_t>(limit) >= n_ctx) {
+        return env->NewStringUTF("{\"error\":\"Invalid context window size\"}");
+    }
+
+    int n_tokens = -llama_tokenize(
+        g_vocab,
+        prompt_text.c_str(),
+        static_cast<int32_t>(prompt_text.length()),
+        nullptr,
+        0,
+        true,
+        true
+    );
     if (n_tokens <= 0) {
-        env->ReleaseStringUTFChars(prompt, prompt_str);
-        if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
         return env->NewStringUTF("{\"error\":\"Failed to calculate prompt token count\"}");
     }
 
-    std::vector<llama_token> prompt_tokens(n_tokens);
-    if (llama_tokenize(g_model, prompt_text.c_str(), static_cast<int32_t>(prompt_text.length()), prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()), true, true) < 0) {
-        env->ReleaseStringUTFChars(prompt, prompt_str);
-        if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
+    if (static_cast<uint32_t>(n_tokens) >= (n_ctx - static_cast<uint32_t>(limit))) {
+        LOGE("Prompt token count %d exceeds safe context budget (n_ctx=%u, max_tokens=%d)", n_tokens, n_ctx, limit);
+        return env->NewStringUTF("{\"error\":\"Prompt exceeds context window\"}");
+    }
+
+    std::vector<llama_token> prompt_tokens(static_cast<size_t>(n_tokens));
+    if (llama_tokenize(
+            g_vocab,
+            prompt_text.c_str(),
+            static_cast<int32_t>(prompt_text.length()),
+            prompt_tokens.data(),
+            static_cast<int32_t>(prompt_tokens.size()),
+            true,
+            true) < 0) {
         return env->NewStringUTF("{\"error\":\"Prompt tokenization failed\"}");
     }
 
-    // KV Cache Prefix Reuse Optimization:
-    // Determine how many tokens match the already evaluated prefix in KV cache
-    size_t n_match = 0;
-    while (n_match < g_cached_tokens.size() && n_match < prompt_tokens.size() &&
-           g_cached_tokens[n_match] == prompt_tokens[n_match]) {
-        n_match++;
-    }
-
-    // If cached sequence diverged, remove cached KV tokens beyond the match point
-    if (n_match < g_cached_tokens.size()) {
-        llama_kv_cache_seq_rm(g_ctx, 0, static_cast<llama_pos>(n_match), -1);
-        g_cached_tokens.resize(n_match);
-    }
-
-    size_t n_new = prompt_tokens.size() - n_match;
-    if (n_new > 0) {
-        llama_batch batch = llama_batch_init(static_cast<int32_t>(n_new), 0, 1);
-        for (size_t i = 0; i < n_new; ++i) {
-            batch.token[i] = prompt_tokens[n_match + i];
-            batch.pos[i] = static_cast<llama_pos>(n_match + i);
-            batch.n_seq_id[i] = 1;
-            batch.seq_id[i][0] = 0;
-            batch.logits[i] = (i == n_new - 1) ? 1 : 0;
-        }
-        batch.n_tokens = static_cast<int32_t>(n_new);
-
-        if (llama_decode(g_ctx, batch) != 0) {
-            llama_batch_free(batch);
-            env->ReleaseStringUTFChars(prompt, prompt_str);
-            if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
-            return env->NewStringUTF("{\"error\":\"Prompt decode failed\"}");
-        }
+    llama_batch batch = llama_batch_init(n_tokens, 0, 1);
+    if (batch.token == nullptr || batch.pos == nullptr || batch.n_seq_id == nullptr ||
+        batch.seq_id == nullptr || batch.logits == nullptr) {
         llama_batch_free(batch);
+        return env->NewStringUTF("{\"error\":\"Failed to allocate prompt batch\"}");
     }
+
+    for (int i = 0; i < n_tokens; ++i) {
+        batch.token[i] = prompt_tokens[static_cast<size_t>(i)];
+        batch.pos[i] = static_cast<llama_pos>(i);
+        batch.n_seq_id[i] = 1;
+        if (batch.seq_id[i] != nullptr) {
+            batch.seq_id[i][0] = 0;
+        }
+        batch.logits[i] = (i == n_tokens - 1) ? 1 : 0;
+    }
+    batch.n_tokens = static_cast<int32_t>(n_tokens);
+
+    if (llama_decode(g_ctx, batch) != 0) {
+        llama_batch_free(batch);
+        llama_kv_cache_clear(g_ctx);
+        return env->NewStringUTF("{\"error\":\"Prompt decode failed\"}");
+    }
+    llama_batch_free(batch);
 
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
+    if (smpl == nullptr) {
+        llama_kv_cache_clear(g_ctx);
+        return env->NewStringUTF("{\"error\":\"Failed to initialize sampler chain\"}");
+    }
 
-    if (grammar_str && strlen(grammar_str) > 0) {
-        llama_sampler* g_smpl = llama_sampler_init_grammar(g_model, grammar_str, "root");
-        if (g_smpl) {
+    if (!grammar_copy.empty()) {
+        llama_sampler* g_smpl = llama_sampler_init_grammar(g_vocab, grammar_copy.c_str(), "root");
+        if (g_smpl != nullptr) {
             llama_sampler_chain_add(smpl, g_smpl);
         } else {
-            LOGE("Failed to parse grammar string, continuing with greedy sampling");
+            LOGE("Failed to parse grammar string, falling back to unconstrained greedy sampling");
         }
     }
-    llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
+
+    llama_sampler* greedy_smpl = llama_sampler_init_greedy();
+    if (greedy_smpl != nullptr) {
+        llama_sampler_chain_add(smpl, greedy_smpl);
+    } else {
+        llama_sampler_free(smpl);
+        llama_kv_cache_clear(g_ctx);
+        return env->NewStringUTF("{\"error\":\"Failed to initialize greedy sampler\"}");
+    }
 
     std::string output_str;
-    int limit = max_tokens > 0 ? max_tokens : 160;
-
     for (int i = 0; i < limit; ++i) {
-        llama_token new_token = llama_sampler_sample(smpl, g_ctx, -1);
-        llama_sampler_accept(smpl, new_token);
-
-        if (llama_token_is_eog(g_model, new_token)) {
+        const llama_pos next_pos = static_cast<llama_pos>(n_tokens + i);
+        if (static_cast<uint32_t>(next_pos) >= n_ctx) {
             break;
         }
 
-        char piece_buf[128];
-        int n_piece = llama_token_to_piece(g_model, new_token, piece_buf, sizeof(piece_buf), 0, true);
-        if (n_piece > 0) {
-            output_str.append(piece_buf, n_piece);
+        llama_token new_token = llama_sampler_sample(smpl, g_ctx, -1);
+        llama_sampler_accept(smpl, new_token);
+
+        if (llama_token_is_eog(g_vocab, new_token)) {
+            break;
+        }
+
+        char piece_buf[256];
+        int n_piece = llama_token_to_piece(g_vocab, new_token, piece_buf, sizeof(piece_buf), 0, true);
+        if (n_piece > 0 && n_piece <= static_cast<int>(sizeof(piece_buf))) {
+            output_str.append(piece_buf, static_cast<size_t>(n_piece));
         }
 
         llama_batch gen_batch = llama_batch_init(1, 0, 1);
+        if (gen_batch.token == nullptr || gen_batch.pos == nullptr || gen_batch.n_seq_id == nullptr ||
+            gen_batch.seq_id == nullptr || gen_batch.seq_id[0] == nullptr || gen_batch.logits == nullptr) {
+            llama_batch_free(gen_batch);
+            break;
+        }
         gen_batch.token[0] = new_token;
-        gen_batch.pos[0] = static_cast<llama_pos>(prompt_tokens.size() + i);
+        gen_batch.pos[0] = next_pos;
         gen_batch.n_seq_id[0] = 1;
         gen_batch.seq_id[0][0] = 0;
         gen_batch.logits[0] = 1;
@@ -208,12 +279,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
 
     llama_sampler_free(smpl);
-    env->ReleaseStringUTFChars(prompt, prompt_str);
-    if (grammar_str) env->ReleaseStringUTFChars(grammar_text, grammar_str);
-
-    // Retain only prompt tokens in KV cache, discarding generated output tokens
-    llama_kv_cache_seq_rm(g_ctx, 0, static_cast<llama_pos>(prompt_tokens.size()), -1);
-    g_cached_tokens = prompt_tokens;
+    llama_kv_cache_clear(g_ctx);
 
     return env->NewStringUTF(output_str.c_str());
 }

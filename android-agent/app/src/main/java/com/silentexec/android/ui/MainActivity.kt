@@ -42,6 +42,7 @@ import com.silentexec.android.core.FastRuleRouter
 import com.silentexec.android.core.InferenceSource
 import com.silentexec.android.core.MemoryItem
 import com.silentexec.android.core.MemoryStore
+import com.silentexec.android.skills.SkillStore
 import com.silentexec.android.core.MultiStepPlan
 import com.silentexec.android.core.Platform
 import com.silentexec.android.core.SafetyDecision
@@ -182,6 +183,7 @@ class MainActivity : AppCompatActivity() {
         settings.applyLocale()
         settings.applyTheme()
         MemoryStore.init(this)
+        SkillStore.init(this)
 
         setContentView(R.layout.activity_main)
         applySystemBarAppearance()
@@ -416,10 +418,9 @@ class MainActivity : AppCompatActivity() {
     private fun loadActiveModelIfAvailable() {
         if (settings.inferenceSource == InferenceSource.OFFLINE) {
             val file = modelDownloader.getModelFile(settings.activeModelFile)
-            if (file.exists() && OnDeviceLlamaEngine.isNativeLoaded && !llamaEngine.isLoaded()) {
-                thread {
-                    llamaEngine.loadModel(file)
-                }
+            llamaEngine.setModelFile(file)
+            if (llamaEngine.validateModelFile(file) == null && OnDeviceLlamaEngine.isNativeLoaded && !llamaEngine.isLoaded()) {
+                llamaEngine.loadModelAsync(file) { _ -> }
             }
         }
     }
@@ -934,30 +935,23 @@ class MainActivity : AppCompatActivity() {
 
         thread {
             val jsonResult = releaseClient.fetchReleasesJson()
+            val catalogModels = jsonResult.fold(
+                onSuccess = { jsonStr ->
+                    releaseClient.getAllCatalogModels(jsonStr, resolveHuggingFace = true)
+                },
+                onFailure = {
+                    releaseClient.getAllCatalogModels(null, resolveHuggingFace = true)
+                }
+            )
             mainHandler.post {
                 pbModelsLoading.visibility = View.GONE
-                jsonResult.onSuccess { jsonStr ->
-                    val parsed = releaseClient.getAllCatalogModels(jsonStr)
-                    modelItems.clear()
-                    modelItems.addAll(parsed)
-                    if (modelItems.isEmpty()) {
-                        tvModelsEmpty.visibility = View.VISIBLE
-                    } else {
-                        tvModelsEmpty.visibility = View.GONE
-                        modelAdapter.updateData(modelItems, settings.activeModelFile)
-                    }
-                }.onFailure { err ->
-                    // Fallback to offline curated models on network failure
-                    val curated = releaseClient.getAllCatalogModels(null)
-                    if (curated.isNotEmpty()) {
-                        modelItems.clear()
-                        modelItems.addAll(curated)
-                        tvModelsEmpty.visibility = View.GONE
-                        modelAdapter.updateData(modelItems, settings.activeModelFile)
-                    } else {
-                        tvModelsEmpty.visibility = View.VISIBLE
-                        tvModelsEmpty.text = getString(R.string.stage_error, err.message ?: "")
-                    }
+                modelItems.clear()
+                modelItems.addAll(catalogModels)
+                if (modelItems.isEmpty()) {
+                    tvModelsEmpty.visibility = View.VISIBLE
+                } else {
+                    tvModelsEmpty.visibility = View.GONE
+                    modelAdapter.updateData(modelItems, settings.activeModelFile)
                 }
             }
         }

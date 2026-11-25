@@ -2,9 +2,9 @@
 
 use silent_exec_core::ActionCommand;
 use silent_exec_pc::{
-    ensure_llama_server_running, run_setup, AppConfig, BridgeConfig, ExecutionResult,
-    FastRuleRouter, FileIndexer, LlamaBackend, ModelManager, PcExecutor, RuntimeManager,
-    SelfUpdater,
+    ensure_llama_server_running, run_setup, AppConfig, BridgeConfig, BuiltInSkills,
+    ExecutionResult, FastRuleRouter, FileIndexer, LlamaBackend, ModelManager, PcExecutor,
+    RuntimeManager, SelfUpdater,
 };
 use std::fs;
 use std::io::{self, BufRead, Read};
@@ -289,6 +289,9 @@ fn main() -> ExitCode {
                 if let Some(routed) = FastRuleRouter::route(user_prompt) {
                     println!("(Fast Rule Router: routed in <15ms)");
                     routed
+                } else if let Some(skill_steps) = BuiltInSkills::resolve(user_prompt) {
+                    println!("(Built-In Skills Router: resolved)");
+                    skill_steps.into_iter().next().unwrap()
                 } else {
                     let backend = match resolve_llama_backend(
                         server_url,
@@ -418,6 +421,9 @@ fn main() -> ExitCode {
                     if let Some(routed) = FastRuleRouter::route(trimmed) {
                         println!("(Fast Rule Router: <15ms)");
                         routed
+                    } else if let Some(skill_steps) = BuiltInSkills::resolve(trimmed) {
+                        println!("(Built-In Skills Router)");
+                        skill_steps.into_iter().next().unwrap()
                     } else {
                         match backend.infer(trimmed) {
                             Ok(c) => c,
