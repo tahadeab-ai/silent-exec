@@ -106,7 +106,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etCommand: EditText
     private lateinit var btnExecute: Button
     private lateinit var btnMic: Button
-    private lateinit var layoutHistoryChips: LinearLayout
+    private lateinit var layoutHistoryChips: com.google.android.material.chip.ChipGroup
     private lateinit var btnClearStream: Button
     private lateinit var tvStreamEmpty: TextView
     private lateinit var rvAgentStream: RecyclerView
@@ -402,7 +402,7 @@ class MainActivity : AppCompatActivity() {
                 if (file.isNotBlank()) file.removeSuffix(".gguf") else "None"
             }
         }
-        tvHeaderModel.text = getString(R.string.header_model_label, modelStr)
+        tvHeaderModel.text = "${getString(R.string.header_model_label, modelStr)} ▾"
 
         val isAccessActive = SilentExecAccessibilityService.get() != null
         dotAccessibility.setBackgroundResource(
@@ -466,6 +466,10 @@ class MainActivity : AppCompatActivity() {
             showMemorySheetDialog()
         }
 
+        tvHeaderModel.setOnClickListener {
+            showModelSwitcherBottomSheet()
+        }
+
         btnClearStream.setOnClickListener {
             agentStreamAdapter.clear()
             tvStreamEmpty.visibility = View.VISIBLE
@@ -514,7 +518,7 @@ class MainActivity : AppCompatActivity() {
             timestamp = timeStr,
             initialStatus = getString(R.string.stream_thinking)
         )
-        rvAgentStream.scrollToPosition(agentStreamAdapter.itemCount - 1)
+        rvAgentStream.smoothScrollToPosition(agentStreamAdapter.itemCount - 1)
 
         overlayController.show(
             initialText = rawInput,
@@ -792,36 +796,177 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun populateHistoryChips() {
-        layoutHistoryChips.removeAllViews()
-        val defaultChips = if (commandHistory.isEmpty()) {
-            if (settings.language == "ar") {
-                listOf("ارجع", "الشاشة الرئيسية", "انزل", "ارفع الصوت 80", "افتح الواتساب")
-            } else {
-                listOf("back", "home", "scroll down", "set volume 80", "open whatsapp")
-            }
-        } else {
-            commandHistory
+    private fun showModelSwitcherBottomSheet() {
+        val dialog = BottomSheetDialog(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 40, 48, 48)
         }
 
-        for (text in defaultChips) {
-            val btn = Button(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                this.text = text
-                textSize = 11f
+        val titleView = TextView(this).apply {
+            text = getString(R.string.model_switcher_title)
+            textSize = 18f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            setPadding(0, 0, 0, 24)
+        }
+        container.addView(titleView)
+
+        val downloadedFiles = modelDownloader.listDownloadedModels().map { it.name }.toSet()
+        val curatedFilenames = linkedSetOf(
+            "LFM3-1.7B-Q4_K_M.gguf",
+            "Qwen3-1.7B-Q4_K_M.gguf",
+            "Qwen2.5-1.5B-Instruct.Q4_K_M.gguf",
+            "Qwen2.5-0.5B-Instruct.Q4_K_M.gguf"
+        )
+        curatedFilenames.addAll(downloadedFiles)
+
+        for (filename in curatedFilenames) {
+            val isReady = downloadedFiles.contains(filename)
+            val isActive = settings.inferenceSource == InferenceSource.OFFLINE &&
+                settings.activeModelFile.equals(filename, ignoreCase = true)
+
+            val shortName = filename.removeSuffix(".gguf")
+            val statusStr = if (isReady) getString(R.string.model_status_ready) else getString(R.string.model_status_not_downloaded)
+            val label = if (isActive) "✓ $shortName ($statusStr)" else "$shortName • $statusStr"
+
+            val btn = com.google.android.material.button.MaterialButton(
+                this,
+                null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle
+            ).apply {
+                text = label
                 isAllCaps = false
-                val params = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 0, 8, 0)
-                }
-                layoutParams = params
+                ).apply { setMargins(0, 0, 0, 12) }
                 setOnClickListener {
-                    etCommand.setText(text)
-                    handleCommand(text)
+                    dialog.dismiss()
+                    if (isReady) {
+                        settings.inferenceSource = InferenceSource.OFFLINE
+                        settings.activeModelFile = filename
+                        updateHeaderStatus()
+                        loadActiveModelIfAvailable()
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.backend_switched_toast, shortName),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        bottomNav.selectedItemId = R.id.nav_models
+                        selectTab(R.id.nav_models)
+                    }
                 }
             }
-            layoutHistoryChips.addView(btn)
+            container.addView(btn)
+        }
+
+        val bridgeLabel = if (settings.inferenceSource == InferenceSource.LAN_BRIDGE) {
+            "✓ ${getString(R.string.engine_bridge)}"
+        } else {
+            getString(R.string.engine_bridge)
+        }
+        val btnBridge = com.google.android.material.button.MaterialButton(
+            this,
+            null,
+            com.google.android.material.R.attr.materialButtonTonalStyle
+        ).apply {
+            text = bridgeLabel
+            isAllCaps = false
+            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 8, 0, 12) }
+            setOnClickListener {
+                dialog.dismiss()
+                settings.inferenceSource = InferenceSource.LAN_BRIDGE
+                updateHeaderStatus()
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.backend_switched_toast, "LAN Bridge"),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        container.addView(btnBridge)
+
+        val cloudLabel = if (settings.inferenceSource == InferenceSource.OPENAI_COMPAT) {
+            "✓ ${getString(R.string.engine_cloud)}"
+        } else {
+            getString(R.string.engine_cloud)
+        }
+        val btnCloud = com.google.android.material.button.MaterialButton(
+            this,
+            null,
+            com.google.android.material.R.attr.materialButtonTonalStyle
+        ).apply {
+            text = cloudLabel
+            isAllCaps = false
+            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener {
+                dialog.dismiss()
+                settings.inferenceSource = InferenceSource.OPENAI_COMPAT
+                updateHeaderStatus()
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.backend_switched_toast, "Cloud API"),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        container.addView(btnCloud)
+
+        dialog.setContentView(container)
+        dialog.show()
+    }
+
+    private fun populateHistoryChips() {
+        layoutHistoryChips.removeAllViews()
+
+        data class SkillChipItem(val label: String, val prompt: String, val executeImmediately: Boolean)
+
+        val skillChips = mutableListOf(
+            SkillChipItem(getString(R.string.skill_chip_youtube), getString(R.string.skill_prompt_youtube), false),
+            SkillChipItem(getString(R.string.skill_chip_web), getString(R.string.skill_prompt_web), false),
+            SkillChipItem(getString(R.string.skill_chip_mute), getString(R.string.skill_prompt_mute), true),
+            SkillChipItem(getString(R.string.skill_chip_summarize), getString(R.string.skill_prompt_summarize), false)
+        )
+
+        for (routine in SkillStore.listSkills()) {
+            skillChips.add(SkillChipItem("⚡ ${routine.name}", routine.name, true))
+        }
+
+        for (historyCmd in commandHistory.take(4)) {
+            if (skillChips.none { it.prompt.equals(historyCmd, ignoreCase = true) }) {
+                skillChips.add(SkillChipItem(historyCmd, historyCmd, true))
+            }
+        }
+
+        for (item in skillChips) {
+            val chip = com.google.android.material.chip.Chip(this).apply {
+                text = item.label
+                isCheckable = false
+                isClickable = true
+                textSize = 12f
+                setEnsureMinTouchTargetSize(false)
+                setOnClickListener {
+                    etCommand.setText(item.prompt)
+                    etCommand.setSelection(item.prompt.length)
+                    if (item.executeImmediately) {
+                        handleCommand(item.prompt)
+                    } else {
+                        etCommand.requestFocus()
+                    }
+                }
+            }
+            layoutHistoryChips.addView(chip)
         }
     }
 

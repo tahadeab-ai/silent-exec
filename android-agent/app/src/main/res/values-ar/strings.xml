@@ -154,4 +154,19 @@
     <string name="memory_btn_save">حفظ التفضيل</string>
     <string name="memory_btn_delete">حذف</string>
     <string name="memory_saved_toast">تم الحفظ في الذاكرة الدائمة</string>
+
+    <!-- v1.1.0: Model Switcher & Built-In Skills Quick Chips -->
+    <string name="model_switcher_title">تبديل النموذج / المحرك النشط</string>
+    <string name="model_status_ready">جاهز</string>
+    <string name="model_status_not_downloaded">غير محمّل (اضغط للانتقال للمستودع)</string>
+    <string name="backend_switched_toast">تم التبديل إلى: %s</string>
+    <string name="skills_section_title">المهارات والروتينات السريعة</string>
+    <string name="skill_chip_youtube">يوتيوب: بحث</string>
+    <string name="skill_chip_web">بحث ويب</string>
+    <string name="skill_chip_mute">كتم الصوت</string>
+    <string name="skill_chip_summarize">ملخص وحفظ</string>
+    <string name="skill_prompt_youtube">افتح اليوتيوب وابحث عن </string>
+    <string name="skill_prompt_web">افتح المتصفح وابحث عن </string>
+    <string name="skill_prompt_mute">اكتم الصوت 0</string>
+    <string name="skill_prompt_summarize">لخص واحفظ في الملاحظات</string>
 </resources>

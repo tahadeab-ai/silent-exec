@@ -154,4 +154,19 @@
     <string name="memory_btn_save">Save Memory</string>
     <string name="memory_btn_delete">Delete</string>
     <string name="memory_saved_toast">Saved to persistent memory</string>
+
+    <!-- v1.1.0: Model Switcher & Built-In Skills Quick Chips -->
+    <string name="model_switcher_title">Switch Active Model / Backend</string>
+    <string name="model_status_ready">Ready</string>
+    <string name="model_status_not_downloaded">Not Downloaded (Tap to open Model Hub)</string>
+    <string name="backend_switched_toast">Switched engine to: %s</string>
+    <string name="skills_section_title">Built-In Skills &amp; Routines</string>
+    <string name="skill_chip_youtube">YouTube: Search</string>
+    <string name="skill_chip_web">Web Search</string>
+    <string name="skill_chip_mute">Mute Volume</string>
+    <string name="skill_chip_summarize">Summarize &amp; Save</string>
+    <string name="skill_prompt_youtube">open YouTube and search for </string>
+    <string name="skill_prompt_web">search google for </string>
+    <string name="skill_prompt_mute">set volume 0</string>
+    <string name="skill_prompt_summarize">summarize and save note</string>
 </resources>
