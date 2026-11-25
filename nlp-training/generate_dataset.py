@@ -15,9 +15,12 @@ from typing import Any, Dict, List, Tuple
 import jsonschema
 
 SYSTEM_PROMPT = (
-    "You are SilentExec, a zero-chatter OS execution agent. "
-    "Emit only a valid ActionCommand JSON matching the strict schema. "
-    "No conversational responses."
+    "You are SilentExec, a step-by-step ReAct OS execution agent. "
+    "Emit ONLY valid ActionCommand or MultiStepPlan JSON matching the strict schema (no conversational text). "
+    "Always reason briefly in \"thought\" (1 short sentence) about what is currently on screen and what SINGLE next step advances the user's goal. "
+    "Never cram follow-up actions (like open first video or click like) into a search query. "
+    "Use numbered screen elements (#0, #1, ...) from the live pruned UI tree for ui_click and ui_type. "
+    "Emit action \"done\" ONLY when the entire user goal is genuinely complete."
 )
 
 ACTIONS = [
@@ -1214,6 +1217,290 @@ def build_multistep_example(category: str, rng: random.Random) -> Tuple[str, Dic
     return prompt, payload
 
 
+def build_react_trajectory_examples(category: str, rng: random.Random) -> List[Tuple[str, Dict[str, Any]]]:
+    """
+    Generates a multi-turn Screen-Aware ReAct trajectory matching PromptFormatter.buildScreenAwarePrompt:
+    Goal + Completed steps + Current screen elements ([0] role: label) -> {"thought":..., "action":..., ...}
+    """
+    is_english = category == "english"
+    is_msa = category == "msa"
+    conf = round(rng.uniform(0.88, 0.99), 2)
+    scenario = rng.choice(["youtube", "whatsapp", "browser", "settings"])
+
+    def fmt_user(goal: str, history: List[str], screen: List[str], platform: str) -> str:
+        hist_str = "Completed steps:\n" + "\n".join(history) if history else "Completed steps: none"
+        scr_str = "Current screen elements:\n" + "\n".join(screen) if screen else "Current screen elements: none visible"
+        return (
+            f"Goal: {goal}\n\n"
+            f"{hist_str}\n\n"
+            f"{scr_str}\n\n"
+            f"Think step-by-step in \"thought\", then emit the SINGLE next ActionCommand JSON using #index for screen elements, "
+            f"or {{\"thought\":\"Goal complete.\",\"action\":\"done\",\"platform\":\"{platform}\",\"confidence\":1.0}} ONLY when the entire goal is genuinely complete."
+        )
+
+    steps_data: List[Tuple[str, Dict[str, Any]]] = []
+
+    if scenario == "youtube":
+        topic = rng.choice(["nlp", "rust programming", "ai agents", "تعلم بايثون", "الذكاء الاصطناعي"])
+        if is_english:
+            goal = f"open youtube and search for {topic} and open first video and click like"
+        elif is_msa:
+            goal = f"افتح اليوتيوب وابحث عن {topic} ثم افتح أول فيديو واضغط إعجاب"
+        else:
+            goal = f"افتح اليوتيوب و ابحث عن {topic} و افتح اول فيديو و اضغط لايك"
+
+        encoded_topic = topic.replace(" ", "+")
+        # Step 1: Open YouTube search URL
+        steps_data.append((
+            fmt_user(goal, [], ["[0] button: YouTube", "[1] button: Chrome", "[2] button: Settings"], "android"),
+            {
+                "thought": f"Open YouTube search results for '{topic}' first before selecting a video.",
+                "action": "open_url",
+                "target": f"https://www.youtube.com/results?search_query={encoded_topic}",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        # Step 2: Click first video
+        h1 = [f"Step 1: open_url(https://www.youtube.com/results?search_query={encoded_topic}) -> OK"]
+        s2 = ["[0] input: Search YouTube", "[1] button: Filters", f"[2] button: {topic} - Full Course Tutorial", "[3] button: More options"]
+        steps_data.append((
+            fmt_user(goal, h1, s2, "android"),
+            {
+                "thought": "Search results are visible; tap the first video result at #2.",
+                "action": "ui_click",
+                "target": "#2",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        # Step 3: Click Like
+        h2 = h1 + ["Step 2: ui_click(#2) -> OK"]
+        s3 = ["[0] view: Video Player", "[1] button: Pause", "[2] button: Subscribe", "[3] button: Like", "[4] button: Share"]
+        steps_data.append((
+            fmt_user(goal, h2, s3, "android"),
+            {
+                "thought": "The video is now open; tap the Like button at #3.",
+                "action": "ui_click",
+                "target": "#3",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        # Step 4: Done
+        h3 = h2 + ["Step 3: ui_click(#3) -> OK"]
+        steps_data.append((
+            fmt_user(goal, h3, s3, "android"),
+            {
+                "thought": "Searched YouTube, opened the first video, and clicked Like; goal is complete.",
+                "action": "done",
+                "platform": "android",
+                "confidence": 1.0,
+            }
+        ))
+
+    elif scenario == "whatsapp":
+        contact = rng.choice(["أحمد", "محمد", "علي", "Ahmed", "Omar"])
+        msg = rng.choice(["السلام عليكم", "جاهز للاجتماع", "Hello, on my way"])
+        if is_english:
+            goal = f"open whatsapp and search for {contact} and send {msg}"
+        elif is_msa:
+            goal = f"افتح الواتساب وابحث عن {contact} وأرسل {msg}"
+        else:
+            goal = f"افتح الواتس ودور على {contact} وارسل له {msg}"
+
+        steps_data.append((
+            fmt_user(goal, [], ["[0] button: Home", "[1] button: WhatsApp"], "android"),
+            {
+                "thought": "Launch WhatsApp first.",
+                "action": "open_android_app",
+                "target": "WhatsApp",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h1 = ["Step 1: open_android_app(WhatsApp) -> OK"]
+        s2 = ["[0] button: Camera", "[1] button: Search", "[2] button: New chat", "[3] list: Chats"]
+        steps_data.append((
+            fmt_user(goal, h1, s2, "android"),
+            {
+                "thought": "Tap the Search icon at #1 to find the contact.",
+                "action": "ui_click",
+                "target": "#1",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h2 = h1 + ["Step 2: ui_click(#1) -> OK"]
+        s3 = ["[0] input: Search...", "[1] button: Back"]
+        steps_data.append((
+            fmt_user(goal, h2, s3, "android"),
+            {
+                "thought": f"Type '{contact}' into the search field at #0.",
+                "action": "ui_type",
+                "target": "#0",
+                "args": {"text": contact},
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h3 = h2 + ["Step 3: ui_type(#0) -> OK"]
+        s4 = ["[0] input: " + contact, f"[1] button: {contact} (Chat)", "[2] button: Clear"]
+        steps_data.append((
+            fmt_user(goal, h3, s4, "android"),
+            {
+                "thought": f"Open the chat with {contact} at #1.",
+                "action": "ui_click",
+                "target": "#1",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h4 = h3 + ["Step 4: ui_click(#1) -> OK"]
+        s5 = [f"[0] view: {contact}", "[1] input: Message", "[2] button: Emoji", "[3] button: Send"]
+        steps_data.append((
+            fmt_user(goal, h4, s5, "android"),
+            {
+                "thought": f"Type the message into #1.",
+                "action": "ui_type",
+                "target": "#1",
+                "args": {"text": msg},
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h5 = h4 + ["Step 5: ui_type(#1) -> OK"]
+        steps_data.append((
+            fmt_user(goal, h5, s5, "android"),
+            {
+                "thought": "Tap the Send button at #3 to deliver the message.",
+                "action": "ui_click",
+                "target": "#3",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h6 = h5 + ["Step 6: ui_click(#3) -> OK"]
+        steps_data.append((
+            fmt_user(goal, h6, s5, "android"),
+            {
+                "thought": "Message sent successfully; goal is complete.",
+                "action": "done",
+                "platform": "android",
+                "confidence": 1.0,
+            }
+        ))
+
+    elif scenario == "browser":
+        q = rng.choice(["rust async", "tauri v2", "تعلم البرمجة"])
+        if is_english:
+            goal = f"open browser and search for {q} then scroll down and click first link"
+        elif is_msa:
+            goal = f"افتح المتصفح وابحث عن {q} ثم مرر للأسفل واضغط على أول رابط"
+        else:
+            goal = f"افتح المتصفح و ابحث عن {q} و انزل لتحت و اضغط اول رابط"
+
+        steps_data.append((
+            fmt_user(goal, [], ["[0] button: Chrome", "[1] button: Files"], "pc"),
+            {
+                "thought": f"Open Google search for '{q}' in the browser.",
+                "action": "open_url",
+                "target": f"https://www.google.com/search?q={q.replace(' ', '+')}",
+                "platform": "pc",
+                "confidence": conf,
+            }
+        ))
+        h1 = [f"Step 1: open_url(https://www.google.com/search?q={q.replace(' ', '+')}) -> OK"]
+        s2 = ["[0] input: Search", "[1] button: All", "[2] button: Images", "[3] list: Search Results"]
+        steps_data.append((
+            fmt_user(goal, h1, s2, "pc"),
+            {
+                "thought": "Scroll down to view the top search result link.",
+                "action": "ui_scroll",
+                "args": {"direction": "down"},
+                "platform": "pc",
+                "confidence": conf,
+            }
+        ))
+        h2 = h1 + ["Step 2: ui_scroll() -> OK"]
+        s3 = [f"[0] button: {q} - Official Docs", "[1] button: GitHub Repository", "[2] button: Next page"]
+        steps_data.append((
+            fmt_user(goal, h2, s3, "pc"),
+            {
+                "thought": "Click the first search result link at #0.",
+                "action": "ui_click",
+                "target": "#0",
+                "platform": "pc",
+                "confidence": conf,
+            }
+        ))
+        h3 = h2 + ["Step 3: ui_click(#0) -> OK"]
+        steps_data.append((
+            fmt_user(goal, h3, s3, "pc"),
+            {
+                "thought": "Opened the first search result; goal is complete.",
+                "action": "done",
+                "platform": "pc",
+                "confidence": 1.0,
+            }
+        ))
+
+    else:  # settings
+        if is_english:
+            goal = "open settings and scroll down and click display"
+        elif is_msa:
+            goal = "افتح الإعدادات ثم مرر للأسفل واضغط على الشاشة"
+        else:
+            goal = "افتح الضبط وانزل لتحت واضغط على الشاشة"
+
+        steps_data.append((
+            fmt_user(goal, [], ["[0] button: Settings", "[1] button: Camera"], "android"),
+            {
+                "thought": "Open the Android Settings app first.",
+                "action": "open_android_app",
+                "target": "Settings",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h1 = ["Step 1: open_android_app(Settings) -> OK"]
+        s2 = ["[0] input: Search settings", "[1] button: Network & internet", "[2] button: Connected devices", "[3] list: Settings"]
+        steps_data.append((
+            fmt_user(goal, h1, s2, "android"),
+            {
+                "thought": "Scroll down in Settings to find Display.",
+                "action": "ui_scroll",
+                "args": {"direction": "down"},
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h2 = h1 + ["Step 2: ui_scroll() -> OK"]
+        s3 = ["[0] button: Apps", "[1] button: Battery", "[2] button: Display", "[3] button: Sound"]
+        steps_data.append((
+            fmt_user(goal, h2, s3, "android"),
+            {
+                "thought": "Display is visible at #2; tap it.",
+                "action": "ui_click",
+                "target": "#2",
+                "platform": "android",
+                "confidence": conf,
+            }
+        ))
+        h3 = h2 + ["Step 3: ui_click(#2) -> OK"]
+        steps_data.append((
+            fmt_user(goal, h3, s3, "android"),
+            {
+                "thought": "Display settings opened; goal is complete.",
+                "action": "done",
+                "platform": "android",
+                "confidence": 1.0,
+            }
+        ))
+
+    return steps_data
+
+
 def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
     rng = random.Random(seed)
 
@@ -1226,11 +1513,35 @@ def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
 
     examples: List[Dict[str, Any]] = []
 
-    # 35% realistic multi-step compound tasks, 65% rich single-step tasks
-    multistep_count = int(total_count * 0.35)
-    singlestep_count = total_count - multistep_count
+    # 40% Screen-Aware ReAct trajectories, 25% multi-step compound plans, 35% single-step tasks
+    react_count = int(total_count * 0.40)
+    multistep_count = int(total_count * 0.25)
+    singlestep_count = total_count - react_count - multistep_count
 
-    # 1. Generate 35% multi-step compound tasks (2 to 4 steps)
+    # 0. Generate 40% Screen-Aware ReAct trajectories (Observe -> Think -> Act)
+    while len(examples) < react_count:
+        cat = rng.choice(categories)
+        trajectory = build_react_trajectory_examples(cat, rng)
+        for user_prompt, payload in trajectory:
+            if len(examples) >= react_count:
+                break
+            examples.append({
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+                    }
+                ],
+                "meta": {
+                    "action": "react_step",
+                    "category": cat,
+                    "confidence": payload["confidence"]
+                }
+            })
+
+    # 1. Generate 25% multi-step compound tasks (2 to 4 steps)
     for _ in range(multistep_count):
         cat = rng.choice(categories)
         user_prompt, payload = build_multistep_example(cat, rng)
@@ -1252,7 +1563,7 @@ def generate_dataset(total_count: int, seed: int) -> List[Dict[str, Any]]:
         }
         examples.append(chatml_sample)
 
-    # 2. Generate 65% rich single-step examples across all 20 actions
+    # 2. Generate 35% rich single-step examples across all 20 actions
     base_per_action = singlestep_count // len(ACTIONS)
     remainder = singlestep_count % len(ACTIONS)
 
@@ -1293,6 +1604,7 @@ def validate_and_save(
     total_validated = 0
     action_counts: Dict[str, int] = {a: 0 for a in ACTIONS}
     action_counts["multi_step"] = 0
+    action_counts["react_step"] = 0
     category_counts: Dict[str, int] = {"colloquial": 0, "msa": 0, "english": 0, "adversarial": 0}
 
     # Validate 100% of generated assistant JSON payloads
