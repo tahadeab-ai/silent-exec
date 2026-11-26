@@ -1,6 +1,8 @@
 package com.silentexec.android.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,6 +27,8 @@ import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TouchApp
@@ -31,26 +36,41 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.core.text.BidiFormatter
 import com.silentexec.android.ui.AgentUiState
 import com.silentexec.android.ui.TraceItem
 
+private fun wrapBidi(text: String): String = BidiFormatter.getInstance().unicodeWrap(text)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentScreen(
     state: AgentUiState,
@@ -71,12 +91,12 @@ fun AgentScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        // Compact Top Status Bar: Provider Pill + Accessibility Badge
+        // Compact Top Status Bar: Provider Pill + Accessibility Badge (non-crowding RTL-safe spacing)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -97,7 +117,7 @@ fun AgentScreen(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = state.activeProviderLabel,
+                        text = wrapBidi(state.activeProviderLabel),
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -112,10 +132,11 @@ fun AgentScreen(
                     MaterialTheme.colorScheme.primaryContainer
                 } else {
                     MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
-                }
+                },
+                modifier = Modifier.wrapContentWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -128,7 +149,7 @@ fun AgentScreen(
                         },
                         modifier = Modifier.size(16.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = if (state.accessibilityEnabled) {
                             if (ar) "مفعّل" else "Ready"
@@ -137,6 +158,8 @@ fun AgentScreen(
                         },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false,
                         color = if (state.accessibilityEnabled) {
                             MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
@@ -250,6 +273,64 @@ fun AgentScreen(
                 }
             }
         }
+
+        // 3-Button Approval / Takeover Bottom Sheet
+        state.activeTakeOverPrompt?.let { prompt ->
+            ModalBottomSheet(
+                onDismissRequest = { prompt.onCancel() }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = prompt.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = wrapBidi(prompt.reason),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { prompt.onApprove() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "تأكيد" else "Approve")
+                        }
+                        FilledTonalButton(
+                            onClick = { prompt.onTakeOver() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "تولي التحكم" else "Take Over")
+                        }
+                        OutlinedButton(
+                            onClick = { prompt.onCancel() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "إلغاء" else "Cancel")
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+        }
     }
 }
 
@@ -287,6 +368,55 @@ private fun EmptyAgentHero(isArabic: Boolean) {
 }
 
 @Composable
+private fun TechnicalDetailsAccordion(
+    technicalDetails: String?,
+    isArabic: Boolean
+) {
+    if (technicalDetails.isNullOrBlank()) return
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = if (isArabic) "التفاصيل التقنية والسجل" else "Technical Details & Log",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = technicalDetails,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TraceItemCard(item: TraceItem, isArabic: Boolean) {
     when (item) {
         is TraceItem.UserGoal -> {
@@ -297,7 +427,7 @@ private fun TraceItemCard(item: TraceItem, isArabic: Boolean) {
                     modifier = Modifier.padding(start = 40.dp)
                 ) {
                     Text(
-                        text = item.text,
+                        text = wrapBidi(item.text),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -312,32 +442,44 @@ private fun TraceItemCard(item: TraceItem, isArabic: Boolean) {
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Visibility,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    val pkg = item.packageName.substringAfterLast('.').ifBlank { "screen" }
-                    val changedTag = when (item.screenChanged) {
-                        true -> if (isArabic) " · تغيرت الشاشة" else " · screen updated"
-                        false -> if (isArabic) " · لم تتغير الشاشة" else " · unchanged"
-                        null -> ""
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            val pkg = wrapBidi(item.packageName.substringAfterLast('.').ifBlank { "screen" })
+                            val headline = when {
+                                item.screenChanged == false ->
+                                    if (isArabic) "⚠️ لم تستجب الشاشة — جارٍ المحاولة البديلة" else "⚠️ Screen unchanged — trying fallback"
+                                isArabic -> "✓ تم رصد ${item.elementCount} عنصراً ($pkg)"
+                                else -> "✓ Observed ${item.elementCount} elements ($pkg)"
+                            }
+                            Text(
+                                text = headline,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        item.elapsedMs?.let { ms ->
+                            Text(
+                                text = wrapBidi("${ms}ms"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    Text(
-                        text = if (isArabic) {
-                            "خطوة ${item.step}: رصد ${item.elementCount} عنصر ($pkg)$changedTag"
-                        } else {
-                            "Step ${item.step}: Observed ${item.elementCount} elements ($pkg)$changedTag"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    TechnicalDetailsAccordion(item.technicalDetails, isArabic)
                 }
             }
         }
@@ -346,31 +488,54 @@ private fun TraceItemCard(item: TraceItem, isArabic: Boolean) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = item.thought,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.TouchApp,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "${item.actionWire}${if (item.target.isNotBlank()) " → ${item.target}" else ""}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.TouchApp,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            val stepTitle = if (isArabic) {
+                                "⏳ ${item.thought.ifBlank { wrapBidi(item.actionWire) }}"
+                            } else {
+                                "⏳ ${item.thought.ifBlank { wrapBidi(item.actionWire) }}"
+                            }
+                            Text(
+                                text = wrapBidi(stepTitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        item.elapsedMs?.let { ms ->
+                            Text(
+                                text = wrapBidi("${ms}ms"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
+                    val detailText = buildString {
+                        append(item.actionWire)
+                        if (item.target.isNotBlank()) append(" -> ${item.target}")
+                        if (!item.technicalDetails.isNullOrBlank()) {
+                            append("\n")
+                            append(item.technicalDetails)
+                        }
+                    }
+                    TechnicalDetailsAccordion(detailText, isArabic)
                 }
             }
         }
@@ -471,16 +636,94 @@ private fun TraceItemCard(item: TraceItem, isArabic: Boolean) {
         is TraceItem.Error -> {
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.65f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = item.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(12.dp)
-                )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = wrapBidi(
+                                if (item.message.contains("<think>", ignoreCase = true) || item.message.length > 140) {
+                                    if (isArabic) "⚠️ تعذر إكمال الخطوة — راجع التفاصيل التقنية" else "⚠️ Step interrupted — see technical details"
+                                } else {
+                                    item.message
+                                }
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    TechnicalDetailsAccordion(
+                        item.technicalDetails ?: item.message.takeIf { it.contains("<think>", ignoreCase = true) || it.length > 140 },
+                        isArabic
+                    )
+                }
+            }
+        }
+
+        // 3-Button Approval / Takeover Bottom Sheet
+        state.activeTakeOverPrompt?.let { prompt ->
+            ModalBottomSheet(
+                onDismissRequest = { prompt.onCancel() }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = prompt.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = wrapBidi(prompt.reason),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { prompt.onApprove() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "تأكيد" else "Approve")
+                        }
+                        FilledTonalButton(
+                            onClick = { prompt.onTakeOver() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "تولي التحكم" else "Take Over")
+                        }
+                        OutlinedButton(
+                            onClick = { prompt.onCancel() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "إلغاء" else "Cancel")
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
     }

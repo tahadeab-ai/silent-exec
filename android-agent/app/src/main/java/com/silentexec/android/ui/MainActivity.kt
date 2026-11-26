@@ -137,6 +137,10 @@ class MainActivity : AppCompatActivity() {
                         settings.executionMode = mode
                         uiState.executionMode = mode
                     },
+                    onToggleDeveloperDebugOverlay = { enabled ->
+                        settings.developerDebugOverlay = enabled
+                        uiState.developerDebugOverlay = enabled
+                    },
                     onCheckForUpdate = { checkForAppUpdate() },
                     onInstallUpdate = { downloadAndInstallAppUpdate() }
                 )
@@ -150,6 +154,15 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         uiState.accessibilityEnabled = SilentExecAccessibilityService.get() != null
         uiState.overlayEnabled = Settings.canDrawOverlays(this)
+        uiState.developerDebugOverlay = settings.developerDebugOverlay
+        overlayController.setAppForeground(true)
+        FloatingBubbleService.setAppForeground(true)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        overlayController.setAppForeground(false)
+        FloatingBubbleService.setAppForeground(false)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -179,6 +192,7 @@ class MainActivity : AppCompatActivity() {
         uiState.activeProviderLabel = ProviderCatalog.activeDisplayLabel(settings)
         uiState.accessibilityEnabled = SilentExecAccessibilityService.get() != null
         uiState.overlayEnabled = Settings.canDrawOverlays(this)
+        uiState.developerDebugOverlay = settings.developerDebugOverlay
     }
 
     private fun runAgentGoal(goal: String) {
@@ -247,6 +261,7 @@ class MainActivity : AppCompatActivity() {
                 lateinit var confirmItem: TraceItem.Confirmation
                 val resolveDecision: (Boolean) -> Unit = { approved ->
                     if (resolvedOnce.compareAndSet(false, true)) {
+                        uiState.activeTakeOverPrompt = null
                         val idx = uiState.traceItems.indexOfFirst { it.id == confirmItem.id }
                         if (idx >= 0) {
                             uiState.traceItems[idx] = confirmItem.copy(resolved = true, approved = approved)
@@ -263,6 +278,17 @@ class MainActivity : AppCompatActivity() {
                     onRespond = resolveDecision
                 )
                 uiState.traceItems.add(confirmItem)
+                uiState.activeTakeOverPrompt = TakeOverPromptState(
+                    step = event.step,
+                    title = if (uiState.isArabic) "تأكيد أو تولي التحكم" else "Approve or Take Over",
+                    reason = "${event.command.action.wireName}: ${event.command.target ?: event.reason}",
+                    onApprove = { resolveDecision(true) },
+                    onTakeOver = {
+                        resolveDecision(false)
+                        stopAgent()
+                    },
+                    onCancel = { resolveDecision(false) }
+                )
                 val summary = "${event.command.action.wireName}: ${event.command.target ?: event.reason}"
                 overlayController.showConfirmation(summary, resolveDecision)
                 if (FloatingBubbleService.isRunning()) {
@@ -578,6 +604,7 @@ private fun SilentExecApp(
     onSetLanguage: (Boolean) -> Unit,
     onSetTheme: (ThemeMode) -> Unit,
     onSetExecutionMode: (com.silentexec.android.core.ExecutionMode) -> Unit,
+    onToggleDeveloperDebugOverlay: (Boolean) -> Unit,
     onCheckForUpdate: () -> Unit,
     onInstallUpdate: () -> Unit
 ) {
@@ -637,6 +664,7 @@ private fun SilentExecApp(
                 onSetExecutionMode = onSetExecutionMode,
                 onOpenAccessibilitySettings = onOpenAccessibility,
                 onOpenOverlaySettings = onOpenOverlay,
+                onToggleDeveloperDebugOverlay = onToggleDeveloperDebugOverlay,
                 onCheckForUpdate = onCheckForUpdate,
                 onInstallUpdate = onInstallUpdate,
                 modifier = Modifier.padding(innerPadding)

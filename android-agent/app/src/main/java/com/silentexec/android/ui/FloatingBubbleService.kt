@@ -77,6 +77,14 @@ class FloatingBubbleService : Service() {
             instance?.hidePillConfirmation()
         }
 
+        fun setAppForeground(inForeground: Boolean) {
+            instance?.applyForegroundState(inForeground)
+        }
+
+        fun setMomentarilyInvisible(invisible: Boolean) {
+            instance?.applyMomentaryInvisibility(invisible)
+        }
+
         fun resetToBubble() {
             instance?.showBubble()
         }
@@ -277,15 +285,49 @@ class FloatingBubbleService : Service() {
         }
     }
 
+    @Volatile
+    private var isAppInForeground: Boolean = false
+
+    private fun isSelfForeground(): Boolean {
+        if (isAppInForeground) return true
+        val pkg = com.silentexec.android.exec.SilentExecAccessibilityService.get()?.activePackageName().orEmpty()
+        return pkg == packageName
+    }
+
+    private fun applyForegroundState(inForeground: Boolean) {
+        isAppInForeground = inForeground
+        mainHandler.post {
+            if (inForeground) {
+                llFloatingPill?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun applyMomentaryInvisibility(invisible: Boolean) {
+        mainHandler.post {
+            val view = rootView ?: return@post
+            val params = windowParams ?: return@post
+            view.alpha = if (invisible) 0f else 1f
+            params.flags = if (invisible) {
+                params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            } else {
+                params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            }
+            try {
+                windowManager.updateViewLayout(view, params)
+            } catch (_: Exception) {}
+        }
+    }
+
     fun showProgress(text: String, onStop: (() -> Unit)?) {
         mainHandler.post {
             onStopCallback = onStop
             onConfirmDecisionCallback = null
             flBubbleIcon?.visibility = View.GONE
             cardMiniConsole?.visibility = View.GONE
-            llFloatingPill?.visibility = View.VISIBLE
+            llFloatingPill?.visibility = if (isSelfForeground()) View.GONE else View.VISIBLE
             llFloatingPillConfirmActions?.visibility = View.GONE
-            tvFloatingPillStatus?.text = text
+            tvFloatingPillStatus?.text = androidx.core.text.BidiFormatter.getInstance().unicodeWrap(text)
             setFocusable(false)
         }
     }
@@ -295,9 +337,9 @@ class FloatingBubbleService : Service() {
             onConfirmDecisionCallback = onDecision
             flBubbleIcon?.visibility = View.GONE
             cardMiniConsole?.visibility = View.GONE
-            llFloatingPill?.visibility = View.VISIBLE
+            llFloatingPill?.visibility = if (isSelfForeground()) View.GONE else View.VISIBLE
             llFloatingPillConfirmActions?.visibility = View.VISIBLE
-            tvFloatingPillStatus?.text = text
+            tvFloatingPillStatus?.text = androidx.core.text.BidiFormatter.getInstance().unicodeWrap(text)
             setFocusable(false)
         }
     }

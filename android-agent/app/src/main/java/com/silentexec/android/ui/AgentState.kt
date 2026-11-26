@@ -31,7 +31,9 @@ sealed interface TraceItem {
         val step: Int,
         val packageName: String,
         val elementCount: Int,
-        val screenChanged: Boolean?
+        val screenChanged: Boolean?,
+        val elapsedMs: Long? = null,
+        val technicalDetails: String? = null
     ) : TraceItem
 
     data class Reasoning(
@@ -39,14 +41,18 @@ sealed interface TraceItem {
         val step: Int,
         val thought: String,
         val actionWire: String,
-        val target: String
+        val target: String,
+        val elapsedMs: Long? = null,
+        val technicalDetails: String? = null
     ) : TraceItem
 
     data class ActionResult(
         override val id: String = UUID.randomUUID().toString(),
         val step: Int,
         val success: Boolean,
-        val message: String
+        val message: String,
+        val elapsedMs: Long? = null,
+        val technicalDetails: String? = null
     ) : TraceItem
 
     data class Confirmation(
@@ -56,6 +62,7 @@ sealed interface TraceItem {
         val reason: String,
         val resolved: Boolean = false,
         val approved: Boolean? = null,
+        val tookOver: Boolean = false,
         val onRespond: (Boolean) -> Unit
     ) : TraceItem
 
@@ -67,9 +74,19 @@ sealed interface TraceItem {
 
     data class Error(
         override val id: String = UUID.randomUUID().toString(),
-        val message: String
+        val message: String,
+        val technicalDetails: String? = null
     ) : TraceItem
 }
+
+data class TakeOverPromptState(
+    val step: Int,
+    val title: String,
+    val reason: String,
+    val onApprove: () -> Unit,
+    val onTakeOver: () -> Unit,
+    val onCancel: () -> Unit
+)
 
 data class ModelCardState(
     val release: ModelReleaseItem,
@@ -97,10 +114,12 @@ class AgentUiState {
 
     var accessibilityEnabled by mutableStateOf(false)
     var overlayEnabled by mutableStateOf(false)
+    var developerDebugOverlay by mutableStateOf(false)
 
     var composerText by mutableStateOf("")
     var isRunning by mutableStateOf(false)
     var isListening by mutableStateOf(false)
+    var activeTakeOverPrompt by mutableStateOf<TakeOverPromptState?>(null)
 
     val traceItems = mutableStateListOf<TraceItem>()
     val models = mutableStateListOf<ModelCardState>()

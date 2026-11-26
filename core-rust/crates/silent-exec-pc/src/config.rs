@@ -115,6 +115,14 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub disable_thinking: bool,
 
+    /// Optional OmniParser URL for visual GUI grounding
+    #[serde(default)]
+    pub omniparser_url: String,
+
+    /// Tools disabled by user in Desktop Tools & MCP tab
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
+
     /// OpenAI compatible API base URL
     #[serde(default = "default_openai_url")]
     pub openai_api_base: String,
@@ -145,6 +153,8 @@ impl Default for AppConfig {
             ollama_url: default_ollama_url(),
             ollama_model: default_ollama_model(),
             disable_thinking: true,
+            omniparser_url: String::new(),
+            disabled_tools: Vec::new(),
             openai_api_base: default_openai_url(),
             openai_api_model: default_openai_model(),
             openai_api_key: String::new(),

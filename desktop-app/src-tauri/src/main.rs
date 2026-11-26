@@ -55,6 +55,9 @@ pub struct AppConfigDto {
     pub mode: String,
     pub active_model_tag: Option<String>,
     pub fast_router_enabled: bool,
+    pub disable_thinking: bool,
+    pub omniparser_url: String,
+    pub disabled_tools: Vec<String>,
     pub backend: String,
     pub ollama_url: String,
     pub ollama_model: String,
@@ -147,6 +150,9 @@ async fn get_app_config(state: State<'_, AppState>) -> Result<AppConfigDto, Stri
         mode: cfg.mode,
         active_model_tag: cfg.active_model_tag,
         fast_router_enabled: cfg.fast_router_enabled,
+        disable_thinking: cfg.disable_thinking,
+        omniparser_url: cfg.omniparser_url,
+        disabled_tools: cfg.disabled_tools,
         backend: cfg.backend,
         ollama_url: cfg.ollama_url,
         ollama_model: cfg.ollama_model,
@@ -165,6 +171,9 @@ async fn save_app_config(
     mode: Option<String>,
     active_model_tag: Option<String>,
     fast_router_enabled: Option<bool>,
+    disable_thinking: Option<bool>,
+    omniparser_url: Option<String>,
+    disabled_tools: Option<Vec<String>>,
     backend: Option<String>,
     ollama_url: Option<String>,
     ollama_model: Option<String>,
@@ -185,6 +194,15 @@ async fn save_app_config(
         }
         if let Some(f) = fast_router_enabled {
             cfg.fast_router_enabled = f;
+        }
+        if let Some(dt) = disable_thinking {
+            cfg.disable_thinking = dt;
+        }
+        if let Some(op) = omniparser_url {
+            cfg.omniparser_url = op;
+        }
+        if let Some(tools) = disabled_tools {
+            cfg.disabled_tools = tools;
         }
         if let Some(b) = backend {
             cfg.backend = b;

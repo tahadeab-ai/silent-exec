@@ -174,6 +174,10 @@ class AppSettings(
         get() = prefs.getBoolean(KEY_FLOATING_BUBBLE, false)
         set(value) = prefs.edit().putBoolean(KEY_FLOATING_BUBBLE, value).apply()
 
+    var developerDebugOverlay: Boolean
+        get() = prefs.getBoolean(KEY_DEVELOPER_DEBUG_OVERLAY, false)
+        set(value) = prefs.edit().putBoolean(KEY_DEVELOPER_DEBUG_OVERLAY, value).apply()
+
     var bridgeHost: String
         get() = prefs.getString(KEY_BRIDGE_HOST, "") ?: ""
         set(value) = prefs.edit().putString(KEY_BRIDGE_HOST, value).apply()
@@ -235,6 +239,7 @@ class AppSettings(
         const val KEY_ACTIVE_MODEL_FILE = "setting_active_model_file"
         const val KEY_FAST_ROUTER = "setting_fast_router"
         const val KEY_FLOATING_BUBBLE = "setting_floating_bubble"
+        const val KEY_DEVELOPER_DEBUG_OVERLAY = "setting_developer_debug_overlay"
         const val KEY_BRIDGE_HOST = "setting_bridge_host"
         const val KEY_BRIDGE_PORT = "setting_bridge_port"
         const val KEY_BRIDGE_TOKEN = "setting_bridge_token"

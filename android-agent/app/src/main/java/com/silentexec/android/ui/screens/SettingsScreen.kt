@@ -51,6 +51,7 @@ fun SettingsScreen(
     onSetExecutionMode: (ExecutionMode) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
+    onToggleDeveloperDebugOverlay: (Boolean) -> Unit = {},
     onCheckForUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
     modifier: Modifier = Modifier
@@ -262,6 +263,30 @@ fun SettingsScreen(
                         OutlinedButton(onClick = onOpenOverlaySettings) {
                             Text(if (state.overlayEnabled) (if (ar) "إعدادات" else "Settings") else (if (ar) "منح الإذن" else "Grant"))
                         }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (ar) "تراكب أرقام العناصر (للمطورين)" else "Developer Debug Index Overlay",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = if (ar) "إظهار مربعات [0], [1] فوق الشاشة للتشخيص" else "Show [0], [1] bounding boxes for debugging",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = state.developerDebugOverlay,
+                            onCheckedChange = onToggleDeveloperDebugOverlay
+                        )
                     }
                 }
             }

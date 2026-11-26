@@ -47,37 +47,84 @@
 
     <!-- Main Content Area -->
     <main class="main-area">
-      <!-- 1. Agent Workspace -->
+      <!-- 1. Agent Workspace (RTL Split-Pane) -->
       <section id="tab-agent" class="tab-view active">
         <header class="view-topbar">
           <div class="topbar-meta">
             <span class="badge badge-subtle" id="topModeBadge">SILENT</span>
-            <span class="badge badge-accent" id="topBackendBadge">Local GGUF</span>
+            <span class="badge badge-accent" id="topBackendBadge"><span dir="ltr" style="unicode-bidi: isolate;">Local GGUF</span></span>
           </div>
-          <button id="btnClearChat" class="btn btn-ghost btn-sm" type="button" data-i18n="clear_chat">محادثة جديدة</button>
+          <div class="topbar-actions">
+            <button id="btnToggleInspector" class="btn btn-ghost btn-sm" type="button" data-i18n="toggle_inspector">المفتش المباشر</button>
+            <button id="btnClearChat" class="btn btn-ghost btn-sm" type="button" data-i18n="clear_chat">محادثة جديدة</button>
+          </div>
         </header>
 
-        <div id="chatScroll" class="chat-scroll">
-          <div id="chatStream" class="chat-stream">
-            <!-- Empty state rendered by app.js -->
-          </div>
-        </div>
-
-        <footer class="composer-wrap">
-          <div class="composer-box">
-            <textarea
-              id="composerInput"
-              class="composer-input"
-              rows="1"
-              data-i18n-placeholder="composer_placeholder"
-              placeholder="اطلب من SilentExec تنفيذ مهمة، كتابة كود، أو البحث..."
-            ></textarea>
-            <div class="composer-actions">
-              <button id="btnStop" class="btn btn-danger btn-sm hidden" type="button" data-i18n="stop_btn">إيقاف</button>
-              <button id="btnSend" class="btn btn-primary btn-sm" type="button" data-i18n="send_btn">إرسال</button>
+        <div class="agent-split-workspace">
+          <!-- Right Pane: Conversation + Collapsible Timeline + Composer -->
+          <div class="agent-chat-pane">
+            <div id="chatScroll" class="chat-scroll">
+              <div id="chatStream" class="chat-stream">
+                <!-- Empty state rendered by app.js -->
+              </div>
             </div>
+
+            <!-- Persistent Bottom Pause / Take Over / Stop Bar -->
+            <div id="agentControlBar" class="agent-control-bar">
+              <span class="control-status-text" id="agentControlStatus" data-i18n="control_idle">جاهز للتنفيذ</span>
+              <div class="control-bar-buttons">
+                <button id="btnPauseAgent" class="btn btn-ghost btn-sm" type="button" disabled data-i18n="pause_btn">إيقاف مؤقت</button>
+                <button id="btnTakeOverAgent" class="btn btn-ghost btn-sm" type="button" data-i18n="takeover_btn">تولي التحكم</button>
+                <button id="btnStopBar" class="btn btn-danger btn-sm" type="button" disabled data-i18n="stop_btn">إيقاف</button>
+              </div>
+            </div>
+
+            <footer class="composer-wrap">
+              <div class="composer-box">
+                <textarea
+                  id="composerInput"
+                  class="composer-input"
+                  dir="auto"
+                  rows="1"
+                  data-i18n-placeholder="composer_placeholder"
+                  placeholder="اطلب من SilentExec تنفيذ مهمة، كتابة كود، أو البحث..."
+                ></textarea>
+                <div class="composer-actions">
+                  <button id="btnStop" class="btn btn-danger btn-sm hidden" type="button" data-i18n="stop_btn">إيقاف</button>
+                  <button id="btnSend" class="btn btn-primary btn-sm" type="button" data-i18n="send_btn">إرسال</button>
+                </div>
+              </div>
+            </footer>
           </div>
-        </footer>
+
+          <!-- Left Pane: Collapsible Live Inspector -->
+          <aside id="liveInspectorPane" class="inspector-pane">
+            <div class="inspector-header">
+              <h3 class="inspector-title" data-i18n="inspector_title">المفتش المباشر</h3>
+              <span class="badge badge-subtle" id="inspectorStateBadge">Idle</span>
+            </div>
+
+            <div class="inspector-section">
+              <div class="inspector-label" data-i18n="inspector_target">النافذة النشطة / حالة الهاتف</div>
+              <div id="inspectorPhoneState" class="inspector-box" dir="ltr" style="unicode-bidi: isolate;">PC Desktop · Ready</div>
+            </div>
+
+            <div class="inspector-section">
+              <div class="inspector-label" data-i18n="inspector_mcp">استدعاءات MCP النشطة</div>
+              <div id="inspectorMcpCalls" class="inspector-box" dir="ltr" style="unicode-bidi: isolate;">None</div>
+            </div>
+
+            <div class="inspector-section">
+              <div class="inspector-label" data-i18n="inspector_a11y">معاينة شجرة الواجهة (a11y_tree)</div>
+              <pre id="inspectorA11yTree" class="inspector-pre" dir="ltr">[]</pre>
+            </div>
+
+            <div class="inspector-section">
+              <div class="inspector-label" data-i18n="inspector_logs">السجل التقني</div>
+              <pre id="inspectorTechLogs" class="inspector-pre" dir="ltr">Waiting for execution...</pre>
+            </div>
+          </aside>
+        </div>
       </section>
 
       <!-- 2. Models View -->
@@ -129,9 +176,9 @@
           <div class="card form-card">
             <h3 class="card-title" data-i18n="add_mcp_title">إضافة خادم MCP مخصص</h3>
             <div class="form-grid-3">
-              <input id="mcpNameInput" class="input" type="text" data-i18n-placeholder="mcp_name_ph" placeholder="الاسم (مثال: docs)" />
-              <input id="mcpCmdInput" class="input" type="text" data-i18n-placeholder="mcp_cmd_ph" placeholder="الأمر (مثال: npx)" />
-              <input id="mcpArgsInput" class="input" type="text" data-i18n-placeholder="mcp_args_ph" placeholder="المعاملات (مثال: -y @modelcontextprotocol/server-fetch)" />
+              <input id="mcpNameInput" class="input" dir="auto" type="text" data-i18n-placeholder="mcp_name_ph" placeholder="الاسم (مثال: docs)" />
+              <input id="mcpCmdInput" class="input" dir="ltr" type="text" data-i18n-placeholder="mcp_cmd_ph" placeholder="الأمر (مثال: npx)" />
+              <input id="mcpArgsInput" class="input" dir="ltr" type="text" data-i18n-placeholder="mcp_args_ph" placeholder="المعاملات (مثال: -y @modelcontextprotocol/server-fetch)" />
             </div>
             <div class="form-actions">
               <button id="btnAddMcp" class="btn btn-primary btn-sm" type="button" data-i18n="add_btn">إضافة</button>
@@ -187,8 +234,16 @@
                 </select>
               </div>
               <div class="setting-row">
-                <label class="setting-label" for="chkFastRouter" data-i18n="fast_router_label">الموجه السريع (&lt;15ms)</label>
+                <label class="setting-label" for="chkFastRouter" id="lblFastRouter">الموجه السريع (<span dir="ltr" style="unicode-bidi: isolate;">&lt;15ms</span>)</label>
                 <input id="chkFastRouter" type="checkbox" class="toggle" />
+              </div>
+              <div class="setting-row">
+                <label class="setting-label" for="chkDisableThinking" data-i18n="disable_thinking_label">تعطيل التفكير التلقائي (Disable Thinking)</label>
+                <input id="chkDisableThinking" type="checkbox" class="toggle" checked />
+              </div>
+              <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+                <label class="setting-label" for="inpOmniParserUrl">OmniParser URL <span class="muted-text">(Optional)</span></label>
+                <input id="inpOmniParserUrl" class="input" dir="ltr" type="text" placeholder="http://127.0.0.1:8000" />
               </div>
             </div>
 
@@ -207,22 +262,22 @@
 
               <div id="ollamaFields" class="provider-fields hidden">
                 <label class="field-label">Ollama URL</label>
-                <input id="inpOllamaUrl" class="input" type="text" placeholder="http://127.0.0.1:11434" />
+                <input id="inpOllamaUrl" class="input" dir="ltr" type="text" placeholder="http://127.0.0.1:11434" />
                 <label class="field-label">Ollama Model</label>
                 <div class="ollama-model-row">
-                  <select id="selOllamaModel" class="input"></select>
+                  <select id="selOllamaModel" class="input" dir="ltr"></select>
                   <button id="btnRefreshOllamaModels" class="btn btn-ghost btn-sm" type="button" title="Refresh Ollama Models">↻</button>
                 </div>
-                <input id="inpOllamaModel" class="input" type="text" placeholder="qwen2.5:7b" />
+                <input id="inpOllamaModel" class="input" dir="ltr" type="text" placeholder="qwen3.5:4b" />
               </div>
 
               <div id="openaiFields" class="provider-fields hidden">
                 <label class="field-label">API Base URL</label>
-                <input id="inpOpenAiBase" class="input" type="text" placeholder="https://generativelanguage.googleapis.com/v1beta/openai" />
+                <input id="inpOpenAiBase" class="input" dir="ltr" type="text" placeholder="https://generativelanguage.googleapis.com/v1beta/openai" />
                 <label class="field-label">Model</label>
-                <input id="inpOpenAiModel" class="input" type="text" placeholder="gemini-2.5-flash" />
+                <input id="inpOpenAiModel" class="input" dir="ltr" type="text" placeholder="gemini-2.5-flash" />
                 <label class="field-label">API Key</label>
-                <input id="inpOpenAiKey" class="input" type="password" placeholder="sk-... / AIza..." />
+                <input id="inpOpenAiKey" class="input" dir="ltr" type="password" placeholder="sk-... / AIza..." />
               </div>
 
               <div id="gooseFields" class="provider-fields hidden">

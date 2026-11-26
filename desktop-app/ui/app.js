@@ -63,6 +63,19 @@ const I18N = {
     mode_interactive: "تفاعلي (Interactive)",
     mode_dry_run: "محاكاة (Dry Run)",
     fast_router_label: "الموجه السريع (<15ms)",
+    disable_thinking_label: "تعطيل التفكير التلقائي (Disable Thinking)",
+    toggle_inspector: "المفتش المباشر",
+    control_idle: "جاهز للتنفيذ",
+    control_running: "جارٍ التنفيذ...",
+    control_paused: "متوقف مؤقتاً",
+    control_takeover: "تم تسليم التحكم للمستخدم",
+    pause_btn: "إيقاف مؤقت",
+    takeover_btn: "تولي التحكم",
+    inspector_title: "المفتش المباشر",
+    inspector_target: "النافذة النشطة / حالة الهاتف",
+    inspector_mcp: "استدعاءات MCP النشطة",
+    inspector_a11y: "معاينة شجرة الواجهة (a11y_tree)",
+    inspector_logs: "السجل التقني",
     provider_settings: "مزود الذكاء الاصطناعي",
     provider_label: "المزود",
     install_goose: "تثبيت Goose",
@@ -139,6 +152,19 @@ const I18N = {
     mode_interactive: "Interactive",
     mode_dry_run: "Dry Run",
     fast_router_label: "Fast Router (<15ms)",
+    disable_thinking_label: "Disable Thinking (Non-Think Mode)",
+    toggle_inspector: "Live Inspector",
+    control_idle: "Ready",
+    control_running: "Running...",
+    control_paused: "Paused",
+    control_takeover: "User took over control",
+    pause_btn: "Pause",
+    takeover_btn: "Take Over",
+    inspector_title: "Live Inspector",
+    inspector_target: "Active Window / Phone State",
+    inspector_mcp: "Active MCP Tool Calls",
+    inspector_a11y: "UI Tree Preview (a11y_tree)",
+    inspector_logs: "Technical Logs",
     provider_settings: "AI Provider",
     provider_label: "Provider",
     install_goose: "Install Goose",
@@ -173,9 +199,12 @@ const MCP_PRESETS = [
 ];
 
 const MODEL_SPECS = {
-  "v0.3.0-model": { params: "1.7B", ctx: "32K", ram: "~1.4 GB RAM", rec: true },
-  "v0.2.0-model": { params: "1.7B", ctx: "32K", ram: "~1.4 GB RAM", rec: false },
-  "v0.1.0-model": { params: "0.5B", ctx: "32K", ram: "~0.6 GB RAM", rec: false },
+  "qwen3.5-2b-gguf": { params: "2B", ctx: "32K", ram: "~1.3 GB", caps: ["Tools", "Think: Off", "201 Langs"], rec: true },
+  "liquidai-lfm3-1.7b": { params: "1.7B", ctx: "32K", ram: "~1.4 GB", caps: ["XML Tools", "Experimental"], rec: false },
+  "qwen3-1.7b-gguf": { params: "1.7B", ctx: "32K", ram: "~1.4 GB", caps: ["Tools", "Arabic"], rec: false },
+  "v0.3.0-model": { params: "1.7B", ctx: "32K", ram: "~1.4 GB RAM", caps: ["Tools", "Ctx: 8K"], rec: true },
+  "v0.2.0-model": { params: "1.7B", ctx: "32K", ram: "~1.4 GB RAM", caps: ["Tools", "Think: Off"], rec: false },
+  "v0.1.0-model": { params: "0.5B", ctx: "32K", ram: "~0.6 GB RAM", caps: ["Router"], rec: false },
 };
 
 const state = {
@@ -183,12 +212,19 @@ const state = {
   theme: localStorage.getItem("silentexec_theme") || "dark",
   config: null,
   isRunning: false,
+  isPaused: false,
   abortRequested: false,
+  inspectorOpen: true,
+  disabledTools: new Set(),
   messages: [],
   downloadProgress: {},
   downloadPaused: {},
   latestUpdateTag: null,
 };
+
+function ltr(text) {
+  return `<span dir="ltr" style="unicode-bidi: isolate;">${escapeHtml(text)}</span>`;
+}
 
 function t(key) {
   return (I18N[state.lang] && I18N[state.lang][key]) || I18N.en[key] || key;
@@ -237,6 +273,12 @@ function applyLanguageAndTheme() {
     const key = el.getAttribute("data-i18n");
     if (key) el.textContent = t(key);
   });
+  const fastLbl = document.getElementById("lblFastRouter");
+  if (fastLbl) {
+    fastLbl.innerHTML = state.lang === "ar"
+      ? `الموجه السريع (${ltr("<15ms")})`
+      : `Fast Router (${ltr("<15ms")})`;
+  }
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder");
     if (key) el.setAttribute("placeholder", t(key));
@@ -344,6 +386,61 @@ function renderChat() {
   scroll.scrollTop = scroll.scrollHeight;
 }
 
+function setExecutionControls(running) {
+  const btnSend = document.getElementById("btnSend");
+  const btnStop = document.getElementById("btnStop");
+  const btnPause = document.getElementById("btnPauseAgent");
+  const btnStopBar = document.getElementById("btnStopBar");
+  const statusEl = document.getElementById("agentControlStatus");
+  if (btnSend) btnSend.classList.toggle("hidden", running);
+  if (btnStop) btnStop.classList.toggle("hidden", !running);
+  if (btnPause) btnPause.disabled = !running;
+  if (btnStopBar) btnStopBar.disabled = !running;
+  if (statusEl) {
+    statusEl.textContent = running ? t("control_running") : t("control_idle");
+  }
+}
+
+function updateInspectorFromReport(report) {
+  const stateBadge = document.getElementById("inspectorStateBadge");
+  const phoneEl = document.getElementById("inspectorPhoneState");
+  const mcpEl = document.getElementById("inspectorMcpCalls");
+  const logsEl = document.getElementById("inspectorTechLogs");
+  if (!report) return;
+
+  if (stateBadge) {
+    stateBadge.textContent = report.success ? "OK" : "Alert";
+  }
+  const steps = report.steps || [];
+  const mcpCalls = steps
+    .filter((s) => (s.action || "").startsWith("mcp") || (s.description || "").includes("mcp"))
+    .map((s) => `${s.action || s.stage}: ${s.details || s.description || ""}`);
+  if (mcpEl) {
+    mcpEl.textContent = mcpCalls.length ? mcpCalls.join(" | ") : "None";
+  }
+  if (phoneEl && steps.length) {
+    const last = steps[steps.length - 1];
+    phoneEl.textContent = `${last.action || last.stage || "PC"} · ${last.stage || "done"}`;
+  }
+  if (logsEl) {
+    logsEl.textContent = JSON.stringify(
+      {
+        query: report.query,
+        success: report.success,
+        steps: steps.map((s) => ({
+          step: s.step_index,
+          stage: s.stage,
+          action: s.action,
+          thought: s.thought,
+          details: s.details,
+        })),
+      },
+      null,
+      2
+    );
+  }
+}
+
 async function sendQuery() {
   const input = document.getElementById("composerInput");
   const query = input.value.trim();
@@ -351,9 +448,9 @@ async function sendQuery() {
 
   input.value = "";
   state.isRunning = true;
+  state.isPaused = false;
   state.abortRequested = false;
-  document.getElementById("btnSend").classList.add("hidden");
-  document.getElementById("btnStop").classList.remove("hidden");
+  setExecutionControls(true);
 
   state.messages.push({ role: "user", text: query });
   renderChat();
@@ -361,6 +458,7 @@ async function sendQuery() {
   try {
     const report = await invoke("execute_query", { query, mode: null });
     if (state.abortRequested) return;
+    updateInspectorFromReport(report);
     state.messages.push({
       role: "assistant",
       text: report.message || "",
@@ -371,16 +469,17 @@ async function sendQuery() {
     });
   } catch (err) {
     if (!state.abortRequested) {
+      const logsEl = document.getElementById("inspectorTechLogs");
+      if (logsEl) logsEl.textContent = String(err);
       state.messages.push({
         role: "assistant",
-        text: `Error: ${err}`,
+        text: `⚠️ ${escapeHtml(String(err))}`,
         steps: [],
       });
     }
   } finally {
     state.isRunning = false;
-    document.getElementById("btnSend").classList.remove("hidden");
-    document.getElementById("btnStop").classList.add("hidden");
+    setExecutionControls(false);
     renderChat();
   }
 }
@@ -422,7 +521,10 @@ async function loadModels() {
     const models = await invoke("list_models");
     grid.innerHTML = models
       .map((m) => {
-        const spec = MODEL_SPECS[m.tag] || { params: "GGUF", ctx: "32K", ram: "Local", rec: false };
+        const spec = MODEL_SPECS[m.tag] || { params: "GGUF", ctx: "32K", ram: "Local", caps: ["Tools", "Ctx: 8K"], rec: false };
+        const capsHtml = (spec.caps || [])
+          .map((c) => `<span class="badge badge-subtle">${ltr(c)}</span>`)
+          .join("");
         const prog = state.downloadProgress[m.tag];
         const isPaused = state.downloadPaused[m.tag];
         const isDownloading = prog && !isPaused && prog.percent < 100;
@@ -451,13 +553,14 @@ async function loadModels() {
         return `
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-              <div class="card-title" style="margin:0;">${escapeHtml(m.name)}</div>
+              <div class="card-title" style="margin:0;">${ltr(m.name)}</div>
               ${spec.rec ? `<span class="badge badge-accent">${t("recommended")}</span>` : ""}
             </div>
             <div class="specs-row">
-              <span class="badge badge-subtle">${spec.params}</span>
-              <span class="badge badge-subtle">${spec.ctx}</span>
-              <span class="badge badge-subtle">${spec.ram}</span>
+              <span class="badge badge-subtle">${ltr(spec.params)}</span>
+              <span class="badge badge-subtle">${ltr(spec.ctx)}</span>
+              <span class="badge badge-subtle">${ltr(spec.ram)}</span>
+              ${capsHtml}
             </div>
             ${progHtml}
             <div class="form-actions">${actions}</div>
@@ -517,16 +620,30 @@ async function startModelDl(tag) {
 
 function renderBuiltinTools() {
   const el = document.getElementById("builtinToolsGrid");
-  el.innerHTML = BUILTIN_PRO_TOOLS.map(
-    (tool) => `
+  el.innerHTML = BUILTIN_PRO_TOOLS.map((tool) => {
+    const enabled = !state.disabledTools.has(tool.id);
+    return `
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
           <strong>${state.lang === "ar" ? tool.title_ar : tool.title_en}</strong>
-          <span class="badge badge-success badge-auto">${t("auto_enabled")}</span>
+          <input type="checkbox" class="toggle chk-builtin-tool" data-tool-id="${escapeHtml(tool.id)}" ${enabled ? "checked" : ""} />
         </div>
-        <div class="muted-text">${state.lang === "ar" ? tool.desc_ar : tool.desc_en}</div>
-      </div>`
-  ).join("");
+        <div class="muted-text">${ltr(state.lang === "ar" ? tool.desc_ar : tool.desc_en)}</div>
+      </div>`;
+  }).join("");
+
+  el.querySelectorAll(".chk-builtin-tool").forEach((chk) => {
+    chk.addEventListener("change", async () => {
+      const id = chk.dataset.toolId;
+      if (!id) return;
+      if (chk.checked) {
+        state.disabledTools.delete(id);
+      } else {
+        state.disabledTools.add(id);
+      }
+      await invoke("save_app_config", { disabledTools: Array.from(state.disabledTools) });
+    });
+  });
 }
 
 function normalizeMcpSignature(command, args) {
@@ -663,7 +780,7 @@ async function refreshOllamaModels() {
     }
     const opts = unique.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`);
     if (current && !unique.includes(current)) {
-      opts.unshift(`<option value="${escapeHtml(current)}">${escapeHtml(current)} (custom)</option>`);
+      opts.unshift(`<option value="${escapeHtml(current)}">${escapeHtml(current)} [Tools · Think: Off · Ctx: 8K]</option>`);
     }
     sel.innerHTML = opts.join("");
     if (current) {
@@ -686,8 +803,8 @@ function syncConfigBadges(cfg) {
     goose_acp: "goose acp",
   };
   const label = labelMap[cfg.backend] || "Local GGUF";
-  document.getElementById("sidebarProviderLabel").textContent = label;
-  document.getElementById("topBackendBadge").textContent = label;
+  document.getElementById("sidebarProviderLabel").innerHTML = ltr(label);
+  document.getElementById("topBackendBadge").innerHTML = ltr(label);
   document.getElementById("topModeBadge").textContent = (cfg.mode || "silent").toUpperCase();
 }
 
@@ -695,11 +812,16 @@ async function loadConfig() {
   const cfg = await invoke("get_app_config");
   state.config = cfg;
   state.lang = cfg.language === "en" ? "en" : "ar";
+  state.disabledTools = new Set(cfg.disabled_tools || []);
 
   document.getElementById("selLanguage").value = state.lang;
   document.getElementById("selTheme").value = state.theme;
   document.getElementById("selExecMode").value = cfg.mode || "silent";
   document.getElementById("chkFastRouter").checked = Boolean(cfg.fast_router_enabled);
+  const chkThink = document.getElementById("chkDisableThinking");
+  if (chkThink) chkThink.checked = cfg.disable_thinking !== false;
+  const inpOmni = document.getElementById("inpOmniParserUrl");
+  if (inpOmni) inpOmni.value = cfg.omniparser_url || "";
   document.getElementById("selBackend").value = cfg.backend || "local_llama";
   document.getElementById("inpOllamaUrl").value = cfg.ollama_url || "";
   document.getElementById("inpOllamaModel").value = cfg.ollama_model || "";
@@ -737,20 +859,51 @@ function bindEvents() {
     renderChat();
   });
 
-  const composer = document.getElementById("composerInput");
-  composer.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendQuery();
-    }
-  });
-  document.getElementById("btnSend").addEventListener("click", sendQuery);
-  document.getElementById("btnStop").addEventListener("click", () => {
+  const btnInspector = document.getElementById("btnToggleInspector");
+  if (btnInspector) {
+    btnInspector.addEventListener("click", () => {
+      state.inspectorOpen = !state.inspectorOpen;
+      const pane = document.getElementById("liveInspectorPane");
+      if (pane) pane.classList.toggle("collapsed", !state.inspectorOpen);
+    });
+  }
+
+  const stopExecution = () => {
     state.abortRequested = true;
     state.isRunning = false;
-    document.getElementById("btnSend").classList.remove("hidden");
-    document.getElementById("btnStop").classList.add("hidden");
-  });
+    state.isPaused = false;
+    setExecutionControls(false);
+  };
+
+  const composer = document.getElementById("composerInput");
+  if (composer) {
+    composer.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendQuery();
+      }
+    });
+  }
+  document.getElementById("btnSend").addEventListener("click", sendQuery);
+  document.getElementById("btnStop").addEventListener("click", stopExecution);
+  const btnStopBar = document.getElementById("btnStopBar");
+  if (btnStopBar) btnStopBar.addEventListener("click", stopExecution);
+  const btnPauseAgent = document.getElementById("btnPauseAgent");
+  if (btnPauseAgent) {
+    btnPauseAgent.addEventListener("click", () => {
+      state.isPaused = !state.isPaused;
+      const statusEl = document.getElementById("agentControlStatus");
+      if (statusEl) statusEl.textContent = state.isPaused ? t("control_paused") : t("control_running");
+    });
+  }
+  const btnTakeOver = document.getElementById("btnTakeOverAgent");
+  if (btnTakeOver) {
+    btnTakeOver.addEventListener("click", () => {
+      stopExecution();
+      const statusEl = document.getElementById("agentControlStatus");
+      if (statusEl) statusEl.textContent = t("control_takeover");
+    });
+  }
 
   document.getElementById("btnSetupRuntime").addEventListener("click", async () => {
     document.getElementById("runtimeTitle").textContent = "...";
@@ -803,6 +956,20 @@ function bindEvents() {
   document.getElementById("chkFastRouter").addEventListener("change", async (e) => {
     await invoke("save_app_config", { fastRouterEnabled: e.target.checked });
   });
+
+  const chkDisableThinking = document.getElementById("chkDisableThinking");
+  if (chkDisableThinking) {
+    chkDisableThinking.addEventListener("change", async (e) => {
+      await invoke("save_app_config", { disableThinking: e.target.checked });
+    });
+  }
+
+  const inpOmniParserUrl = document.getElementById("inpOmniParserUrl");
+  if (inpOmniParserUrl) {
+    inpOmniParserUrl.addEventListener("change", async (e) => {
+      await invoke("save_app_config", { omniparserUrl: e.target.value.trim() });
+    });
+  }
 
   document.getElementById("selBackend").addEventListener("change", async (e) => {
     updateProviderVisibility(e.target.value);

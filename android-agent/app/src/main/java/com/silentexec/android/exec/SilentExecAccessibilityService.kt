@@ -527,10 +527,28 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     private fun dispatchTapGesture(x: Float, y: Float): Boolean {
-        val path = Path().apply { moveTo(x, y) }
-        val stroke = GestureDescription.StrokeDescription(path, 0, 50)
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
-        return dispatchGesture(gesture, null, null)
+        com.silentexec.android.ui.LiveOverlayController.setMomentarilyInvisible(true)
+        com.silentexec.android.ui.FloatingBubbleService.setMomentarilyInvisible(true)
+        return try {
+            val path = Path().apply { moveTo(x, y) }
+            val stroke = GestureDescription.StrokeDescription(path, 0, 50)
+            val gesture = GestureDescription.Builder().addStroke(stroke).build()
+            dispatchGesture(gesture, object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    com.silentexec.android.ui.LiveOverlayController.setMomentarilyInvisible(false)
+                    com.silentexec.android.ui.FloatingBubbleService.setMomentarilyInvisible(false)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    com.silentexec.android.ui.LiveOverlayController.setMomentarilyInvisible(false)
+                    com.silentexec.android.ui.FloatingBubbleService.setMomentarilyInvisible(false)
+                }
+            }, null)
+        } catch (t: Throwable) {
+            com.silentexec.android.ui.LiveOverlayController.setMomentarilyInvisible(false)
+            com.silentexec.android.ui.FloatingBubbleService.setMomentarilyInvisible(false)
+            false
+        }
     }
 
     private fun dispatchSwipeGesture(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
