@@ -113,7 +113,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     JNIEnv* env,
     jobject /* this */,
     jstring prompt,
-    jstring grammar_text,
+    jstring /* grammar_text */,
     jint max_tokens
 ) {
     if (env == nullptr) {
@@ -129,15 +129,6 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
     std::string prompt_text(prompt_str);
     env->ReleaseStringUTFChars(prompt, prompt_str);
-
-    std::string grammar_copy;
-    if (grammar_text != nullptr) {
-        const char* grammar_str = env->GetStringUTFChars(grammar_text, nullptr);
-        if (grammar_str != nullptr) {
-            grammar_copy.assign(grammar_str);
-            env->ReleaseStringUTFChars(grammar_text, grammar_str);
-        }
-    }
 
     std::lock_guard<std::mutex> lock(g_llama_mutex);
 
@@ -220,13 +211,9 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Failed to initialize sampler chain\"}");
     }
 
-    if (!grammar_copy.empty()) {
-        llama_sampler* g_smpl = llama_sampler_init_grammar(g_vocab, grammar_copy.c_str(), "root");
-        if (g_smpl != nullptr) {
-            llama_sampler_chain_add(smpl, g_smpl);
-        } else {
-            LOGE("Failed to parse grammar string, falling back to unconstrained greedy sampling");
-        }
+    llama_sampler* penalty_smpl = llama_sampler_init_penalties(64, 1.15f, 0.0f, 0.0f);
+    if (penalty_smpl != nullptr) {
+        llama_sampler_chain_add(smpl, penalty_smpl);
     }
 
     llama_sampler* greedy_smpl = llama_sampler_init_greedy();
@@ -239,6 +226,12 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
 
     std::string output_str;
+    bool saw_open_brace = false;
+    bool in_string = false;
+    bool escape_next = false;
+    int brace_depth = 0;
+    size_t scan_idx = 0;
+
     for (int i = 0; i < limit; ++i) {
         const llama_pos next_pos = static_cast<llama_pos>(n_tokens + i);
         if (static_cast<uint32_t>(next_pos) >= n_ctx) {
@@ -256,6 +249,51 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         int n_piece = llama_token_to_piece(g_vocab, new_token, piece_buf, sizeof(piece_buf), 0, true);
         if (n_piece > 0 && n_piece <= static_cast<int>(sizeof(piece_buf))) {
             output_str.append(piece_buf, static_cast<size_t>(n_piece));
+        }
+
+        const size_t im_end_pos = output_str.find("<|im_end|>");
+        if (im_end_pos != std::string::npos) {
+            output_str.resize(im_end_pos);
+            break;
+        }
+        const size_t eot_pos = output_str.find("<|endoftext|>");
+        if (eot_pos != std::string::npos) {
+            output_str.resize(eot_pos);
+            break;
+        }
+
+        bool json_complete = false;
+        while (scan_idx < output_str.size()) {
+            const char ch = output_str[scan_idx];
+            if (escape_next) {
+                escape_next = false;
+            } else if (in_string) {
+                if (ch == '\\') {
+                    escape_next = true;
+                } else if (ch == '"') {
+                    in_string = false;
+                }
+            } else {
+                if (ch == '"') {
+                    in_string = true;
+                } else if (ch == '{') {
+                    saw_open_brace = true;
+                    ++brace_depth;
+                } else if (ch == '}') {
+                    if (saw_open_brace) {
+                        --brace_depth;
+                        if (brace_depth <= 0) {
+                            output_str.resize(scan_idx + 1);
+                            json_complete = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            ++scan_idx;
+        }
+        if (json_complete) {
+            break;
         }
 
         llama_batch gen_batch = llama_batch_init(1, 0, 1);

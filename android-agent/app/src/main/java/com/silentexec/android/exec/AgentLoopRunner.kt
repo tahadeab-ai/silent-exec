@@ -68,7 +68,6 @@ class AgentLoopRunner(
     private val llamaEngine: OnDeviceLlamaEngine? = null,
     private val bridgeClient: LanBridgeClient? = null,
     private val cloudApiClient: CloudApiClient? = null,
-    private val grammarText: String = "",
     private val stepDelayMs: Long = 600L,
     private val uiObserver: (() -> List<String>)? = null,
     private val decider: ((prompt: String) -> String)? = null
@@ -481,7 +480,6 @@ class AgentLoopRunner(
             }
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
-                grammarText = grammarText,
                 maxTokens = 192
             )
             val cmd = res.getOrThrow()
@@ -491,7 +489,6 @@ class AgentLoopRunner(
         if (llamaEngine != null && llamaEngine.isLoaded()) {
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
-                grammarText = grammarText,
                 maxTokens = 192
             )
             val cmd = res.getOrThrow()

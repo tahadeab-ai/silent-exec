@@ -9,12 +9,8 @@
 use crate::process_helper::hidden_command;
 use serde_json::Value;
 use silent_exec_core::ActionCommand;
-use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-
-/// Embedded GBNF grammar for ActionCommand schema.
-pub const EMBEDDED_ACTION_GBNF: &str = include_str!("../../../../schemas/action.gbnf");
 
 /// Default system prompt strictly matching `nlp-training/generate_dataset.py`.
 pub const DEFAULT_SYSTEM_PROMPT: &str = "You are SilentExec, a step-by-step ReAct OS execution agent. \
@@ -209,7 +205,7 @@ impl AiBackend {
         let raw_output = match self {
             Self::LocalLlama { url, grammar } => {
                 let prompt = format_prompt(user_query);
-                let grammar_str = grammar.as_deref().unwrap_or(EMBEDDED_ACTION_GBNF);
+                let grammar_str = grammar.as_deref().unwrap_or("");
                 LlamaBackend::complete_server(url, &prompt, grammar_str)?
             }
             Self::Ollama { url, model } => Self::complete_ollama(url, model, user_query)?,
@@ -470,7 +466,7 @@ impl LlamaBackend {
 
         let raw_output = match self {
             Self::Server { url, grammar } => {
-                let grammar_str = grammar.as_deref().unwrap_or(EMBEDDED_ACTION_GBNF);
+                let grammar_str = grammar.as_deref().unwrap_or("");
                 Self::complete_server(url, &prompt, grammar_str)?
             }
             Self::Cli {
@@ -487,14 +483,17 @@ impl LlamaBackend {
     /// Generates the canonical JSON request payload for llama-server `/completion` endpoint.
     /// Explicitly enables `"cache_prompt": true` for KV-cache reuse.
     pub fn build_completion_payload(prompt: &str, grammar: &str) -> serde_json::Value {
-        serde_json::json!({
+        let mut payload = serde_json::json!({
             "prompt": prompt,
-            "grammar": grammar,
             "temperature": 0.0,
             "n_predict": 160,
             "stream": false,
             "cache_prompt": true
-        })
+        });
+        if !grammar.trim().is_empty() {
+            payload["grammar"] = serde_json::Value::String(grammar.to_string());
+        }
+        payload
     }
 
     /// Execute completion against `llama-server` `/completion` endpoint via `curl`.
@@ -601,16 +600,9 @@ impl LlamaBackend {
         cmd.args(["-n", "160"]);
         cmd.arg("--no-display-prompt");
 
-        // Set up grammar
-        let temp_grammar_file = if let Some(g_path) = grammar_path {
+        if let Some(g_path) = grammar_path {
             cmd.arg("--grammar-file").arg(g_path);
-            None
-        } else {
-            let temp_file = std::env::temp_dir().join("silent_exec_action.gbnf");
-            let _ = fs::write(&temp_file, EMBEDDED_ACTION_GBNF);
-            cmd.arg("--grammar-file").arg(&temp_file);
-            Some(temp_file)
-        };
+        }
 
         let output = cmd.output().map_err(|e| {
             format!(
@@ -619,11 +611,6 @@ impl LlamaBackend {
                 e
             )
         })?;
-
-        // Clean up temporary grammar file if created
-        if let Some(p) = temp_grammar_file {
-            let _ = fs::remove_file(p);
-        }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

@@ -59,9 +59,6 @@
       btn_activate: 'تفعيل',
       btn_delete: 'حذف',
       recommended_badge: 'موصى به',
-      built_in_skills_title: 'المهارات المدمجة (Built-In Skills)',
-      built_in_skills_desc: 'مهارات حتمية سريعة مفعّلة افتراضياً في SilentExec.',
-      skills_active_badge: 'مفعّلة',
       custom_routines_title: 'إنشاء روتين مخصص',
       custom_routines_desc: 'احفظ اختصارات متعددة الخطوات في ذاكرة SilentExec لاستدعائها فوراً.',
       routine_name_label: 'اسم الروتين',
@@ -176,9 +173,6 @@
       btn_activate: 'Activate',
       btn_delete: 'Delete',
       recommended_badge: 'Recommended',
-      built_in_skills_title: 'Built-In Native Skills',
-      built_in_skills_desc: 'Deterministic fast skills enabled by default in SilentExec.',
-      skills_active_badge: 'Active',
       custom_routines_title: 'Custom Routine Builder',
       custom_routines_desc: 'Save multi-step shortcuts in SilentExec Memory for instant replay.',
       routine_name_label: 'Routine Name',
@@ -241,33 +235,6 @@
       saved_ok: 'Saved successfully'
     }
   };
-
-  const BUILT_IN_SKILLS = [
-    {
-      arName: 'بحث الويب ويوتيوب',
-      enName: 'Web & YouTube Search',
-      arDesc: 'فتح نتائج البحث مباشرة في المتصفح الافتراضي.',
-      enDesc: 'Open web and YouTube search results directly.'
-    },
-    {
-      arName: 'التحكم بالصوت والتطبيقات',
-      enName: 'System Volume & Apps',
-      arDesc: 'تشغيل التطبيقات وضبط الصوت والتنقل السريع.',
-      enDesc: 'Launch apps, adjust system volume, and navigate UI.'
-    },
-    {
-      arName: 'ذاكرة SilentExec الدائمة',
-      enName: 'SilentExec Persistent Memory',
-      arDesc: 'حفظ التفضيلات والحقائق تلقائياً في memory.json.',
-      enDesc: 'Persist preferences and facts automatically in memory.json.'
-    },
-    {
-      arName: 'الملفات والملاحظات',
-      enName: 'Files & Notes',
-      arDesc: 'إنشاء الملاحظات وقراءة وكتابة الملفات بأمان.',
-      enDesc: 'Create notes and read or write files safely.'
-    }
-  ];
 
   const MCP_PRESETS = [
     { name: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '.'], arDesc: 'قراءة وإدارة الملفات ضمن المجلد المحدد', enDesc: 'Read and manage files in allowed workspace' },
@@ -413,7 +380,6 @@
     });
 
     updateTopbarTitle();
-    renderBuiltInSkills();
     renderMcpPresets();
     renderModels();
     renderMemories();
@@ -807,20 +773,6 @@
   }
 
   // ---------------- Skills & MCP ----------------
-  function renderBuiltInSkills() {
-    const grid = document.getElementById('builtInSkillsGrid');
-    if (!grid) return;
-    grid.innerHTML = BUILT_IN_SKILLS.map(s => `
-      <div class="mini-card">
-        <div>
-          <div class="mini-card-title">${escapeHtml(State.lang === 'ar' ? s.arName : s.enName)}</div>
-          <div class="mini-card-desc">${escapeHtml(State.lang === 'ar' ? s.arDesc : s.enDesc)}</div>
-        </div>
-        <span class="semantic-badge success">✓</span>
-      </div>
-    `).join('');
-  }
-
   function renderMcpPresets() {
     const grid = document.getElementById('mcpPresetsGrid');
     if (!grid) return;

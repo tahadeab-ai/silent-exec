@@ -92,7 +92,6 @@ class MainActivity : AppCompatActivity() {
 
     private var voiceInputHelper: VoiceInputHelper? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var grammarText: String = ""
 
     // Containers
     private lateinit var bottomNav: BottomNavigationView
@@ -102,7 +101,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutTabSettings: View
 
     // Tab 1.5 (Skills & MCP) Views
-    private lateinit var layoutProSkillsList: LinearLayout
     private lateinit var etSkillName: EditText
     private lateinit var etSkillPrompt: EditText
     private lateinit var btnSaveSkill: Button
@@ -214,12 +212,10 @@ class MainActivity : AppCompatActivity() {
             settings = settings,
             llamaEngine = llamaEngine,
             bridgeClient = bridgeClient,
-            grammarText = grammarText,
             stepDelayMs = 600L
         )
 
         bindViews()
-        loadGrammarAsset()
         setupBottomNavigation()
         setupExecuteTab()
         setupSkillsTab()
@@ -309,7 +305,6 @@ class MainActivity : AppCompatActivity() {
         layoutTabSettings = findViewById(R.id.layoutTabSettings)
 
         // Tab 1.5 (Skills & MCP)
-        layoutProSkillsList = findViewById(R.id.layoutProSkillsList)
         etSkillName = findViewById(R.id.etSkillName)
         etSkillPrompt = findViewById(R.id.etSkillPrompt)
         btnSaveSkill = findViewById(R.id.btnSaveSkill)
@@ -418,98 +413,6 @@ class MainActivity : AppCompatActivity() {
     // =========================================================================
 
     private fun setupSkillsTab() {
-        val isArabic = settings.language == "ar"
-        val proSkills = listOf(
-            Triple(
-                if (isArabic) "تصفح يوتيوب الذكي" else "YouTube ReAct Navigator",
-                if (isArabic) "فتح يوتيوب والبحث والتنقل خطوة بخطوة" else "Open YouTube, search, and navigate UI",
-                if (isArabic) "افتح اليوتيوب وابحث عن nlp" else "open YouTube and search for nlp"
-            ),
-            Triple(
-                if (isArabic) "بحث الويب والتلخيص" else "Web Search & Summarize",
-                if (isArabic) "البحث في جوجل وعرض النتائج مباشرة" else "Search Google and open results",
-                if (isArabic) "افتح المتصفح وابحث عن الذكاء الاصطناعي" else "search google for edge AI"
-            ),
-            Triple(
-                if (isArabic) "صياغة الرسائل الذكية" else "Smart Message Drafter",
-                if (isArabic) "كتابة مسودة رسالة احترافية فوراً" else "Draft a crisp professional message",
-                if (isArabic) "اكتب رسالة اعتذار قصيرة عن تأخير الاجتماع" else "reply draft a short polite email confirming tomorrow's meeting"
-            ),
-            Triple(
-                if (isArabic) "روتين الدراسة والتركيز" else "Study & Focus Routine",
-                if (isArabic) "خفض الصوت إلى 20% وتهيئة الجهاز" else "Lower volume to 20% for focus",
-                if (isArabic) "اضبط الصوت 20" else "set volume 20"
-            ),
-            Triple(
-                if (isArabic) "ترجمة وتلخيص الحافظة" else "Clipboard Translate / Summarize",
-                if (isArabic) "نسخ وتلخيص المحتوى وحفظه كملاحظة" else "Summarize clipboard text and save note",
-                if (isArabic) "لخص واحفظ في الملاحظات" else "summarize and save note"
-            ),
-            Triple(
-                if (isArabic) "إدارة الملفات والملاحظات" else "File & Notes Manager",
-                if (isArabic) "إنشاء ملاحظات سريعة وتنظيم الملفات" else "Create notes and organize local files",
-                if (isArabic) "اكتب ملاحظة باسم أفكار سريعة" else "create note Quick Ideas"
-            ),
-            Triple(
-                if (isArabic) "التبديل السريع للتطبيقات" else "App Switcher",
-                if (isArabic) "تشغيل أي تطبيق مثبت فوراً" else "Launch installed Android apps",
-                if (isArabic) "افتح الإعدادات" else "open settings"
-            ),
-            Triple(
-                if (isArabic) "إعدادات الجهاز والصوت" else "Device Settings & Volume",
-                if (isArabic) "كتم الصوت أو ضبط السطوع والإعدادات" else "Mute audio or adjust device settings",
-                if (isArabic) "اكتم الصوت 0" else "set volume 0"
-            ),
-            Triple(
-                if (isArabic) "الذاكرة الدائمة" else "Persistent Memory",
-                if (isArabic) "حفظ تفضيلاتك في memory.json" else "Store user preferences in memory.json",
-                if (isArabic) "احفظ في الذاكرة لغتي المفضلة هي العربية" else "remember preferred language is English"
-            ),
-            Triple(
-                if (isArabic) "ملاح واجهة الشاشة" else "Screen UI Navigator",
-                if (isArabic) "التفاعل مع عناصر الشاشة عبر Accessibility" else "Click, type, and scroll screen elements",
-                if (isArabic) "انزل لأسفل" else "scroll down"
-            )
-        )
-
-        layoutProSkillsList.removeAllViews()
-        for ((title, desc, prompt) in proSkills) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, 10, 0, 10)
-            }
-            val textCol = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            textCol.addView(TextView(this).apply {
-                text = title
-                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
-                textSize = 13.5f
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-            })
-            textCol.addView(TextView(this).apply {
-                text = desc
-                setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
-                textSize = 11.5f
-                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-            })
-            val btnTry = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TonalButton).apply {
-                text = getString(R.string.skill_try_btn)
-                textSize = 11.5f
-                setOnClickListener {
-                    selectTab(R.id.nav_execute)
-                    etCommand.setText(prompt)
-                    handleCommand(prompt)
-                }
-            }
-            row.addView(textCol)
-            row.addView(btnTry)
-            layoutProSkillsList.addView(row)
-        }
-
         btnSaveSkill.setOnClickListener {
             val name = etSkillName.text.toString().trim()
             val promptText = etSkillPrompt.text.toString().trim()
@@ -683,14 +586,6 @@ class MainActivity : AppCompatActivity() {
             row.addView(btnTest)
             row.addView(btnDel)
             layoutMcpServers.addView(row)
-        }
-    }
-
-    private fun loadGrammarAsset() {
-        thread {
-            grammarText = runCatching {
-                assets.open("action.gbnf").bufferedReader().use { it.readText() }
-            }.getOrDefault("")
         }
     }
 

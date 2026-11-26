@@ -25,7 +25,7 @@ pub use indexer::{
 };
 pub use inference::{
     build_chatml_prompt, extract_action_json, format_prompt, get_effective_system_prompt,
-    AiBackend, LlamaBackend, DEFAULT_SYSTEM_PROMPT, EMBEDDED_ACTION_GBNF,
+    AiBackend, LlamaBackend, DEFAULT_SYSTEM_PROMPT,
 };
 pub use mcp_bridge::{
     JsonRpcError, JsonRpcRequest, JsonRpcResponse, McpClient, McpTool, McpToolCallResult,
