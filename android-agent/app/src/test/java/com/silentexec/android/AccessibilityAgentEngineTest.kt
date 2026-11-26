@@ -14,6 +14,7 @@ import com.silentexec.android.exec.ScreenObservation
 import com.silentexec.android.exec.ScreenObserver
 import com.silentexec.android.nlp.CloudApiClient
 import com.silentexec.android.nlp.ProviderCatalog
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -133,8 +134,8 @@ class AccessibilityAgentEngineTest {
             userPrompt = "usr",
             useToolCalling = true
         )
-        assertTrue(reqBody.has("tools"))
-        assertEquals("auto", reqBody.getString("tool_choice"))
+        assertTrue(reqBody.containsKey("tools"))
+        assertEquals("auto", reqBody["tool_choice"]?.jsonPrimitive?.content)
 
         val mockToolResponse = """
             {

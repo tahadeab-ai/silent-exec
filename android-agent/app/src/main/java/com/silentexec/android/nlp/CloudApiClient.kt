@@ -3,8 +3,17 @@ package com.silentexec.android.nlp
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 /**
  * OpenAI-compatible Client for SilentExec Android.
@@ -53,7 +62,6 @@ class CloudApiClient(
         val responseCode = conn.responseCode
         if (responseCode !in 200..299) {
             val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-            // Retry once without tool calling if provider/model rejects tools
             if (useToolCalling && responseCode in 400..422) {
                 return generateCompletion(systemPrompt, userPrompt, useToolCalling = false)
             }
@@ -65,6 +73,8 @@ class CloudApiClient(
     }
 
     companion object {
+        private val json = Json { ignoreUnknownKeys = true }
+
         fun buildChatCompletionsUrl(baseUrl: String): String {
             val clean = baseUrl.trim().trimEnd('/')
             return if (clean.endsWith("/chat/completions")) clean else "$clean/chat/completions"
@@ -75,19 +85,19 @@ class CloudApiClient(
             systemPrompt: String,
             userPrompt: String,
             useToolCalling: Boolean
-        ): JSONObject {
-            val messages = JSONArray().apply {
-                put(JSONObject().apply {
+        ): JsonObject {
+            val messages = buildJsonArray {
+                add(buildJsonObject {
                     put("role", "system")
                     put("content", systemPrompt)
                 })
-                put(JSONObject().apply {
+                add(buildJsonObject {
                     put("role", "user")
                     put("content", userPrompt)
                 })
             }
 
-            return JSONObject().apply {
+            return buildJsonObject {
                 put("model", model)
                 put("messages", messages)
                 put("temperature", 0.0)
@@ -95,81 +105,88 @@ class CloudApiClient(
                     put("tools", buildDeviceActionTools())
                     put("tool_choice", "auto")
                 } else {
-                    put("response_format", JSONObject().apply {
+                    put("response_format", buildJsonObject {
                         put("type", "json_object")
                     })
                 }
             }
         }
 
-        fun buildDeviceActionTools(): JSONArray {
-            val parameters = JSONObject().apply {
+        fun buildDeviceActionTools(): JsonArray {
+            val actionEnum = listOf(
+                "ui_click", "ui_type", "ui_scroll", "open_android_app", "open_url",
+                "ui_back", "ui_home", "set_volume", "create_note",
+                "delete_file", "reply", "done"
+            )
+            val parameters = buildJsonObject {
                 put("type", "object")
-                put("properties", JSONObject().apply {
-                    put("thought", JSONObject().apply {
+                put("properties", buildJsonObject {
+                    put("thought", buildJsonObject {
                         put("type", "string")
                         put("description", "Short 1-sentence reasoning about the current screen and next step.")
                     })
-                    put("action", JSONObject().apply {
+                    put("action", buildJsonObject {
                         put("type", "string")
-                        put("enum", JSONArray(listOf(
-                            "ui_click", "ui_type", "ui_scroll", "open_android_app", "open_url",
-                            "ui_back", "ui_home", "set_volume", "create_note",
-                            "delete_file", "reply", "done"
-                        )))
+                        put("enum", buildJsonArray { actionEnum.forEach { add(JsonPrimitive(it)) } })
                     })
-                    put("target", JSONObject().apply {
+                    put("target", buildJsonObject {
                         put("type", "string")
                         put("description", "Element index (#0, #1), visible label, app name, URL, or final reply text.")
                     })
-                    put("args", JSONObject().apply {
+                    put("args", buildJsonObject {
                         put("type", "object")
                         put("description", "Optional arguments such as {\"text\":\"...\"} or {\"direction\":\"down\"}.")
                     })
-                    put("platform", JSONObject().apply {
+                    put("platform", buildJsonObject {
                         put("type", "string")
-                        put("enum", JSONArray(listOf("android", "any")))
+                        put("enum", buildJsonArray {
+                            add(JsonPrimitive("android"))
+                            add(JsonPrimitive("any"))
+                        })
                     })
-                    put("confidence", JSONObject().apply {
+                    put("confidence", buildJsonObject {
                         put("type", "number")
                     })
                 })
-                put("required", JSONArray(listOf("thought", "action", "platform", "confidence")))
+                put("required", buildJsonArray {
+                    add(JsonPrimitive("thought"))
+                    add(JsonPrimitive("action"))
+                    add(JsonPrimitive("platform"))
+                    add(JsonPrimitive("confidence"))
+                })
             }
 
-            val functionObj = JSONObject().apply {
-                put("name", "execute_device_action")
-                put("description", "Execute a single Android accessibility or system action on the device.")
-                put("parameters", parameters)
-            }
-
-            return JSONArray().apply {
-                put(JSONObject().apply {
+            return buildJsonArray {
+                add(buildJsonObject {
                     put("type", "function")
-                    put("function", functionObj)
+                    put("function", buildJsonObject {
+                        put("name", "execute_device_action")
+                        put("description", "Execute a single Android accessibility or system action on the device.")
+                        put("parameters", parameters)
+                    })
                 })
             }
         }
 
         fun extractResponseContent(responseText: String): String {
-            val root = JSONObject(responseText)
-            val choices = root.optJSONArray("choices") ?: return responseText
-            if (choices.length() == 0) return responseText
+            val root = runCatching { json.parseToJsonElement(responseText).jsonObject }.getOrNull()
+                ?: return responseText
+            val choices = root["choices"]?.jsonArray ?: return responseText
+            if (choices.isEmpty()) return responseText
 
-            val first = choices.getJSONObject(0)
-            val message = first.optJSONObject("message") ?: return responseText
+            val first = choices[0].jsonObject
+            val message = first["message"]?.jsonObject ?: return responseText
 
-            val toolCalls = message.optJSONArray("tool_calls")
-            if (toolCalls != null && toolCalls.length() > 0) {
-                val firstCall = toolCalls.getJSONObject(0)
-                val fn = firstCall.optJSONObject("function")
-                val argsStr = fn?.optString("arguments")
+            val toolCalls = runCatching { message["tool_calls"]?.jsonArray }.getOrNull()
+            if (toolCalls != null && toolCalls.isNotEmpty()) {
+                val fn = toolCalls[0].jsonObject["function"]?.jsonObject
+                val argsStr = fn?.get("arguments")?.jsonPrimitive?.contentOrNull
                 if (!argsStr.isNullOrBlank()) {
                     return argsStr
                 }
             }
 
-            val content = message.optString("content")
+            val content = runCatching { message["content"]?.jsonPrimitive?.contentOrNull }.getOrNull()
             if (!content.isNullOrBlank()) {
                 return content
             }
