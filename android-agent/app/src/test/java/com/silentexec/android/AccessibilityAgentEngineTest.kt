@@ -161,4 +161,69 @@ class AccessibilityAgentEngineTest {
         val extracted = CloudApiClient.extractResponseContent(mockToolResponse)
         assertTrue(extracted.contains("\"action\":\"ui_click\""))
     }
+
+    @Test
+    fun test04_repeatActionBanInsideYouTubeAndHaltAfterTwoRecoveryTurns() {
+        val settings = AppSettings().apply {
+            fastRouterEnabled = false
+            executionMode = ExecutionMode.SILENT
+            inferenceSource = InferenceSource.OPENAI_COMPAT
+        }
+
+        var openAppExecutions = 0
+        val observer = ScreenObserver {
+            ScreenObservation(
+                "com.google.android.youtube",
+                listOf("[0] button: Search [900,120]", "[1] text: Home")
+            )
+        }
+        val performer = ActionPerformer { cmd, _ ->
+            if (cmd.action == ActionType.OPEN_ANDROID_APP || cmd.action == ActionType.OPEN_URL) {
+                openAppExecutions++
+            }
+            AgentActionResult(true, "Executed ${cmd.action.wireName}")
+        }
+
+        val promptsSeen = mutableListOf<String>()
+        val decider: (String) -> String = { prompt ->
+            promptsSeen.add(prompt)
+            """{"thought":"Open YouTube","action":"open_android_app","target":"YouTube","platform":"android","confidence":0.92}"""
+        }
+
+        val events = mutableListOf<AgentTraceEvent>()
+        val engine = AccessibilityAgentEngine(
+            settings = settings,
+            observer = observer,
+            performer = performer,
+            customDecider = decider,
+            settleDelayMs = 0L
+        )
+
+        engine.run("Open YouTube and search nlp") { events.add(it) }
+
+        assertEquals(0, openAppExecutions)
+        assertTrue(promptsSeen.size == 2)
+        assertTrue(promptsSeen[1].contains("BLOCKED REPEAT: You are ALREADY inside com.google.android.youtube"))
+        val finished = events.filterIsInstance<AgentTraceEvent.Finished>().firstOrNull()
+        assertNotNull(finished)
+        assertEquals(2, finished!!.stepsTaken)
+    }
+
+    @Test
+    fun test05_canonicalModelPathResolutionOnColdStart() {
+        val tempFilesDir = java.nio.file.Files.createTempDirectory("silentexec_files").toFile()
+        try {
+            val resolved = com.silentexec.android.nlp.OnDeviceLlamaEngine.resolveCanonicalModelFile(
+                tempFilesDir,
+                "Qwen3-1.7B-Q4_K_M.gguf"
+            )
+            val expected = java.io.File(java.io.File(tempFilesDir, "models"), "Qwen3-1.7B-Q4_K_M.gguf").absolutePath
+            assertEquals(expected, resolved.absolutePath)
+
+            val engine = com.silentexec.android.nlp.OnDeviceLlamaEngine()
+            assertNotNull(engine.validateModelFile(resolved))
+        } finally {
+            tempFilesDir.deleteRecursively()
+        }
+    }
 }

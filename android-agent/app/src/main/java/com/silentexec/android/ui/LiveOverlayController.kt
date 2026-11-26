@@ -21,7 +21,11 @@ class LiveOverlayController(private val context: Context) {
 
     private var pillView: View? = null
     private var tvPillStatus: TextView? = null
+    private var llPillConfirmActions: View? = null
+    private var btnPillAllow: Button? = null
+    private var btnPillDeny: Button? = null
     private var onCancelCallback: (() -> Unit)? = null
+    private var onConfirmDecisionCallback: ((Boolean) -> Unit)? = null
 
     val canDrawOverlays: Boolean
         get() = Settings.canDrawOverlays(context)
@@ -43,11 +47,30 @@ class LiveOverlayController(private val context: Context) {
                 val inflater = LayoutInflater.from(context)
                 val view = inflater.inflate(R.layout.layout_floating_pill, null)
                 tvPillStatus = view.findViewById(R.id.tvPillStatus)
+                llPillConfirmActions = view.findViewById(R.id.llPillConfirmActions)
+                btnPillAllow = view.findViewById(R.id.btnPillAllow)
+                btnPillDeny = view.findViewById(R.id.btnPillDeny)
                 val btnStop = view.findViewById<Button>(R.id.btnPillStop)
 
                 btnStop.setOnClickListener {
+                    onConfirmDecisionCallback?.invoke(false)
+                    onConfirmDecisionCallback = null
                     onCancelCallback?.invoke()
                     hide()
+                }
+
+                btnPillAllow?.setOnClickListener {
+                    val cb = onConfirmDecisionCallback
+                    onConfirmDecisionCallback = null
+                    llPillConfirmActions?.visibility = View.GONE
+                    cb?.invoke(true)
+                }
+
+                btnPillDeny?.setOnClickListener {
+                    val cb = onConfirmDecisionCallback
+                    onConfirmDecisionCallback = null
+                    llPillConfirmActions?.visibility = View.GONE
+                    cb?.invoke(false)
                 }
 
                 val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -87,10 +110,38 @@ class LiveOverlayController(private val context: Context) {
     fun update(stepText: String, fallbackNotifier: ((String) -> Unit)? = null) {
         mainHandler.post {
             if (pillView != null && tvPillStatus != null) {
+                llPillConfirmActions?.visibility = View.GONE
+                onConfirmDecisionCallback = null
                 tvPillStatus?.text = stepText
             } else {
                 fallbackNotifier?.invoke(stepText)
             }
+        }
+    }
+
+    fun showConfirmation(
+        actionSummary: String,
+        onDecision: (Boolean) -> Unit
+    ) {
+        mainHandler.post {
+            if (!canDrawOverlays) {
+                return@post
+            }
+            if (pillView == null) {
+                show(actionSummary, onCancel = { onDecision(false) })
+            }
+            mainHandler.post {
+                onConfirmDecisionCallback = onDecision
+                tvPillStatus?.text = actionSummary
+                llPillConfirmActions?.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    fun hideConfirmation() {
+        mainHandler.post {
+            onConfirmDecisionCallback = null
+            llPillConfirmActions?.visibility = View.GONE
         }
     }
 
@@ -104,7 +155,11 @@ class LiveOverlayController(private val context: Context) {
                 }
                 pillView = null
                 tvPillStatus = null
+                llPillConfirmActions = null
+                btnPillAllow = null
+                btnPillDeny = null
                 onCancelCallback = null
+                onConfirmDecisionCallback = null
             }
         }
     }

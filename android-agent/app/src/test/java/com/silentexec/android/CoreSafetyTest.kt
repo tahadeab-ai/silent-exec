@@ -23,10 +23,10 @@ class CoreSafetyTest {
             "delete_file", "move_file", "system_power", "open_android_app",
             "toggle_setting", "send_message", "open_url",
             "ui_click", "ui_type", "ui_scroll", "ui_back", "ui_home", "done",
-            "reply", "read_file", "write_file", "memory_save"
+            "reply", "read_file", "write_file", "memory_save", "web_fetch"
         )
 
-        assertEquals(25, ActionType.values().size)
+        assertEquals(26, ActionType.values().size)
 
         for (action in actions) {
             val json = """
@@ -239,8 +239,8 @@ class CoreSafetyTest {
     @Test
     fun test12_lowConfidenceDowngradeToRequireConfirm() {
         val cmd = ActionCommand(
-            action = ActionType.OPEN_URL,
-            target = "https://safe.example.com",
+            action = ActionType.SET_BRIGHTNESS,
+            target = "80",
             platform = Platform.ANDROID,
             confidence = 0.60 // below 0.65 threshold
         )
@@ -249,6 +249,30 @@ class CoreSafetyTest {
         assertTrue(decision is SafetyDecision.RequireConfirm)
         val reason = (decision as SafetyDecision.RequireConfirm).reason
         assertTrue(reason.contains("below the 0.65 threshold"))
+    }
+
+    @Test
+    fun test12b_tier1OpenUrlConfidence055DoesNotTriggerFalseConfirmation() {
+        val cmd = ActionCommand(
+            action = ActionType.OPEN_URL,
+            target = "https://www.youtube.com/results?search_query=nlp",
+            platform = Platform.ANDROID,
+            confidence = 0.55
+        )
+        val decision = SafetyGate.evaluate(cmd)
+        assertEquals(SafetyDecision.AllowSilent, decision)
+    }
+
+    @Test
+    fun test12c_tier2DeleteFileStillRequiresConfirmation() {
+        val cmd = ActionCommand(
+            action = ActionType.DELETE_FILE,
+            target = "notes.txt",
+            platform = Platform.ANDROID,
+            confidence = 0.99
+        )
+        val decision = SafetyGate.evaluate(cmd)
+        assertTrue(decision is SafetyDecision.RequireConfirm)
     }
 
     @Test

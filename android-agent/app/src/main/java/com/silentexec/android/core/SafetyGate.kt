@@ -13,6 +13,22 @@ sealed class SafetyDecision {
 object SafetyGate {
     const val CONFIDENCE_THRESHOLD: Double = 0.65
 
+    private val SAFE_TIER1_NAVIGATION_READ_ACTIONS = setOf(
+        ActionType.OPEN_URL,
+        ActionType.OPEN_ANDROID_APP,
+        ActionType.UI_CLICK,
+        ActionType.UI_TYPE,
+        ActionType.UI_SCROLL,
+        ActionType.UI_BACK,
+        ActionType.UI_HOME,
+        ActionType.REPLY,
+        ActionType.DONE,
+        ActionType.READ_FILE,
+        ActionType.WEB_FETCH,
+        ActionType.MEMORY_SAVE,
+        ActionType.COPY_TO_CLIPBOARD
+    )
+
     private val SHELL_METACHARACTERS = listOf("&&", "||", ";", "|", "$(", "`")
 
     private val PROTECTED_SYSTEM_PREFIXES = listOf(
@@ -65,7 +81,9 @@ object SafetyGate {
                 )
             }
             SafetyTier.TIER_1_SILENT -> {
-                if (cmd.confidence < CONFIDENCE_THRESHOLD) {
+                if (cmd.action in SAFE_TIER1_NAVIGATION_READ_ACTIONS && cmd.confidence >= 0.50) {
+                    SafetyDecision.AllowSilent
+                } else if (cmd.confidence < CONFIDENCE_THRESHOLD) {
                     SafetyDecision.RequireConfirm(
                         "Confidence %.2f is below the %.2f threshold; downgraded to require confirmation"
                             .format(cmd.confidence, CONFIDENCE_THRESHOLD)

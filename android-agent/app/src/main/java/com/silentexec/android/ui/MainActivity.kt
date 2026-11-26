@@ -243,20 +243,31 @@ class MainActivity : AppCompatActivity() {
                 overlayController.update("${event.command.action.wireName}: ${event.command.target.orEmpty()}")
             }
             is AgentTraceEvent.ConfirmRequired -> {
+                val resolvedOnce = java.util.concurrent.atomic.AtomicBoolean(false)
                 lateinit var confirmItem: TraceItem.Confirmation
-                confirmItem = TraceItem.Confirmation(
-                    step = event.step,
-                    command = event.command,
-                    reason = event.reason,
-                    onRespond = { approved ->
+                val resolveDecision: (Boolean) -> Unit = { approved ->
+                    if (resolvedOnce.compareAndSet(false, true)) {
                         val idx = uiState.traceItems.indexOfFirst { it.id == confirmItem.id }
                         if (idx >= 0) {
                             uiState.traceItems[idx] = confirmItem.copy(resolved = true, approved = approved)
                         }
+                        overlayController.hideConfirmation()
+                        FloatingBubbleService.hideConfirmation()
                         event.respond(approved)
                     }
+                }
+                confirmItem = TraceItem.Confirmation(
+                    step = event.step,
+                    command = event.command,
+                    reason = event.reason,
+                    onRespond = resolveDecision
                 )
                 uiState.traceItems.add(confirmItem)
+                val summary = "${event.command.action.wireName}: ${event.command.target ?: event.reason}"
+                overlayController.showConfirmation(summary, resolveDecision)
+                if (FloatingBubbleService.isRunning()) {
+                    FloatingBubbleService.showConfirmation(summary, resolveDecision)
+                }
             }
             is AgentTraceEvent.Acted -> {
                 uiState.traceItems.add(
@@ -454,10 +465,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadActiveModelIfAvailable() {
         if (settings.inferenceSource == InferenceSource.OFFLINE && settings.activeModelFile.isNotBlank()) {
-            val file = modelDownloader.getModelFile(settings.activeModelFile)
+            val file = OnDeviceLlamaEngine.resolveCanonicalModelFile(filesDir, settings.activeModelFile)
             llamaEngine.setModelFile(file)
-            if (llamaEngine.validateModelFile(file) == null && OnDeviceLlamaEngine.isNativeLoaded && !llamaEngine.isLoaded()) {
-                llamaEngine.loadModelAsync(file) { }
+            val validationError = llamaEngine.validateModelFile(file)
+            if (validationError == null && OnDeviceLlamaEngine.isNativeLoaded && !llamaEngine.isLoaded()) {
+                llamaEngine.loadModelAsync(file) { res ->
+                    res.onFailure { err ->
+                        mainHandler.post {
+                            uiState.traceItems.add(
+                                TraceItem.Error(message = err.message ?: "Failed to restore local model")
+                            )
+                        }
+                    }
+                }
             }
         }
     }

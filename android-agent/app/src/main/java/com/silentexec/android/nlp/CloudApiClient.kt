@@ -115,7 +115,8 @@ class CloudApiClient(
         fun buildDeviceActionTools(): JsonArray {
             val actionEnum = listOf(
                 "ui_click", "ui_type", "ui_scroll", "open_android_app", "open_url",
-                "ui_back", "ui_home", "set_volume", "create_note",
+                "ui_back", "ui_home", "set_volume", "create_note", "copy_to_clipboard",
+                "web_fetch", "read_file", "write_file", "memory_save",
                 "delete_file", "reply", "done"
             )
             val parameters = buildJsonObject {

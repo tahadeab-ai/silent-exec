@@ -151,6 +151,9 @@ class AndroidActionExecutor(private val context: Context? = null) {
                 ActionType.MEMORY_SAVE -> {
                     handleMemorySave(cmd.target, cmd.args)
                 }
+                ActionType.WEB_FETCH -> {
+                    handleWebFetch(cmd.target ?: "")
+                }
                 ActionType.DONE -> {
                     AndroidExecutionResult.Success(
                         action = "done",
@@ -381,6 +384,54 @@ class AndroidActionExecutor(private val context: Context? = null) {
             )
         } catch (e: Exception) {
             AndroidExecutionResult.Error("write_file", "Failed to write file: ${e.message}")
+        }
+    }
+
+    private fun handleWebFetch(target: String): AndroidExecutionResult {
+        val trimmed = target.trim()
+        if (trimmed.isEmpty()) {
+            return AndroidExecutionResult.Error("web_fetch", "Target URL or query is empty")
+        }
+        val urlStr = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed
+        } else {
+            "https://duckduckgo.com/html/?q=${Uri.encode(trimmed)}"
+        }
+        if (context == null) {
+            return AndroidExecutionResult.Success(
+                action = "web_fetch",
+                details = "Simulated web fetch: $urlStr",
+                targetResolved = urlStr
+            )
+        }
+        return try {
+            val conn = (java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "SilentExec/3.1 (Android)")
+            }
+            val code = conn.responseCode
+            val raw = if (code in 200..299) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
+            }
+            val plain = raw
+                .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("<[^>]+>"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .take(4096)
+            AndroidExecutionResult.Success(
+                action = "web_fetch",
+                details = plain.ifBlank { "Fetched $urlStr (HTTP $code)" },
+                targetResolved = urlStr
+            )
+        } catch (e: Exception) {
+            AndroidExecutionResult.Error("web_fetch", "Web fetch failed: ${e.message}")
         }
     }
 

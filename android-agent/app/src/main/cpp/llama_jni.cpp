@@ -2,6 +2,10 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <cerrno>
+#include <cstdio>
+#include <algorithm>
+#include <thread>
 #include <mutex>
 #include <android/log.h>
 #include "llama.h"
@@ -14,6 +18,7 @@ static std::mutex g_llama_mutex;
 static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
 static const llama_model* g_vocab = nullptr;
+static std::string g_last_error;
 
 static void release_llama_state_locked() {
     if (g_ctx != nullptr) {
@@ -38,27 +43,43 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     jint threads
 ) {
     if (env == nullptr || model_path == nullptr) {
+        std::lock_guard<std::mutex> lock(g_llama_mutex);
+        g_last_error = "Invalid JNI environment or null model path";
         return JNI_FALSE;
     }
 
     const char* path_chars = env->GetStringUTFChars(model_path, nullptr);
     if (!path_chars) {
+        std::lock_guard<std::mutex> lock(g_llama_mutex);
+        g_last_error = "Failed to decode UTF-8 model path";
         return JNI_FALSE;
     }
     std::string path_str(path_chars);
     env->ReleaseStringUTFChars(model_path, path_chars);
 
     if (path_str.empty()) {
+        std::lock_guard<std::mutex> lock(g_llama_mutex);
+        g_last_error = "Model path is empty";
         LOGE("Model path is empty");
         return JNI_FALSE;
     }
 
     std::lock_guard<std::mutex> lock(g_llama_mutex);
+    g_last_error.clear();
 
+    // Cleanly free any stale context/model before loading
     if (g_model != nullptr || g_ctx != nullptr) {
-        LOGI("Model already loaded, releasing previous context");
+        LOGI("Releasing stale llama context/model before loading new model");
         release_llama_state_locked();
     }
+
+    FILE* fp = std::fopen(path_str.c_str(), "rb");
+    if (fp == nullptr) {
+        g_last_error = "Cannot open model file '" + path_str + "': " + std::strerror(errno);
+        LOGE("%s", g_last_error.c_str());
+        return JNI_FALSE;
+    }
+    std::fclose(fp);
 
     llama_backend_init();
 
@@ -66,26 +87,48 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     g_model = llama_load_model_from_file(path_str.c_str(), model_params);
 
     if (g_model == nullptr) {
-        LOGE("Failed to load llama model from file: %s", path_str.c_str());
+        g_last_error = "llama_load_model_from_file failed for '" + path_str + "' (corrupt GGUF or unsupported quant/architecture)";
+        LOGE("%s", g_last_error.c_str());
         g_vocab = nullptr;
         return JNI_FALSE;
     }
     g_vocab = g_model;
 
+    int hw_threads = static_cast<int>(std::thread::hardware_concurrency());
+    if (hw_threads <= 0) {
+        hw_threads = 4;
+    }
+    int req_threads = threads > 0 ? threads : 4;
+    int safe_threads = std::min(req_threads, std::min(4, hw_threads));
+    if (safe_threads < 1) {
+        safe_threads = 1;
+    }
+
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = 1024;
-    ctx_params.n_threads = threads > 0 ? threads : 4;
-    ctx_params.n_threads_batch = ctx_params.n_threads;
+    ctx_params.n_ctx = 2048;
+    ctx_params.n_threads = safe_threads;
+    ctx_params.n_threads_batch = safe_threads;
 
     g_ctx = llama_new_context_with_model(g_model, ctx_params);
     if (g_ctx == nullptr) {
-        LOGE("Failed to create llama context with model");
+        g_last_error = "llama_new_context_with_model failed (n_ctx=2048, n_threads=" + std::to_string(safe_threads) + ", insufficient RAM)";
+        LOGE("%s", g_last_error.c_str());
         release_llama_state_locked();
         return JNI_FALSE;
     }
 
-    LOGI("Model loaded successfully with %d threads", ctx_params.n_threads);
+    LOGI("Model loaded successfully (n_ctx=2048, n_threads=%d)", safe_threads);
     return JNI_TRUE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGetLastError(
+    JNIEnv* env,
+    jobject /* this */
+) {
+    if (env == nullptr) return nullptr;
+    std::lock_guard<std::mutex> lock(g_llama_mutex);
+    return env->NewStringUTF(g_last_error.c_str());
 }
 
 JNIEXPORT jboolean JNICALL

@@ -34,11 +34,15 @@ class FloatingBubbleService : Service() {
     private var llFloatingPill: LinearLayout? = null
     private var tvFloatingPillStatus: TextView? = null
     private var btnFloatingPillStop: Button? = null
+    private var llFloatingPillConfirmActions: View? = null
+    private var btnFloatingPillAllow: Button? = null
+    private var btnFloatingPillDeny: Button? = null
     private var etFloatingCommand: EditText? = null
     private var tvFloatingModeBadge: TextView? = null
     private var windowParams: WindowManager.LayoutParams? = null
 
     private var onStopCallback: (() -> Unit)? = null
+    private var onConfirmDecisionCallback: ((Boolean) -> Unit)? = null
 
     companion object {
         private var instance: FloatingBubbleService? = null
@@ -63,6 +67,14 @@ class FloatingBubbleService : Service() {
 
         fun updateProgress(text: String, onStop: (() -> Unit)? = null) {
             instance?.showProgress(text, onStop)
+        }
+
+        fun showConfirmation(text: String, onDecision: (Boolean) -> Unit) {
+            instance?.showPillConfirmation(text, onDecision)
+        }
+
+        fun hideConfirmation() {
+            instance?.hidePillConfirmation()
         }
 
         fun resetToBubble() {
@@ -100,6 +112,9 @@ class FloatingBubbleService : Service() {
         llFloatingPill = view.findViewById(R.id.llFloatingPill)
         tvFloatingPillStatus = view.findViewById(R.id.tvFloatingPillStatus)
         btnFloatingPillStop = view.findViewById(R.id.btnFloatingPillStop)
+        llFloatingPillConfirmActions = view.findViewById(R.id.llFloatingPillConfirmActions)
+        btnFloatingPillAllow = view.findViewById(R.id.btnFloatingPillAllow)
+        btnFloatingPillDeny = view.findViewById(R.id.btnFloatingPillDeny)
         etFloatingCommand = view.findViewById(R.id.etFloatingCommand)
         tvFloatingModeBadge = view.findViewById(R.id.tvFloatingModeBadge)
 
@@ -130,9 +145,25 @@ class FloatingBubbleService : Service() {
         }
 
         btnFloatingPillStop?.setOnClickListener {
+            onConfirmDecisionCallback?.invoke(false)
+            onConfirmDecisionCallback = null
             onStopCallback?.invoke()
             MainActivity.activeInstance?.cancelAgentLoop()
             showBubble()
+        }
+
+        btnFloatingPillAllow?.setOnClickListener {
+            val cb = onConfirmDecisionCallback
+            onConfirmDecisionCallback = null
+            llFloatingPillConfirmActions?.visibility = View.GONE
+            cb?.invoke(true)
+        }
+
+        btnFloatingPillDeny?.setOnClickListener {
+            val cb = onConfirmDecisionCallback
+            onConfirmDecisionCallback = null
+            llFloatingPillConfirmActions?.visibility = View.GONE
+            cb?.invoke(false)
         }
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -249,11 +280,32 @@ class FloatingBubbleService : Service() {
     fun showProgress(text: String, onStop: (() -> Unit)?) {
         mainHandler.post {
             onStopCallback = onStop
+            onConfirmDecisionCallback = null
             flBubbleIcon?.visibility = View.GONE
             cardMiniConsole?.visibility = View.GONE
             llFloatingPill?.visibility = View.VISIBLE
+            llFloatingPillConfirmActions?.visibility = View.GONE
             tvFloatingPillStatus?.text = text
             setFocusable(false)
+        }
+    }
+
+    fun showPillConfirmation(text: String, onDecision: (Boolean) -> Unit) {
+        mainHandler.post {
+            onConfirmDecisionCallback = onDecision
+            flBubbleIcon?.visibility = View.GONE
+            cardMiniConsole?.visibility = View.GONE
+            llFloatingPill?.visibility = View.VISIBLE
+            llFloatingPillConfirmActions?.visibility = View.VISIBLE
+            tvFloatingPillStatus?.text = text
+            setFocusable(false)
+        }
+    }
+
+    fun hidePillConfirmation() {
+        mainHandler.post {
+            onConfirmDecisionCallback = null
+            llFloatingPillConfirmActions?.visibility = View.GONE
         }
     }
 

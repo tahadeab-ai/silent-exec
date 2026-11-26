@@ -20,7 +20,7 @@ class GuiAgentAndRouterTest {
 
     @Test
     fun test01_allTwentyActionsExactDeserialization() {
-        assertEquals(25, ActionType.values().size)
+        assertEquals(26, ActionType.values().size)
 
         val wireNames = listOf(
             "open_folder", "open_file", "launch_app", "search_files",
@@ -28,7 +28,7 @@ class GuiAgentAndRouterTest {
             "delete_file", "move_file", "system_power", "open_android_app",
             "toggle_setting", "send_message", "open_url",
             "ui_click", "ui_type", "ui_scroll", "ui_back", "ui_home", "done",
-            "reply", "read_file", "write_file", "memory_save"
+            "reply", "read_file", "write_file", "memory_save", "web_fetch"
         )
 
         for (wire in wireNames) {

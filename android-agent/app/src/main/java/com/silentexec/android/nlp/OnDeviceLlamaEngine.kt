@@ -20,7 +20,15 @@ class OnDeviceLlamaEngine {
         } catch (_: Throwable) {
             false
         }
-        const val MIN_MODEL_SIZE_BYTES = 5L * 1024L * 1024L // 5 MB
+        const val MIN_MODEL_SIZE_BYTES = 5_000_000L // 5 MB
+
+        /**
+         * Resolves the canonical absolute model path under filesDir/models/<fileName>.
+         */
+        fun resolveCanonicalModelFile(filesDir: File, fileName: String): File {
+            val baseName = File(fileName.trim()).name
+            return File(File(filesDir, "models"), baseName).absoluteFile
+        }
     }
 
     @Volatile
@@ -30,6 +38,7 @@ class OnDeviceLlamaEngine {
     private var configuredThreads: Int = 4
 
     external fun nativeLoadModel(modelPath: String, threads: Int): Boolean
+    external fun nativeGetLastError(): String
     external fun nativeIsLoaded(): Boolean
     external fun nativeUnload()
     external fun nativeGenerateJson(prompt: String, grammarText: String, maxTokens: Int): String
@@ -50,7 +59,10 @@ class OnDeviceLlamaEngine {
         if (modelFile == null || !modelFile.exists()) {
             return "ملف النموذج غير موجود. يرجى تحميل نموذج من تبويب النماذج أو اختيار Cloud API من الإعدادات"
         }
-        if (modelFile.length() < MIN_MODEL_SIZE_BYTES) {
+        if (!modelFile.canRead()) {
+            return "تعذر قراءة ملف النموذج (${modelFile.absolutePath}). يرجى إعادة تحميله من تبويب النماذج"
+        }
+        if (modelFile.length() <= MIN_MODEL_SIZE_BYTES) {
             return "ملف النموذج غير صالح أو أصغر من 5 ميجابايت (${modelFile.name}). يرجى إعادة تحميله من تبويب النماذج"
         }
         return null
@@ -95,7 +107,11 @@ class OnDeviceLlamaEngine {
             if (ok) {
                 onComplete(Result.success(Unit))
             } else {
-                onComplete(Result.failure(IllegalStateException("فشل تحميل النموذج المحلي: ${modelFile.name}")))
+                val nativeErr = runCatching {
+                    if (isNativeLoaded) nativeGetLastError() else "Native library not loaded"
+                }.getOrDefault("")
+                val detail = if (nativeErr.isNotBlank()) " ($nativeErr)" else ""
+                onComplete(Result.failure(IllegalStateException("فشل تحميل النموذج المحلي: ${modelFile.name}$detail")))
             }
         }
     }

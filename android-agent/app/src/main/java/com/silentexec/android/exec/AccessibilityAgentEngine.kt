@@ -120,7 +120,12 @@ class AccessibilityAgentEngine(
         }
 
         val stepHistory = mutableListOf<String>()
+        val actionHistory = mutableListOf<StepRecord>()
+        val subGoals = parseSubGoals(cleanGoal)
+        var completedSubGoals = 0
         var lastScreenChanged: Boolean? = null
+        var recoveryDirective: String? = null
+        var consecutiveRecoveryTurns = 0
 
         for (step in 1..maxSteps) {
             if (isCancelled) {
@@ -140,7 +145,15 @@ class AccessibilityAgentEngine(
             )
 
             // 2. Reason
-            val prompt = buildObservationPrompt(cleanGoal, beforeObs, stepHistory, lastScreenChanged)
+            val prompt = buildObservationPrompt(
+                goal = cleanGoal,
+                obs = beforeObs,
+                history = stepHistory,
+                previousScreenChanged = lastScreenChanged,
+                subGoals = subGoals,
+                completedSubGoals = completedSubGoals,
+                recoveryDirective = recoveryDirective
+            )
             val rawOutput = try {
                 decideNextJson(prompt)
             } catch (t: Throwable) {
@@ -172,6 +185,37 @@ class AccessibilityAgentEngine(
                 return
             }
 
+            // Hard Repeat-Action Ban
+            val normTarget = normalizeTarget(cmd.target)
+            val isNavAction = cmd.action in NAV_REPEAT_GUARD_ACTIONS
+            val alreadyInsideTarget = isNavAction && packageMatchesTarget(beforeObs.packageName, cmd)
+            val sameAsPrevUnchanged = lastScreenChanged == false &&
+                actionHistory.lastOrNull()?.let { it.action == cmd.action && it.normalizedTarget == normTarget } == true
+            val repeatedNavInSamePkg = isNavAction && actionHistory.any {
+                it.action == cmd.action && it.normalizedTarget == normTarget && it.currentPackage == beforeObs.packageName
+            }
+
+            if (alreadyInsideTarget || sameAsPrevUnchanged || repeatedNavInSamePkg) {
+                consecutiveRecoveryTurns++
+                if (consecutiveRecoveryTurns >= 2) {
+                    val pkgLabel = beforeObs.packageName.ifBlank { "current screen" }
+                    onEvent(
+                        AgentTraceEvent.Finished(
+                            "Stopped cleanly: screen remained unchanged after repeated recovery attempts in $pkgLabel.",
+                            step
+                        )
+                    )
+                    return
+                }
+                val pkgDisplay = beforeObs.packageName.ifBlank { "current app" }
+                recoveryDirective =
+                    "BLOCKED REPEAT: You are ALREADY inside $pkgDisplay. Do NOT call open_url/open_android_app again. " +
+                    "Pick a visible element #index from the screen list below to click/type, or call done/reply."
+                stepHistory.add("Step $step: BLOCKED repeat ${cmd.action.wireName}(${cmd.target ?: ""}) inside $pkgDisplay")
+                lastScreenChanged = false
+                continue
+            }
+
             // 3. Safety Confirmation (only before delete/send/pay or Tier-2 in interactive mode)
             if (!confirmIfSensitive(step, cmd, onEvent)) {
                 onEvent(AgentTraceEvent.Cancelled)
@@ -184,7 +228,20 @@ class AccessibilityAgentEngine(
 
             if (!result.success) {
                 stepHistory.add("Step $step: ${cmd.action.wireName}(${cmd.target ?: ""}) -> FAILED: ${result.message}")
+                actionHistory.add(StepRecord(step, cmd.action, normTarget, beforeObs.packageName, false))
                 lastScreenChanged = false
+                if (recoveryDirective != null) {
+                    consecutiveRecoveryTurns++
+                    if (consecutiveRecoveryTurns >= 2) {
+                        onEvent(
+                            AgentTraceEvent.Finished(
+                                "Stopped cleanly: recovery action failed (${result.message}).",
+                                step
+                            )
+                        )
+                        return
+                    }
+                }
                 continue
             }
 
@@ -198,11 +255,41 @@ class AccessibilityAgentEngine(
                 }
             }
             val afterObs = observer.observe()
-            val changed = afterObs.signatureHash != beforeObs.signatureHash
+            val changed = if (cmd.action in NON_UI_CONTENT_ACTIONS) {
+                true
+            } else {
+                afterObs.signatureHash != beforeObs.signatureHash
+            }
             lastScreenChanged = changed
+            actionHistory.add(StepRecord(step, cmd.action, normTarget, beforeObs.packageName, changed))
 
+            if (changed) {
+                recoveryDirective = null
+                consecutiveRecoveryTurns = 0
+                if (completedSubGoals < subGoals.size) {
+                    completedSubGoals++
+                }
+            } else if (recoveryDirective != null) {
+                consecutiveRecoveryTurns++
+                if (consecutiveRecoveryTurns >= 2) {
+                    val pkgLabel = afterObs.packageName.ifBlank { "current screen" }
+                    onEvent(
+                        AgentTraceEvent.Finished(
+                            "Stopped cleanly: screen remained unchanged for 2 consecutive recovery turns in $pkgLabel.",
+                            step
+                        )
+                    )
+                    return
+                }
+            }
+
+            val detailSuffix = if (cmd.action in NON_UI_CONTENT_ACTIONS && result.message.isNotBlank()) {
+                " | output: ${result.message.take(1500)}"
+            } else {
+                ""
+            }
             stepHistory.add(
-                "Step $step: ${cmd.action.wireName}(${cmd.target ?: ""}) -> ok (screenChanged=$changed)"
+                "Step $step: ${cmd.action.wireName}(${cmd.target ?: ""}) -> ok (screenChanged=$changed)$detailSuffix"
             )
         }
 
@@ -283,7 +370,7 @@ class AccessibilityAgentEngine(
 
         val engine = llamaEngine
             ?: throw IllegalStateException("Local GGUF engine not initialized")
-        val cmd = engine.inferActionCommand(userQuery = prompt, maxTokens = 192).getOrThrow()
+        val cmd = engine.inferActionCommand(userQuery = prompt, maxTokens = 384).getOrThrow()
         return ActionJson.toJson(cmd)
     }
 
@@ -291,14 +378,31 @@ class AccessibilityAgentEngine(
         goal: String,
         obs: ScreenObservation,
         history: List<String>,
-        previousScreenChanged: Boolean?
+        previousScreenChanged: Boolean?,
+        subGoals: List<String> = emptyList(),
+        completedSubGoals: Int = 0,
+        recoveryDirective: String? = null
     ): String {
         val pkgLine = if (obs.packageName.isNotBlank()) "Foreground app: ${obs.packageName}" else "Foreground app: unknown"
+        val checklistSection = if (subGoals.size > 1) {
+            val lines = subGoals.mapIndexed { idx, item ->
+                val tag = when {
+                    idx < completedSubGoals -> " [DONE]"
+                    idx == completedSubGoals -> " [CURRENT]"
+                    else -> ""
+                }
+                "${idx + 1}. $item$tag"
+            }
+            "Progress Checklist:\n${lines.joinToString("\n")}"
+        } else {
+            ""
+        }
         val changeLine = when (previousScreenChanged) {
             true -> "Previous action changed the screen."
             false -> "WARNING: Previous action did NOT change the screen. Try another element, scroll, or finish."
             null -> ""
         }
+        val directiveLine = recoveryDirective.orEmpty()
         val historySection = if (history.isEmpty()) "Completed steps: none" else "Completed steps:\n${history.joinToString("\n")}"
         val screenSection = if (obs.elements.isEmpty()) {
             "Current screen elements: none visible"
@@ -308,12 +412,22 @@ class AccessibilityAgentEngine(
         return listOf(
             "Goal: $goal",
             pkgLine,
+            checklistSection,
             changeLine,
+            directiveLine,
             historySection,
             screenSection,
             "Return ONLY one valid ActionCommand JSON or call execute_device_action."
         ).filter { it.isNotBlank() }.joinToString("\n\n")
     }
+
+    private data class StepRecord(
+        val step: Int,
+        val action: ActionType,
+        val normalizedTarget: String,
+        val currentPackage: String,
+        val screenChanged: Boolean?
+    )
 
     companion object {
         private val UI_TRANSITION_ACTIONS = setOf(
@@ -325,6 +439,63 @@ class AccessibilityAgentEngine(
             ActionType.UI_BACK,
             ActionType.UI_HOME
         )
+
+        private val NAV_REPEAT_GUARD_ACTIONS = setOf(
+            ActionType.OPEN_URL,
+            ActionType.OPEN_ANDROID_APP,
+            ActionType.LAUNCH_APP
+        )
+
+        private val NON_UI_CONTENT_ACTIONS = setOf(
+            ActionType.READ_FILE,
+            ActionType.WEB_FETCH,
+            ActionType.MEMORY_SAVE,
+            ActionType.COPY_TO_CLIPBOARD
+        )
+
+        private val APP_PACKAGE_HINTS = mapOf(
+            "youtube" to "youtube",
+            "يوتيوب" to "youtube",
+            "whatsapp" to "whatsapp",
+            "واتساب" to "whatsapp",
+            "chrome" to "chrome",
+            "كروم" to "chrome",
+            "telegram" to "telegram",
+            "تليجرام" to "telegram",
+            "instagram" to "instagram",
+            "انستقرام" to "instagram",
+            "settings" to "settings",
+            "الاعدادات" to "settings",
+            "الإعدادات" to "settings"
+        )
+
+        fun normalizeTarget(target: String?): String =
+            target?.trim()?.lowercase()?.replace(Regex("\\s+"), " ") ?: ""
+
+        fun packageMatchesTarget(currentPackage: String, cmd: ActionCommand): Boolean {
+            if (currentPackage.isBlank()) return false
+            val pkgLower = currentPackage.lowercase()
+            val target = normalizeTarget(cmd.target)
+            if (target.isEmpty()) return false
+            if (pkgLower == target) return true
+            for ((keyword, pkgHint) in APP_PACKAGE_HINTS) {
+                if (target.contains(keyword) && pkgLower.contains(pkgHint)) {
+                    return true
+                }
+            }
+            if (cmd.action == ActionType.OPEN_URL && (pkgLower.contains("chrome") || pkgLower.contains("browser"))) {
+                return true
+            }
+            return target.length >= 4 && pkgLower.contains(target)
+        }
+
+        fun parseSubGoals(goal: String): List<String> {
+            val parts = goal
+                .split(Regex("(?:\\s+(?:ثم|بعدين|بعدها|and|then)\\s+|\\s+و\\s+|[,،])", RegexOption.IGNORE_CASE))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            return if (parts.isEmpty()) listOf(goal.trim()) else parts.take(6)
+        }
 
         private val SENSITIVE_KEYWORDS = listOf(
             "delete", "remove", "erase", "send", "pay", "purchase", "checkout", "transfer",

@@ -88,7 +88,10 @@ enum class ActionType {
     WRITE_FILE,
 
     @SerialName("memory_save")
-    MEMORY_SAVE;
+    MEMORY_SAVE,
+
+    @SerialName("web_fetch")
+    WEB_FETCH;
 
     val tier: SafetyTier
         get() = when (this) {
@@ -128,6 +131,7 @@ enum class ActionType {
             READ_FILE -> "read_file"
             WRITE_FILE -> "write_file"
             MEMORY_SAVE -> "memory_save"
+            WEB_FETCH -> "web_fetch"
         }
 }
 

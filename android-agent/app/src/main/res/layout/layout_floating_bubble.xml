@@ -132,35 +132,77 @@
         android:layout_height="wrap_content"
         android:background="@drawable/pill_background"
         android:elevation="14dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingHorizontal="14dp"
         android:paddingVertical="8dp"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/tvFloatingPillStatus"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxWidth="240dp"
-            android:singleLine="true"
-            android:textColor="@color/text_primary"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/btnFloatingPillStop"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="8dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="0dp"
-            android:text="⏹"
-            android:textColor="@color/danger_red"
-            android:textSize="14sp" />
+            <TextView
+                android:id="@+id/tvFloatingPillStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxWidth="240dp"
+                android:maxLines="3"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnFloatingPillStop"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="⏹"
+                android:textColor="@color/danger_red"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/llFloatingPillConfirmActions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btnFloatingPillAllow"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="0dp"
+                android:text="✓ سماح / Allow"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnFloatingPillDeny"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="0dp"
+                android:text="✗ رفض / Deny"
+                android:textColor="@color/danger_red"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
 </FrameLayout>
