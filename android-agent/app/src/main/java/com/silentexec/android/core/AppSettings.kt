@@ -198,6 +198,10 @@ class AppSettings(
         get() = prefs.getString(KEY_OPENAI_API_KEY, "") ?: ""
         set(value) = prefs.edit().putString(KEY_OPENAI_API_KEY, value).apply()
 
+    var providerPreset: String
+        get() = prefs.getString(KEY_PROVIDER_PRESET, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_PROVIDER_PRESET, value).apply()
+
     fun applyLocale() {
         runCatching {
             val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(language)
@@ -237,6 +241,7 @@ class AppSettings(
         const val KEY_OPENAI_API_BASE = "setting_openai_api_base"
         const val KEY_OPENAI_API_MODEL = "setting_openai_api_model"
         const val KEY_OPENAI_API_KEY = "setting_openai_api_key"
+        const val KEY_PROVIDER_PRESET = "setting_provider_preset"
 
         const val DEFAULT_LANGUAGE = "ar"
         const val DEFAULT_OPENAI_API_BASE = "https://api.openai.com/v1"

@@ -17,7 +17,8 @@ data class UiElementInfo(
     val isClickable: Boolean,
     val isEditable: Boolean,
     val isScrollable: Boolean,
-    val bounds: Rect
+    val bounds: Rect,
+    val resourceId: String = ""
 ) {
     fun formatForPrompt(): String {
         val label = when {
@@ -33,7 +34,8 @@ data class UiElementInfo(
             isScrollable -> "list"
             else -> className.substringAfterLast('.').ifBlank { "view" }
         }
-        return "[$index] $role: $label"
+        val idSuffix = resourceId.substringAfterLast('/').takeIf { it.isNotBlank() }?.let { " #$it" } ?: ""
+        return "[$index] $role: $label$idSuffix [${bounds.centerX()},${bounds.centerY()}]"
     }
 }
 
@@ -90,7 +92,8 @@ class SilentExecAccessibilityService : AccessibilityService() {
                             isClickable = isClickable,
                             isEditable = isEditable,
                             isScrollable = isScrollable,
-                            bounds = bounds
+                            bounds = bounds,
+                            resourceId = node.viewIdResourceName ?: ""
                         )
                     )
                 }
@@ -110,6 +113,16 @@ class SilentExecAccessibilityService : AccessibilityService() {
      */
     fun extractPrunedUiStrings(): List<String> {
         return extractPrunedUiTree().map { it.formatForPrompt() }
+    }
+
+    fun activePackageName(): String {
+        return rootInActiveWindow?.packageName?.toString().orEmpty()
+    }
+
+    fun computeScreenSignature(): String {
+        val pkg = activePackageName()
+        val elements = extractPrunedUiStrings()
+        return "$pkg|${elements.joinToString("\n")}".hashCode().toString()
     }
 
     /**

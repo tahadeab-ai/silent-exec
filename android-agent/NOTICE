@@ -1,0 +1,14 @@
+SilentExec Android Third-Party Notices & Attributions
+
+1. OpenPhoneUse (https://github.com/joungminsung/OpenPhoneUse)
+   License: MIT License
+   Copyright (c) 2026 joungminsung
+   Adopted architectural patterns: Accessibility screen-control loop
+   (Observe -> Reason -> Safety Gate -> Act -> Verify Screen Changed),
+   touchless AccessibilityNodeInfo click-before-tap fallback, and single-focus
+   Material 3 Jetpack Compose Agent UX.
+
+2. llama.cpp (https://github.com/ggml-org/llama.cpp)
+   License: MIT License
+   Copyright (c) 2023-2026 The ggml authors
+   Used via native JNI bridge (libllama_jni.so) for on-device arm64-v8a GGUF inference.
