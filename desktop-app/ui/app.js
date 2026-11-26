@@ -880,9 +880,44 @@
     });
     const ollamaBox = document.getElementById('ollamaConfigBox');
     const openaiBox = document.getElementById('openaiConfigBox');
+    const gooseBox = document.getElementById('gooseConfigBox');
     if (ollamaBox) ollamaBox.style.display = State.backend === 'ollama' ? 'block' : 'none';
     if (openaiBox) openaiBox.style.display = State.backend === 'openai_compat' ? 'block' : 'none';
+    if (gooseBox) {
+      gooseBox.style.display = State.backend === 'goose_acp' ? 'block' : 'none';
+      if (State.backend === 'goose_acp') refreshGooseStatus();
+    }
     updateModelIndicators();
+  }
+
+  async function refreshGooseStatus() {
+    const el = document.getElementById('gooseStatusText');
+    if (!el) return;
+    try {
+      const st = await invokeTauri('get_goose_status');
+      el.textContent = st.installed
+        ? `✓ Installed: ${st.version || st.binary_path}`
+        : 'Not installed yet — click Install to fetch aaif-goose/goose release.';
+    } catch (e) {
+      el.textContent = String(e);
+    }
+  }
+
+  const installGooseBtn = document.getElementById('installGooseBtn');
+  if (installGooseBtn) {
+    installGooseBtn.addEventListener('click', async () => {
+      const el = document.getElementById('gooseStatusText');
+      installGooseBtn.disabled = true;
+      if (el) el.textContent = 'Downloading aaif-goose/goose release...';
+      try {
+        const st = await invokeTauri('install_goose_cli');
+        if (el) el.textContent = `✓ Installed: ${st.version || st.binary_path}`;
+      } catch (e) {
+        if (el) el.textContent = `✕ ${e}`;
+      } finally {
+        installGooseBtn.disabled = false;
+      }
+    });
   }
 
   async function saveSettings() {

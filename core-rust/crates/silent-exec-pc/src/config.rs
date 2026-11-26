@@ -66,9 +66,17 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub fast_router_enabled: bool,
 
-    /// AI backend to use: "local_llama" | "ollama" | "openai_compat"
+    /// AI backend to use: "goose_acp" | "openai_compat" | "ollama" | "local_llama"
     #[serde(default = "default_backend")]
     pub backend: String,
+
+    /// Optional Goose provider override (e.g. "google", "groq", "openai", "ollama")
+    #[serde(default)]
+    pub goose_provider: String,
+
+    /// Optional Goose model override
+    #[serde(default)]
+    pub goose_model: String,
 
     /// Ollama endpoint URL (default: http://127.0.0.1:11434)
     #[serde(default = "default_ollama_url")]
@@ -103,6 +111,8 @@ impl Default for AppConfig {
             active_model_tag: default_model_tag(),
             fast_router_enabled: true,
             backend: default_backend(),
+            goose_provider: String::new(),
+            goose_model: String::new(),
             ollama_url: default_ollama_url(),
             ollama_model: default_ollama_model(),
             openai_api_base: default_openai_url(),

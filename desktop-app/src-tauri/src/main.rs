@@ -2,12 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
-use silent_exec_core::{ActionCommand, ExecutionMode, MultiStepPlan, SafetyDecision, SafetyGate};
+use silent_exec_core::{ActionCommand, ExecutionMode, SafetyDecision, SafetyGate};
 use silent_exec_pc::{
-    action_type_to_str, hidden_command, parse_plan, resolve_clause, split_compound_prompt,
-    start_bridge_server, AiBackend, AppConfig, BridgeConfig, ExecutionResult, FastRuleRouter,
-    FileIndexer, McpClient, McpServerConfig, McpTool, MemoryItem, ModelDownloadInfo, ModelManager,
-    ModelReleaseInfo, PcExecutor, RuntimeManager, SelfUpdater, SetupResult,
+    action_type_to_str, hidden_command, start_bridge_server, AiBackend, AppConfig, BridgeConfig,
+    ExecutionResult, FastRuleRouter, FileIndexer, GooseAcpRunner, GooseStatus, McpClient,
+    McpServerConfig, McpTool, MemoryItem, ModelDownloadInfo, ModelManager, ModelReleaseInfo,
+    PcExecutor, RuntimeManager, SelfUpdater, SetupResult, ToolCallingAgent,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -348,218 +348,88 @@ async fn execute_query(
             }
         }
 
-        // Helper to run AI backend inference
-        let run_ai_backend = |prompt_str: &str| -> Result<ActionCommand, String> {
-            let backend = match cfg.backend.as_str() {
-                "ollama" => AiBackend::new_ollama(Some(&cfg.ollama_url), Some(&cfg.ollama_model)),
-                "openai_compat" => AiBackend::new_openai_compat(
-                    Some(&cfg.openai_api_base),
-                    Some(&cfg.openai_api_model),
-                    Some(&cfg.openai_api_key),
-                ),
-                _ => {
-                    let manager = ModelManager::new(None).ok();
-                    if let Some(m) = manager {
-                        if m.find_cached_model().is_some() {
-                            AiBackend::new_local_llama(None, None)
-                        } else {
-                            return Err(
-                                "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
-                                    .to_string(),
-                            );
-                        }
-                    } else {
-                        return Err(
-                            "AI backend not ready — click Setup in Models tab or configure Ollama/API in Settings"
-                                .to_string(),
-                        );
-                    }
-                }
-            };
-
-            backend.infer(prompt_str).map_err(|e| {
-                format!(
-                    "AI backend error ({}) — click Setup in Models tab or configure Ollama/API in Settings",
-                    e
-                )
-            })
-        };
-
-        // 2. Compound or Multi-Step Planning
-        let clauses = split_compound_prompt(trimmed);
-        let plan = if clauses.len() > 1 {
-            let mut steps = Vec::new();
-            for clause in &clauses {
-                if let Some(cmd) = resolve_clause(clause) {
-                    steps.push(cmd);
-                } else {
-                    match run_ai_backend(clause) {
-                        Ok(cmd) => steps.push(cmd),
-                        Err(err_msg) => {
-                            steps_out.push(StepInfo {
-                                step_index: steps.len() + 1,
-                                total_steps: clauses.len(),
-                                stage: "failed".to_string(),
-                                description: "AI Backend Required".to_string(),
-                                action: None,
-                                details: Some(err_msg.clone()),
-
-                                thought: None,
-                            });
-                            return Ok(ExecutionReport {
-                                success: false,
-                                query: query.clone(),
-                                steps: steps_out,
-                                message: err_msg,
-                                requires_confirm: false,
-                                pending_step_index: None,
-                            });
-                        }
-                    }
-                }
-            }
-            MultiStepPlan { steps }
-        } else if let Some(cmd) = resolve_clause(trimmed) {
-            MultiStepPlan { steps: vec![cmd] }
-        } else {
-            match parse_plan(trimmed) {
-                Ok(p) => p,
-                Err(_) => match run_ai_backend(trimmed) {
-                    Ok(cmd) => MultiStepPlan { steps: vec![cmd] },
-                    Err(err_msg) => {
-                        steps_out.push(StepInfo {
-                            step_index: 1,
-                            total_steps: 1,
-                            stage: "failed".to_string(),
-                            description: "AI Backend Required".to_string(),
-                            action: None,
-                            details: Some(err_msg.clone()),
-
-                            thought: None,
-                        });
-                        return Ok(ExecutionReport {
-                            success: false,
-                            query: query.clone(),
-                            steps: steps_out,
-                            message: err_msg,
-                            requires_confirm: false,
-                            pending_step_index: None,
-                        });
-                    }
-                },
-            }
-        };
-
-        let total = plan.steps.len();
-        steps_out.push(StepInfo {
-            thought: None,
-            step_index: 1,
-            total_steps: total,
-            stage: "planned".to_string(),
-            description: format!("Formulated plan with {} step(s)", total),
-            action: None,
-            details: Some(format!("Clauses: {:?}", clauses)),
-        });
-
-        let mut first_error_reason: Option<String> = None;
-
-        for (idx, step) in plan.steps.iter().enumerate() {
-            let step_num = idx + 1;
-            let decision = SafetyGate::evaluate(step);
-            match decision {
-                SafetyDecision::Block { reason } => {
-                    steps_out.push(StepInfo {
-                        thought: step.thought.clone(),
-                        step_index: step_num,
-                        total_steps: total,
-                        stage: "blocked".to_string(),
-                        description: format!("Step {} blocked by Safety Policy", step_num),
-                        action: Some(action_type_to_str(step.action).to_string()),
-                        details: Some(reason.clone()),
-                    });
-                    return Ok(ExecutionReport {
-                        success: false,
-                        query: query.clone(),
-                        steps: steps_out,
-                        message: format!("Step {} blocked: {}", step_num, reason),
-                        requires_confirm: false,
-                        pending_step_index: None,
-                    });
-                }
-                SafetyDecision::RequireConfirm { reason } => {
-                    if exec_mode != ExecutionMode::DryRun {
-                        *pending_exec.lock().unwrap() = Some((step.clone(), exec_mode));
-                        steps_out.push(StepInfo {
-                            thought: step.thought.clone(),
-                            step_index: step_num,
-                            total_steps: total,
-                            stage: "awaiting_confirm".to_string(),
-                            description: format!("Step {} requires user confirmation", step_num),
-                            action: Some(action_type_to_str(step.action).to_string()),
-                            details: Some(reason.clone()),
-                        });
-                        return Ok(ExecutionReport {
-                            success: true,
-                            query: query.clone(),
-                            steps: steps_out,
-                            message: format!("Confirm step {}: {}", step_num, reason),
-                            requires_confirm: true,
-                            pending_step_index: Some(step_num),
-                        });
-                    }
-                }
-                SafetyDecision::AllowSilent => {}
-            }
-
-            if exec_mode == ExecutionMode::Interactive {
-                let target_str = step.target.as_deref().unwrap_or("").to_string();
-                *pending_exec.lock().unwrap() = Some((step.clone(), exec_mode));
-                steps_out.push(StepInfo {
-                    thought: step.thought.clone(),
-                    step_index: step_num,
-                    total_steps: total,
-                    stage: "awaiting_confirm".to_string(),
-                    description: format!("Interactive mode: Step {} confirmation", step_num),
-                    action: Some(action_type_to_str(step.action).to_string()),
-                    details: Some(format!("Target: {}", target_str)),
-                });
-                return Ok(ExecutionReport {
-                    success: true,
-                    query: query.clone(),
-                    steps: steps_out,
-                    message: format!("Confirm step {} of {}", step_num, total),
-                    requires_confirm: true,
-                    pending_step_index: Some(step_num),
-                });
-            }
-
-            let dry_run = exec_mode == ExecutionMode::DryRun;
-            let res = executor.execute(step, dry_run);
-            let (stage, details) = format_execution_result(res);
-            if (stage == "failed" || stage == "blocked") && first_error_reason.is_none() {
-                first_error_reason = Some(details.clone());
-            }
-
+        // 2. Real Agent Engine: Goose ACP or Standard Tool-Calling Loop + MCP
+        let dry_run = exec_mode == ExecutionMode::DryRun;
+        if cfg.backend == "goose_acp" {
+            let goose_bin = GooseAcpRunner::find_goose_binary().ok_or_else(|| {
+                "Goose CLI is not installed. Click 'Install Goose ACP' in Settings.".to_string()
+            })?;
+            let out = GooseAcpRunner::run_task(
+                &goose_bin,
+                trimmed,
+                Some(&cfg.goose_provider),
+                Some(&cfg.goose_model),
+            )?;
             steps_out.push(StepInfo {
-                thought: step.thought.clone(),
-                step_index: step_num,
-                total_steps: total,
-                stage,
-                description: format!("Step {}: {}", step_num, action_type_to_str(step.action)),
-                action: Some(action_type_to_str(step.action).to_string()),
-                details: Some(details),
+                thought: Some("Executed via Goose ACP".to_string()),
+                step_index: 1,
+                total_steps: 1,
+                stage: "executed".to_string(),
+                description: "Goose ACP Agent".to_string(),
+                action: Some("goose_acp".to_string()),
+                details: Some(out.clone()),
+            });
+            return Ok(ExecutionReport {
+                success: true,
+                query,
+                steps: steps_out,
+                message: out,
+                requires_confirm: false,
+                pending_step_index: None,
             });
         }
 
-        let all_succeeded = first_error_reason.is_none();
-        let summary_message = first_error_reason
-            .unwrap_or_else(|| "Plan executed successfully".to_string());
+        let (endpoint_base, api_key, model_name) = match cfg.backend.as_str() {
+            "ollama" => (cfg.ollama_url.clone(), String::new(), cfg.ollama_model.clone()),
+            "openai_compat" => (
+                cfg.openai_api_base.clone(),
+                cfg.openai_api_key.clone(),
+                cfg.openai_api_model.clone(),
+            ),
+            _ => ("http://127.0.0.1:8080".to_string(), String::new(), "local-gguf".to_string()),
+        };
+
+        let (loop_steps, summary, pending_cmd) = ToolCallingAgent::run_tool_loop(
+            trimmed,
+            &endpoint_base,
+            &api_key,
+            &model_name,
+            &cfg.mcp_servers,
+            &executor,
+            dry_run,
+            8,
+        )?;
+
+        let total = loop_steps.len().max(1);
+        for s in loop_steps {
+            steps_out.push(StepInfo {
+                thought: s.thought,
+                step_index: s.step_index,
+                total_steps: total,
+                stage: s.stage,
+                description: format!("Step {}: {}", s.step_index, s.action_label),
+                action: Some(s.action_label),
+                details: Some(s.details),
+            });
+        }
+
+        if let Some(cmd) = pending_cmd {
+            *pending_exec.lock().unwrap() = Some((cmd, exec_mode));
+            return Ok(ExecutionReport {
+                success: true,
+                query,
+                steps: steps_out,
+                message: summary,
+                requires_confirm: true,
+                pending_step_index: Some(total),
+            });
+        }
 
         Ok(ExecutionReport {
-            success: all_succeeded,
+            success: true,
             query,
             steps: steps_out,
-            message: summary_message,
+            message: summary,
             requires_confirm: false,
             pending_step_index: None,
         })
@@ -1154,6 +1024,42 @@ async fn delete_memory(id_or_key: String) -> Result<bool, String> {
         .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
+#[tauri::command]
+async fn get_goose_status() -> Result<GooseStatus, String> {
+    tauri::async_runtime::spawn_blocking(GooseAcpRunner::status)
+        .await
+        .map_err(|e| format!("Task execution failed: {}", e))
+}
+
+#[tauri::command]
+async fn install_goose_cli() -> Result<GooseStatus, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        GooseAcpRunner::install_from_github()?;
+        Ok(GooseAcpRunner::status())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
+async fn list_mcp_tools(server_name: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cfg = AppConfig::load();
+        let srv = cfg
+            .mcp_servers
+            .into_iter()
+            .find(|s| s.name == server_name)
+            .ok_or_else(|| format!("MCP server '{}' not found", server_name))?;
+        let mut client = McpClient::new(srv);
+        client.start()?;
+        client.initialize()?;
+        let tools = client.list_tools()?;
+        Ok(tools.into_iter().map(|t| t.name).collect())
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
 // ---------------------------------------------------------
 // Main Entrypoint
 // ---------------------------------------------------------
@@ -1264,7 +1170,10 @@ fn main() {
             run_agent_plan,
             list_memories,
             save_memory,
-            delete_memory
+            delete_memory,
+            get_goose_status,
+            install_goose_cli,
+            list_mcp_tools
         ])
         .run(tauri::generate_context!())
         .expect("error while running SilentExec Desktop application");

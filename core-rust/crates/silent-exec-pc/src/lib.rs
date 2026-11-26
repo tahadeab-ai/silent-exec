@@ -1,5 +1,6 @@
 //! SilentExec PC Executor, Arabic/English Fuzzy Indexer, Inference & LAN Bridge Library
 
+pub mod agent_engine;
 pub mod bridge;
 pub mod config;
 pub mod executor;
@@ -16,6 +17,9 @@ pub mod skills;
 pub mod ui_win32;
 pub mod updater;
 
+pub use agent_engine::{
+    AgentTurnDecision, GooseAcpRunner, GooseStatus, ToolCallingAgent, ToolLoopStep,
+};
 pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
 pub use config::{AppConfig, McpServerConfig};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
@@ -2084,5 +2088,74 @@ mod tests {
         assert_eq!(cmd.thought.as_deref(), Some("Open first video result"));
         assert_eq!(cmd.action, ActionType::UiClick);
         assert_eq!(cmd.target.as_deref(), Some("#0"));
+    }
+
+    #[test]
+    fn test_80_tool_calling_agent_and_mcp_schema() {
+        let mcp_tool = McpTool {
+            name: "read_file".to_string(),
+            description: Some("Read file contents".to_string()),
+            input_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } }
+            })),
+        };
+        let lookup = vec![("filesystem", &mcp_tool)];
+        let schema = ToolCallingAgent::build_tools_schema(&lookup);
+        let arr = schema.as_array().expect("tools should be JSON array");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[1]["function"]["name"], "mcp__filesystem__read_file");
+
+        let resp_pc = r#"{
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "execute_pc_action",
+                            "arguments": "{\"thought\":\"Open Downloads\",\"action\":\"open_folder\",\"target\":\"Downloads\",\"platform\":\"pc\",\"confidence\":0.96}"
+                        }
+                    }]
+                }
+            }]
+        }"#;
+        match ToolCallingAgent::parse_response(resp_pc, &lookup).expect("should parse tool call") {
+            AgentTurnDecision::Action(cmd) => {
+                assert_eq!(cmd.action, ActionType::OpenFolder);
+                assert_eq!(cmd.target.as_deref(), Some("Downloads"));
+            }
+            other => panic!("Expected Action, got {:?}", other),
+        }
+
+        let resp_mcp = r#"{
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {
+                            "name": "mcp__filesystem__read_file",
+                            "arguments": "{\"path\":\"README.md\"}"
+                        }
+                    }]
+                }
+            }]
+        }"#;
+        match ToolCallingAgent::parse_response(resp_mcp, &lookup).expect("should parse mcp call") {
+            AgentTurnDecision::McpCall {
+                server_name,
+                tool_name,
+                arguments,
+                ..
+            } => {
+                assert_eq!(server_name, "filesystem");
+                assert_eq!(tool_name, "read_file");
+                assert_eq!(arguments["path"], "README.md");
+            }
+            other => panic!("Expected McpCall, got {:?}", other),
+        }
     }
 }

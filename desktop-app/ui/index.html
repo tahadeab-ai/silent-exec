@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title data-i18n="app_title">SilentExec v2.0.0</title>
+  <title data-i18n="app_title">SilentExec v3.0.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
         </div>
         <div class="brand-meta">
           <span class="brand-name">SilentExec</span>
-          <span class="brand-version">v2.0.0</span>
+          <span class="brand-version">v3.0.0</span>
         </div>
       </div>
 
@@ -400,6 +400,10 @@
             </div>
 
             <div class="brain-cards-grid" id="brainCardsGrid">
+              <button class="brain-card" data-backend="goose_acp" type="button">
+                <div class="brain-card-title">Goose ACP</div>
+                <div class="brain-card-desc" data-i18n="brain_goose_desc">Linux Foundation Rust Agent (85+ مزود + MCP)</div>
+              </button>
               <button class="brain-card active" data-backend="local_llama" type="button">
                 <div class="brain-card-title" data-i18n="brain_local_title">Local GGUF</div>
                 <div class="brain-card-desc" data-i18n="brain_local_desc">خصوصية تامة عبر llama-server</div>
@@ -410,8 +414,18 @@
               </button>
               <button class="brain-card" data-backend="openai_compat" type="button">
                 <div class="brain-card-title">OpenAI-Compatible</div>
-                <div class="brain-card-desc" data-i18n="brain_api_desc">OpenAI / DeepSeek / Groq</div>
+                <div class="brain-card-desc" data-i18n="brain_api_desc">Gemini / Groq / OpenRouter / OpenAI</div>
               </button>
+            </div>
+
+            <div class="inline-form-panel mt-16" id="gooseConfigBox" style="display: none;">
+              <div class="card-row-between">
+                <div>
+                  <div class="setting-label">Goose ACP Runtime (aaif-goose/goose)</div>
+                  <div class="setting-hint" id="gooseStatusText">Checking Goose CLI...</div>
+                </div>
+                <button class="btn btn-primary btn-sm" id="installGooseBtn" type="button">Install / Update Goose</button>
+              </div>
             </div>
 
             <div class="inline-form-panel mt-16" id="ollamaConfigBox" style="display: none;">
