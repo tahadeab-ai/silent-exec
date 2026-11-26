@@ -114,7 +114,7 @@ class CloudApiClient(
                         put("type", "string")
                         put("enum", JSONArray(listOf(
                             "ui_click", "ui_type", "ui_scroll", "open_android_app", "open_url",
-                            "press_back", "press_home", "wait", "set_volume", "create_note",
+                            "ui_back", "ui_home", "set_volume", "create_note",
                             "delete_file", "reply", "done"
                         )))
                     })

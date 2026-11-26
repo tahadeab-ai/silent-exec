@@ -29,8 +29,10 @@ import com.silentexec.android.core.InferenceSource
 import com.silentexec.android.core.ThemeMode
 import com.silentexec.android.exec.AccessibilityAgentEngine
 import com.silentexec.android.exec.ActionPerformer
+import com.silentexec.android.exec.AgentActionResult
 import com.silentexec.android.exec.AgentTraceEvent
 import com.silentexec.android.exec.AndroidActionExecutor
+import com.silentexec.android.exec.AndroidExecutionResult
 import com.silentexec.android.exec.SilentExecAccessibilityService
 import com.silentexec.android.net.AppUpdater
 import com.silentexec.android.net.DownloadStatus
@@ -48,6 +50,15 @@ import com.silentexec.android.ui.theme.SilentExecTheme
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        const val ACTION_TRIGGER_MIC = "com.silentexec.android.ACTION_TRIGGER_MIC"
+        const val ACTION_EXECUTE_COMMAND = "com.silentexec.android.ACTION_EXECUTE_COMMAND"
+        const val EXTRA_COMMAND = "extra_command"
+
+        @Volatile
+        var activeInstance: MainActivity? = null
+    }
 
     private lateinit var settings: AppSettings
     private lateinit var executor: AndroidActionExecutor
@@ -78,6 +89,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activeInstance = this
         settings = AppSettings(this)
         settings.applyLocale()
         settings.applyTheme()
@@ -147,6 +159,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (activeInstance === this) {
+            activeInstance = null
+        }
         activeEngine?.cancel()
         voiceInputHelper?.destroy()
         overlayController.hide()
@@ -181,7 +196,14 @@ class MainActivity : AppCompatActivity() {
 
         val engine = AccessibilityAgentEngine(
             settings = settings,
-            performer = ActionPerformer { cmd, mode -> executor.execute(cmd, mode) },
+            performer = ActionPerformer { cmd, _ ->
+                when (val res = executor.execute(cmd, confirmed = true)) {
+                    is AndroidExecutionResult.Success -> AgentActionResult(true, res.details)
+                    is AndroidExecutionResult.ConfirmationRequired -> AgentActionResult(false, res.reason)
+                    is AndroidExecutionResult.Blocked -> AgentActionResult(false, res.reason)
+                    is AndroidExecutionResult.Error -> AgentActionResult(false, res.message)
+                }
+            },
             llamaEngine = llamaEngine
         )
         activeEngine = engine
@@ -263,6 +285,14 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    fun cancelAgentLoop() {
+        mainHandler.post { stopAgent() }
+    }
+
+    fun handleCommandFromExternal(command: String) {
+        mainHandler.post { runAgentGoal(command) }
     }
 
     private fun stopAgent() {

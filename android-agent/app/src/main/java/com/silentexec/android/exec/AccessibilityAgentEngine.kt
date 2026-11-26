@@ -28,8 +28,13 @@ fun interface ScreenObserver {
     fun observe(): ScreenObservation
 }
 
+data class AgentActionResult(
+    val success: Boolean,
+    val message: String
+)
+
 fun interface ActionPerformer {
-    fun perform(command: ActionCommand, mode: ExecutionMode): ExecutionResult
+    fun perform(command: ActionCommand, mode: ExecutionMode): AgentActionResult
 }
 
 sealed interface AgentTraceEvent {
@@ -57,7 +62,7 @@ sealed interface AgentTraceEvent {
     data class Acted(
         val step: Int,
         val command: ActionCommand,
-        val result: ExecutionResult
+        val result: AgentActionResult
     ) : AgentTraceEvent
 
     data class Finished(val summary: String, val stepsTaken: Int) : AgentTraceEvent
@@ -209,13 +214,13 @@ class AccessibilityAgentEngine(
         cmd: ActionCommand,
         onEvent: (AgentTraceEvent) -> Unit
     ): Boolean {
-        val gateDecision = SafetyGate.evaluate(cmd, settings.executionMode)
+        val gateDecision = SafetyGate.evaluate(cmd)
         val sensitiveReason = when {
             gateDecision is SafetyDecision.Block -> {
                 onEvent(AgentTraceEvent.Failed(gateDecision.reason))
                 return false
             }
-            gateDecision is SafetyDecision.RequireConfirmation -> gateDecision.reason
+            gateDecision is SafetyDecision.RequireConfirm -> gateDecision.reason
             isSensitiveUiTarget(cmd) -> "Confirm sensitive action: ${cmd.action.wireName} (${cmd.target.orEmpty()})"
             else -> null
         } ?: return true
@@ -258,16 +263,18 @@ class AccessibilityAgentEngine(
         }
 
         if (settings.inferenceSource == InferenceSource.LAN_BRIDGE) {
-            val client = bridgeClient ?: LanBridgeClient(
+            val client = bridgeClient ?: LanBridgeClient()
+            val res = client.executeRemote(
                 host = settings.bridgeHost,
                 port = settings.bridgePort,
-                token = settings.bridgeToken
+                token = settings.bridgeToken,
+                prompt = prompt,
+                dryRun = settings.executionMode == ExecutionMode.DRY_RUN
             )
-            val res = client.sendCommand(prompt)
             return ActionJson.toJson(
                 ActionCommand(
                     action = ActionType.REPLY,
-                    target = res.getOrThrow().message,
+                    target = res.getOrThrow(),
                     platform = Platform.ANDROID,
                     confidence = 1.0
                 )
@@ -315,8 +322,8 @@ class AccessibilityAgentEngine(
             ActionType.UI_SCROLL,
             ActionType.OPEN_ANDROID_APP,
             ActionType.OPEN_URL,
-            ActionType.PRESS_BACK,
-            ActionType.PRESS_HOME
+            ActionType.UI_BACK,
+            ActionType.UI_HOME
         )
 
         private val SENSITIVE_KEYWORDS = listOf(

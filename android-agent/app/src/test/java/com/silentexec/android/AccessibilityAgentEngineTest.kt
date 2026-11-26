@@ -8,8 +8,8 @@ import com.silentexec.android.core.InferenceSource
 import com.silentexec.android.core.Platform
 import com.silentexec.android.exec.AccessibilityAgentEngine
 import com.silentexec.android.exec.ActionPerformer
+import com.silentexec.android.exec.AgentActionResult
 import com.silentexec.android.exec.AgentTraceEvent
-import com.silentexec.android.exec.ExecutionResult
 import com.silentexec.android.exec.ScreenObservation
 import com.silentexec.android.exec.ScreenObserver
 import com.silentexec.android.nlp.CloudApiClient
@@ -41,7 +41,7 @@ class AccessibilityAgentEngineTest {
 
         val performer = ActionPerformer { cmd, _ ->
             screenStep++
-            ExecutionResult(true, "Executed ${cmd.action.wireName}")
+            AgentActionResult(true, "Executed ${cmd.action.wireName}")
         }
 
         var turn = 0
@@ -89,7 +89,7 @@ class AccessibilityAgentEngineTest {
             observer = ScreenObserver { ScreenObservation("com.whatsapp", listOf("[0] button: Send [900,1800]")) },
             performer = ActionPerformer { _, _ ->
                 performed = true
-                ExecutionResult(true, "Sent")
+                AgentActionResult(true, "Sent")
             },
             customDecider = {
                 """{"thought":"Tap Send button","action":"ui_click","target":"Send","platform":"android","confidence":0.92}"""
