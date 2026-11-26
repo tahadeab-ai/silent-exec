@@ -278,11 +278,12 @@ class AndroidActionExecutor(private val context: Context? = null) {
     }
 
     private fun handleOpenUrl(target: String): AndroidExecutionResult {
-        val uriString = if (!target.startsWith("http://") && !target.startsWith("https://")) {
-            "https://$target"
-        } else {
-            target
-        }
+        val uriString = com.silentexec.android.nlp.PromptFormatter.normalizeOpenUrlTarget(target, null)
+            ?: if (!target.startsWith("http://") && !target.startsWith("https://")) {
+                "https://$target"
+            } else {
+                target
+            }
 
         val ctx = context ?: return AndroidExecutionResult.Success(
             action = "open_url",

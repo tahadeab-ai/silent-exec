@@ -1,5 +1,5 @@
 //! Deterministic Compound & Built-In Skills Router for SilentExec PC
-//! Inspired by Hermes Agent & Goose: resolves everyday multi-step tasks
+//! Built-in deterministic skills for SilentExec: resolves everyday multi-step tasks
 //! (YouTube Search, Web Search, and custom user routines in `skills.json`)
 //! before falling back to local LLM inference.
 

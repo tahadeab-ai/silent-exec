@@ -2,11 +2,13 @@ package com.silentexec.android.nlp
 
 import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ActionJson
+import com.silentexec.android.core.ActionType
 import com.silentexec.android.core.MemoryItem
 import com.silentexec.android.core.MemoryStore
 import com.silentexec.android.core.MultiStepPlan
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import java.net.URLEncoder
 
 /**
  * Result wrapper for parsed LLM outputs: either a MultiStepPlan or a single ActionCommand.
@@ -188,7 +190,7 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
             throw IllegalArgumentException("Conversational suffix text rejected: '$suffix'")
         }
 
-        val candidate = cleaned.substring(startIdx, endIdx + 1)
+        val candidate = sanitizeDuplicateJsonKeys(cleaned.substring(startIdx, endIdx + 1))
 
         // Validate JSON object structure
         val element = Json.parseToJsonElement(candidate)
@@ -198,21 +200,175 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
     }
 
     /**
-     * Parses either a `{"steps": [...]}` MultiStepPlan or a single ActionCommand JSON.
+     * Deduplicates repeated keys within any JSON object (e.g. small edge models emitting
+     * `"platform"` twice in the same object), preserving the last occurrence.
+     */
+    fun sanitizeDuplicateJsonKeys(jsonStr: String): String {
+        val len = jsonStr.length
+        var pos = 0
+
+        fun skipWs() {
+            while (pos < len && jsonStr[pos].isWhitespace()) pos++
+        }
+
+        fun readString(): String {
+            val start = pos
+            pos++ // opening quote
+            while (pos < len) {
+                val c = jsonStr[pos]
+                if (c == '\\') {
+                    pos += 2
+                } else if (c == '"') {
+                    pos++
+                    return jsonStr.substring(start, pos)
+                } else {
+                    pos++
+                }
+            }
+            return jsonStr.substring(start)
+        }
+
+        fun unescapeJsonKey(quoted: String): String {
+            if (quoted.length < 2) return quoted
+            return quoted.substring(1, quoted.length - 1)
+        }
+
+        fun sanitizeValue(): String {
+            skipWs()
+            if (pos >= len) return ""
+            return when (jsonStr[pos]) {
+                '{' -> sanitizeObject()
+                '[' -> sanitizeArray()
+                '"' -> readString()
+                else -> {
+                    val start = pos
+                    while (pos < len && jsonStr[pos] !in charArrayOf(',', '}', ']', ' ', '\t', '\r', '\n')) {
+                        pos++
+                    }
+                    jsonStr.substring(start, pos)
+                }
+            }
+        }
+
+        fun sanitizeObject(): String {
+            pos++ // '{'
+            skipWs()
+            if (pos < len && jsonStr[pos] == '}') {
+                pos++
+                return "{}"
+            }
+            val entries = LinkedHashMap<String, Pair<String, String>>()
+            while (pos < len) {
+                skipWs()
+                if (pos >= len || jsonStr[pos] == '}') {
+                    if (pos < len) pos++
+                    break
+                }
+                if (jsonStr[pos] != '"') {
+                    // Fallback: return original if not a standard object
+                    return jsonStr
+                }
+                val rawKey = readString()
+                val keyName = unescapeJsonKey(rawKey)
+                skipWs()
+                if (pos < len && jsonStr[pos] == ':') pos++
+                val value = sanitizeValue()
+                entries[keyName] = rawKey to value
+                skipWs()
+                if (pos < len && jsonStr[pos] == ',') {
+                    pos++
+                } else if (pos < len && jsonStr[pos] == '}') {
+                    pos++
+                    break
+                }
+            }
+            return entries.values.joinToString(prefix = "{", postfix = "}", separator = ",") { (k, v) ->
+                "$k:$v"
+            }
+        }
+
+        fun sanitizeArray(): String {
+            pos++ // '['
+            skipWs()
+            if (pos < len && jsonStr[pos] == ']') {
+                pos++
+                return "[]"
+            }
+            val items = mutableListOf<String>()
+            while (pos < len) {
+                skipWs()
+                if (pos >= len || jsonStr[pos] == ']') {
+                    if (pos < len) pos++
+                    break
+                }
+                items.add(sanitizeValue())
+                skipWs()
+                if (pos < len && jsonStr[pos] == ',') {
+                    pos++
+                } else if (pos < len && jsonStr[pos] == ']') {
+                    pos++
+                    break
+                }
+            }
+            return items.joinToString(prefix = "[", postfix = "]", separator = ",")
+        }
+
+        return runCatching { sanitizeValue() }.getOrElse { jsonStr }
+    }
+
+    /**
+     * Normalizes `open_url` targets: if `target` is a plain search phrase (e.g. "ابحث عن nlp")
+     * rather than a URL or domain, converts it to a YouTube or Google search URL.
+     */
+    fun normalizeOpenUrlTarget(target: String?, thought: String?): String? {
+        val trimmed = target?.trim() ?: return null
+        if (trimmed.isEmpty()) return trimmed
+        if (trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            return trimmed
+        }
+        val domainRegex = Regex("^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}(/.*)?$")
+        if (!trimmed.contains(' ') && domainRegex.matches(trimmed)) {
+            return "https://$trimmed"
+        }
+        val cleanedQuery = trimmed.replace(
+            Regex("^(?:ابحث عن|بحث عن|ابحث|search for|search)\\s+", RegexOption.IGNORE_CASE),
+            ""
+        ).trim().ifEmpty { trimmed }
+        val encoded = URLEncoder.encode(cleanedQuery, "UTF-8")
+        val thoughtLower = thought?.lowercase().orEmpty()
+        return if (thoughtLower.contains("youtube") || thoughtLower.contains("يوتيوب")) {
+            "https://www.youtube.com/results?search_query=$encoded"
+        } else {
+            "https://www.google.com/search?q=$encoded"
+        }
+    }
+
+    fun normalizeCommand(cmd: ActionCommand): ActionCommand {
+        if (cmd.action != ActionType.OPEN_URL) return cmd
+        val normalized = normalizeOpenUrlTarget(cmd.target, cmd.thought)
+        return if (normalized != cmd.target) cmd.copy(target = normalized) else cmd
+    }
+
+    /**
+     * Parses either a `{"steps": [...]}` MultiStepPlan or a single ActionCommand JSON
+     * using the lenient RuntimeActionJson parser so extra LLM keys never crash execution.
      */
     fun parsePlanOrSingleAction(rawOutput: String): PlanOrAction {
         val jsonStr = extractActionJson(rawOutput)
 
         // 1. Try MultiStepPlan
-        val plan = runCatching { ActionJson.planFromJson(jsonStr) }.getOrNull()
+        val plan = runCatching { ActionJson.planFromLlmJson(jsonStr) }.getOrNull()
         if (plan != null) {
-            return PlanOrAction.Plan(plan)
+            val normalizedPlan = MultiStepPlan(plan.steps.map { normalizeCommand(it) })
+            return PlanOrAction.Plan(normalizedPlan)
         }
 
         // 2. Try single ActionCommand
-        val single = runCatching { ActionJson.fromJson(jsonStr) }.getOrNull()
+        val single = runCatching { ActionJson.fromLlmJson(jsonStr) }.getOrNull()
         if (single != null) {
-            return PlanOrAction.Action(single)
+            return PlanOrAction.Action(normalizeCommand(single))
         }
 
         throw IllegalArgumentException("JSON is neither a valid MultiStepPlan nor ActionCommand: '$jsonStr'")

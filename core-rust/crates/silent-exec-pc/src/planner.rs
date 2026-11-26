@@ -323,7 +323,7 @@ pub fn parse_plan(output_or_json: &str) -> Result<MultiStepPlan, String> {
         Err(_) => output_or_json.trim().to_string(),
     };
 
-    MultiStepPlan::from_any_json(&json_str)
+    MultiStepPlan::from_any_llm_json(&json_str)
 }
 
 /// Plan Engine that sequentially executes multi-step plans honoring `ExecutionMode`.

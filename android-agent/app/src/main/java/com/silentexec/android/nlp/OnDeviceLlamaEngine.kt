@@ -164,7 +164,7 @@ class OnDeviceLlamaEngine {
                 throw IllegalStateException("فشل تشغيل النموذج المحلي: ${t.message ?: "Unknown error"}", t)
             }
             val cleanJson = PromptFormatter.extractActionJson(rawOutput)
-            ActionJson.fromJson(cleanJson)
+            PromptFormatter.normalizeCommand(ActionJson.fromLlmJson(cleanJson))
         }
     }
 }

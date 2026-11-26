@@ -229,7 +229,7 @@ impl AiBackend {
         };
 
         let clean_json = extract_action_json(&raw_output)?;
-        ActionCommand::from_json(&clean_json)
+        ActionCommand::from_llm_json(&clean_json)
     }
 
     /// Builds payload for Ollama /api/chat with format: "json" and injected memories
@@ -481,7 +481,7 @@ impl LlamaBackend {
         };
 
         let clean_json = extract_action_json(&raw_output)?;
-        ActionCommand::from_json(&clean_json)
+        ActionCommand::from_llm_json(&clean_json)
     }
 
     /// Generates the canonical JSON request payload for llama-server `/completion` endpoint.

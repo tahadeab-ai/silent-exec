@@ -10,15 +10,15 @@
   // --- Complete Localization Dictionaries ---
   const I18N = {
     ar: {
-      app_title: 'SilentExec Desktop v1.2.0',
-      version_label: 'الإصدار الحالي: v1.2.0 (Windows x86_64)',
+      app_title: 'SilentExec Desktop v2.0.0',
+      version_label: 'الإصدار الحالي: v2.0.0 (Windows x86_64)',
       thought_label: 'التفكير',
       btn_install_update: '⬇️ تحميل وتثبيت التحديث الآن',
       status_ready: 'جاهز',
       status_not_downloaded: 'غير محمّل',
       btn_manage_models: 'النماذج',
       built_in_skills_title: 'المهارات المدمجة (Built-In Native Skills)',
-      built_in_skills_desc: 'مهارات حتمية سريعة مفعّلة افتراضياً (مستوحاة من Hermes Agent و Goose).',
+      built_in_skills_desc: 'مهارات حتمية سريعة مفعّلة افتراضياً في SilentExec.',
       skills_active_badge: 'مفعّلة افتراضياً',
       mcp_presets_title: 'إضافات MCP الرسمية (تفعيل بنقرة واحدة)',
       btn_enable_preset: '+ تفعيل',
@@ -72,7 +72,7 @@
       btn_resume: 'استئناف',
       btn_activate: 'تفعيل',
       btn_delete: 'حذف',
-      memory_title: 'الذاكرة والمهارات الدائمة (Hermes Memory)',
+      memory_title: 'الذاكرة والمهارات الدائمة (ذاكرة SilentExec)',
       memory_desc: 'معلومات وتفضيلات يحفظها الوكيل تلقائياً في memory.json ويحقنها في السياق لتخصيص الأوامر.',
       btn_add_memory: 'إضافة معلومة للذاكرة',
       memory_form_title: 'تسجيل معلومة جديدة في الذاكرة',
@@ -149,15 +149,15 @@
       quick_ex_5: 'ارجع'
     },
     en: {
-      app_title: 'SilentExec Desktop v1.2.0',
-      version_label: 'Current Version: v1.2.0 (Windows x86_64)',
+      app_title: 'SilentExec Desktop v2.0.0',
+      version_label: 'Current Version: v2.0.0 (Windows x86_64)',
       thought_label: 'Thinking',
       btn_install_update: '⬇️ Download & Install Update',
       status_ready: 'Ready',
       status_not_downloaded: 'Not Downloaded',
       btn_manage_models: 'Models',
       built_in_skills_title: 'Built-In Native Skills (Active)',
-      built_in_skills_desc: 'Deterministic fast skills enabled by default (inspired by Hermes Agent & Goose).',
+      built_in_skills_desc: 'Deterministic fast skills enabled by default in SilentExec.',
       skills_active_badge: 'Active by Default',
       mcp_presets_title: 'Official MCP Presets (1-Click Enable)',
       btn_enable_preset: '+ Enable',
@@ -186,7 +186,7 @@
       timeline_desc: 'Inspect classified steps, safety gates, and live execution outcomes.',
       status_idle: 'Ready for Commands',
       agent_stream_title: 'Smart Agent Session',
-      agent_welcome_title: 'Hermes Smart Agent Ready',
+      agent_welcome_title: 'SilentExec Smart Agent Ready',
       agent_welcome_desc: 'Execute OS actions, read/write files, summarize, and automate workflows.',
       agent_thinking: 'Formulating execution plan...',
       agent_steps_title: 'Execution Steps',
@@ -211,7 +211,7 @@
       btn_resume: 'Resume',
       btn_activate: 'Activate',
       btn_delete: 'Delete',
-      memory_title: 'Persistent Memories & Skills (Hermes Memory)',
+      memory_title: 'Persistent Memories & Skills (SilentExec Memory)',
       memory_desc: 'Facts and preferences automatically saved in memory.json and injected into context.',
       btn_add_memory: 'Add Memory',
       memory_form_title: 'Save New Memory Entry',
@@ -579,7 +579,7 @@
     });
   }
 
-  // --- Fluid Hermes / Codex Agent Session Stream ---
+  // --- Fluid SilentExec Agent Session Stream ---
   async function runAgent() {
     const promptInput = document.getElementById('promptInput');
     const query = promptInput ? promptInput.value.trim() : '';
@@ -692,7 +692,7 @@
       <div class="stream-agent-header">
         <div class="agent-identity">
           <span>⚡</span>
-          <span>Hermes Agent</span>
+          <span>SilentExec</span>
           <span class="mode-pill-top" style="font-size: 10.5px; padding: 1px 7px;">${AppState.mode}</span>
         </div>
         <span class="status-badge-live ${report.success ? 'ready' : 'blocked'}">${statusText}</span>
@@ -707,10 +707,12 @@
       report.steps.forEach((step, idx) => {
         const isDone = step.stage === 'completed';
         const isBlocked = step.stage === 'blocked';
+        const isFailed = step.stage === 'failed';
         const isConfirm = step.stage === 'awaiting_confirm';
         let pillClass = 'completed';
         let statusIcon = '✓';
         if (isBlocked) { pillClass = 'blocked'; statusIcon = '!'; }
+        if (isFailed) { pillClass = 'blocked'; statusIcon = '✕'; }
         if (isConfirm) { pillClass = 'awaiting_confirm'; statusIcon = '?'; }
 
         const actionName = step.action || step.stage;
@@ -780,8 +782,23 @@
               <span>${t.memory_saved_chip} ${escapeHtml(step.details || step.description)}</span>
             </div>
           `;
+        } else if (isFailed || isBlocked) {
+          const errText = step.details || step.description || report.message || 'Execution failed';
+          contentCardsHtml += `
+            <div class="stream-reply-card" style="border-inline-start-color: var(--accent-red, #ef4444); color: var(--text-main);">
+              <div style="font-size: 11.5px; font-weight: 700; color: var(--accent-red, #ef4444); margin-bottom: 4px;">${isBlocked ? '⛔ Blocked' : '⚠️ Failed'}: ${escapeHtml(step.description)}</div>
+              ${escapeHtml(errText)}
+            </div>
+          `;
         }
       });
+      if (!report.success && !contentCardsHtml && report.message) {
+        contentCardsHtml = `
+          <div class="stream-reply-card" style="border-inline-start-color: var(--accent-red, #ef4444);">
+            ${escapeHtml(report.message)}
+          </div>
+        `;
+      }
     } else {
       contentCardsHtml = `<p class="step-details-text">${escapeHtml(report.message || 'Done')}</p>`;
     }
@@ -1056,10 +1073,10 @@
       enDesc: 'Launch desktop apps, adjust volume, and navigate system UI.'
     },
     {
-      id: 'hermes_memory',
+      id: 'silentexec_memory',
       icon: '🧠',
-      arName: 'ذاكرة Hermes الدائمة',
-      enName: 'Hermes Persistent Memory',
+      arName: 'ذاكرة SilentExec الدائمة',
+      enName: 'SilentExec Persistent Memory',
       arDesc: 'حفظ التفضيلات والحقائق تلقائياً في memory.json.',
       enDesc: 'Persist user preferences and facts automatically in memory.json.'
     },

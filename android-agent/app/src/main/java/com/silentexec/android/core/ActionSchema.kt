@@ -200,12 +200,22 @@ data class MultiStepPlan(
     }
 }
 
+val StrictActionJson: Json = Json {
+    ignoreUnknownKeys = false
+    isLenient = false
+    encodeDefaults = true
+}
+
+val RuntimeActionJson: Json = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    coerceInputValues = true
+    encodeDefaults = true
+}
+
 object ActionJson {
-    val strict = Json {
-        ignoreUnknownKeys = false
-        isLenient = false
-        encodeDefaults = true
-    }
+    val strict: Json = StrictActionJson
+    val runtime: Json = RuntimeActionJson
 
     fun fromJson(jsonStr: String): ActionCommand {
         return strict.decodeFromString<ActionCommand>(jsonStr)
@@ -213,6 +223,14 @@ object ActionJson {
 
     fun planFromJson(jsonStr: String): MultiStepPlan {
         return strict.decodeFromString<MultiStepPlan>(jsonStr)
+    }
+
+    fun fromLlmJson(jsonStr: String): ActionCommand {
+        return runtime.decodeFromString<ActionCommand>(jsonStr)
+    }
+
+    fun planFromLlmJson(jsonStr: String): MultiStepPlan {
+        return runtime.decodeFromString<MultiStepPlan>(jsonStr)
     }
 
     fun toJson(cmd: ActionCommand): String {

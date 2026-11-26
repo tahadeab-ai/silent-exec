@@ -143,7 +143,7 @@ object SkillStore {
 }
 
 /**
- * Deterministic Compound & Built-In Skills Router for SilentExec Android (inspired by Hermes Agent & Goose).
+ * Deterministic Compound & Built-In Skills Router for SilentExec Android.
  * Runs BEFORE weak local LLM weights to resolve multi-step intents (YouTube Search, Web Search,
  * and custom user routines in skills.json) cleanly in Arabic (Yemeni + MSA) and English.
  */

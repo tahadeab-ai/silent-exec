@@ -29,7 +29,7 @@ pub enum ActionType {
     UiHome,
     // ReAct Loop Termination
     Done,
-    // Hermes / Content Generation & Agent Tools
+    // SilentExec Content Generation & Agent Tools
     Reply,
     ReadFile,
     WriteFile,
@@ -140,6 +140,46 @@ impl ActionCommand {
         Ok(cmd)
     }
 
+    /// Parses an `ActionCommand` from raw LLM JSON output:
+    /// strips unknown keys (such as `"index": 10`) safely, handles duplicate keys via
+    /// `serde_json::Value` object map, and validates strictly through `SafetyGate::evaluate`.
+    pub fn from_llm_json(raw: &str) -> Result<Self, String> {
+        let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| "Expected JSON object for ActionCommand".to_string())?;
+
+        const KNOWN_KEYS: [&str; 7] = [
+            "thought",
+            "action",
+            "target",
+            "folder",
+            "args",
+            "platform",
+            "confidence",
+        ];
+
+        let mut filtered = serde_json::Map::new();
+        for (k, v) in obj {
+            if KNOWN_KEYS.contains(&k.as_str()) {
+                filtered.insert(k.clone(), v.clone());
+            }
+        }
+
+        let cmd: Self = serde_json::from_value(serde_json::Value::Object(filtered))
+            .map_err(|e| e.to_string())?;
+        if !(0.0..=1.0).contains(&cmd.confidence) {
+            return Err(format!(
+                "Confidence score {} is out of valid range [0.0, 1.0]",
+                cmd.confidence
+            ));
+        }
+        if let SafetyDecision::Block { reason } = SafetyGate::evaluate(&cmd) {
+            return Err(reason);
+        }
+        Ok(cmd)
+    }
+
     /// Serializes the `ActionCommand` to a canonical JSON string.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
@@ -198,6 +238,34 @@ impl MultiStepPlan {
         }
         // Fall back to single ActionCommand
         let cmd = ActionCommand::from_json(trimmed)?;
+        Ok(Self { steps: vec![cmd] })
+    }
+
+    /// Leniently parses either a `MultiStepPlan` JSON or a single `ActionCommand` JSON
+    /// from LLM output, stripping unknown keys on each step and validating via `SafetyGate`.
+    pub fn from_any_llm_json(json_str: &str) -> Result<Self, String> {
+        let trimmed = json_str.trim();
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Some(steps_arr) = value.get("steps").and_then(|v| v.as_array()) {
+                if steps_arr.is_empty() {
+                    return Err("MultiStepPlan steps array cannot be empty".to_string());
+                }
+                if steps_arr.len() > Self::MAX_STEPS {
+                    return Err(format!(
+                        "MultiStepPlan exceeds maximum step limit of {} (found {})",
+                        Self::MAX_STEPS,
+                        steps_arr.len()
+                    ));
+                }
+                let mut steps = Vec::with_capacity(steps_arr.len());
+                for step_val in steps_arr {
+                    let step_str = serde_json::to_string(step_val).map_err(|e| e.to_string())?;
+                    steps.push(ActionCommand::from_llm_json(&step_str)?);
+                }
+                return Ok(Self { steps });
+            }
+        }
+        let cmd = ActionCommand::from_llm_json(trimmed)?;
         Ok(Self { steps: vec![cmd] })
     }
 
@@ -1267,5 +1335,22 @@ mod tests {
         assert_eq!(mem_cmd.action, ActionType::MemorySave);
         assert_eq!(mem_cmd.action.tier(), SafetyTier::Tier1Silent);
         assert_eq!(SafetyGate::evaluate(&mem_cmd), SafetyDecision::AllowSilent);
+    }
+
+    #[test]
+    fn test_29_lfm3_lenient_llm_json_with_duplicate_and_unknown_keys() {
+        let raw_lfm3_output = r#"{"action":"open_url","platform":"android","confidence":0.88,"thought":"navigate to YouTube","target":"ابحث عن nlp","platform":"android","index":10}"#;
+
+        // Strict schema parser still rejects unknown keys
+        assert!(ActionCommand::from_json(raw_lfm3_output).is_err());
+
+        // Lenient LLM parser strips unknown keys, handles duplicate keys, and passes SafetyGate
+        let cmd = ActionCommand::from_llm_json(raw_lfm3_output)
+            .expect("from_llm_json should parse LFM3-1.7B output cleanly");
+        assert_eq!(cmd.action, ActionType::OpenUrl);
+        assert_eq!(cmd.platform, Platform::Android);
+        assert!((cmd.confidence - 0.88).abs() < 1e-6);
+        assert_eq!(cmd.thought.as_deref(), Some("navigate to YouTube"));
+        assert_eq!(cmd.target.as_deref(), Some("ابحث عن nlp"));
     }
 }

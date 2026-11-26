@@ -1,4 +1,4 @@
-//! Hermes-Style Persistent Memory Store for SilentExec
+//! Persistent Memory Store for SilentExec
 //! Stores bounded, structured memories in `%LOCALAPPDATA%\silent-exec\memory.json`
 //! (Linux: `~/.config/silent-exec/memory.json`).
 //! Automatically injects the top relevant memories into the agent's system context before inference.

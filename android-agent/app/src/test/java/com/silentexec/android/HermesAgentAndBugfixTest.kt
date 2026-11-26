@@ -229,4 +229,20 @@ class HermesAgentAndBugfixTest {
         assertTrue(FastRuleRouter.isCompoundCommand(compoundEn))
         assertNull(FastRuleRouter.route(compoundEn))
     }
+
+    @Test
+    fun test15_lfm3DuplicateKeysExtraIndexAndOpenUrlNormalization() {
+        val rawLfm3Output =
+            """{"action":"open_url","platform":"android","confidence":0.88,"thought":"navigate to YouTube","target":"ابحث عن nlp","platform":"android","index":10}"""
+
+        val parsed = com.silentexec.android.nlp.PromptFormatter.parsePlanOrSingleAction(rawLfm3Output)
+        assertTrue(parsed is com.silentexec.android.nlp.PlanOrAction.Action)
+        val cmd = (parsed as com.silentexec.android.nlp.PlanOrAction.Action).actionCommand
+
+        assertEquals(ActionType.OPEN_URL, cmd.action)
+        assertEquals(Platform.ANDROID, cmd.platform)
+        assertEquals(0.88, cmd.confidence, 0.001)
+        assertEquals("navigate to YouTube", cmd.thought)
+        assertEquals("https://www.youtube.com/results?search_query=nlp", cmd.target)
+    }
 }

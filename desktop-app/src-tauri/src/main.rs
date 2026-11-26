@@ -461,6 +461,8 @@ async fn execute_query(
             details: Some(format!("Clauses: {:?}", clauses)),
         });
 
+        let mut first_error_reason: Option<String> = None;
+
         for (idx, step) in plan.steps.iter().enumerate() {
             let step_num = idx + 1;
             let decision = SafetyGate::evaluate(step);
@@ -534,6 +536,9 @@ async fn execute_query(
             let dry_run = exec_mode == ExecutionMode::DryRun;
             let res = executor.execute(step, dry_run);
             let (stage, details) = format_execution_result(res);
+            if (stage == "failed" || stage == "blocked") && first_error_reason.is_none() {
+                first_error_reason = Some(details.clone());
+            }
 
             steps_out.push(StepInfo {
                 thought: step.thought.clone(),
@@ -546,11 +551,15 @@ async fn execute_query(
             });
         }
 
+        let all_succeeded = first_error_reason.is_none();
+        let summary_message = first_error_reason
+            .unwrap_or_else(|| "Plan executed successfully".to_string());
+
         Ok(ExecutionReport {
-            success: true,
+            success: all_succeeded,
             query,
             steps: steps_out,
-            message: "Plan executed successfully".to_string(),
+            message: summary_message,
             requires_confirm: false,
             pending_step_index: None,
         })
@@ -606,6 +615,12 @@ async fn confirm_step(
         let dry_run = mode == ExecutionMode::DryRun;
         let res = executor.execute(&cmd, dry_run);
         let (stage, details) = format_execution_result(res);
+        let step_ok = stage != "failed" && stage != "blocked";
+        let summary_msg = if step_ok {
+            "Step executed successfully".to_string()
+        } else {
+            details.clone()
+        };
 
         steps_out.push(StepInfo {
             thought: cmd.thought.clone(),
@@ -621,10 +636,10 @@ async fn confirm_step(
         });
 
         Ok(ExecutionReport {
-            success: true,
+            success: step_ok,
             query: "Confirmed step".to_string(),
             steps: steps_out,
-            message: "Step executed successfully".to_string(),
+            message: summary_msg,
             requires_confirm: false,
             pending_step_index: None,
         })
