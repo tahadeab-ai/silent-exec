@@ -324,7 +324,7 @@ private fun TraceItemCard(item: TraceItem, isArabic: Boolean) {
                     )
                     Spacer(Modifier.width(8.dp))
                     val pkg = item.packageName.substringAfterLast('.').ifBlank { "screen" }
-                    val changedTag = when (item.previousScreenChanged) {
+                    val changedTag = when (item.screenChanged) {
                         true -> if (isArabic) " · تغيرت الشاشة" else " · screen updated"
                         false -> if (isArabic) " · لم تتغير الشاشة" else " · unchanged"
                         null -> ""

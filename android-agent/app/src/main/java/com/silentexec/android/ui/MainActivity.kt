@@ -399,9 +399,9 @@ class MainActivity : AppCompatActivity() {
         val filename = model.release.filename
         updateModelStatus(filename, DownloadStatus.DOWNLOADING, progress = 0)
         thread(name = "gguf-download") {
-            val res = modelDownloader.downloadModelResumable(
-                model = model.release,
-                onProgress = { state ->
+            val res = modelDownloader.downloadModelItemWithState(
+                item = model.release,
+                onStateUpdate = { state ->
                     val pct = if (state.totalBytes > 0) ((state.downloadedBytes * 100) / state.totalBytes).toInt() else 0
                     mainHandler.post {
                         updateModelStatus(filename, state.status, pct, state.speedMBps)
@@ -508,7 +508,7 @@ class MainActivity : AppCompatActivity() {
             mainHandler.post {
                 uiState.updateDownloadProgress = null
                 res.fold(
-                    onSuccess = { apk -> appUpdater.triggerApkInstall(apk) },
+                    onSuccess = { appUpdater.installApk(it) },
                     onFailure = { e -> uiState.updateMessage = "✕ ${e.message ?: "Download failed"}" }
                 )
             }
