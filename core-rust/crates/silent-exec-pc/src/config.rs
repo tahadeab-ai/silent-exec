@@ -52,6 +52,31 @@ pub struct McpServerConfig {
     pub enabled: bool,
 }
 
+impl McpServerConfig {
+    /// Returns a normalized lowercase name for deduplication.
+    #[must_use]
+    pub fn normalized_name(&self) -> String {
+        self.name.trim().to_ascii_lowercase()
+    }
+
+    /// Returns a normalized `command + args` signature for deduplication.
+    #[must_use]
+    pub fn normalized_signature(&self) -> String {
+        let cmd = self.command.trim().to_ascii_lowercase();
+        let args: Vec<&str> = self
+            .args
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .collect();
+        if args.is_empty() {
+            cmd
+        } else {
+            format!("{} {}", cmd, args.join(" "))
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppConfig {
     #[serde(default = "default_language")]
@@ -169,8 +194,46 @@ impl AppConfig {
     pub fn load_from(path: &Path) -> Result<Self, String> {
         let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read config file {}: {}", path.display(), e))?;
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Invalid config JSON structure {}: {}", path.display(), e))
+        let mut cfg: Self = serde_json::from_str(&content)
+            .map_err(|e| format!("Invalid config JSON structure {}: {}", path.display(), e))?;
+        cfg.deduplicate_mcp_servers();
+        Ok(cfg)
+    }
+
+    /// Deduplicates `mcp_servers` by normalized name or normalized command+args signature.
+    pub fn deduplicate_mcp_servers(&mut self) {
+        let mut seen_names = std::collections::HashSet::new();
+        let mut seen_sigs = std::collections::HashSet::new();
+        self.mcp_servers.retain(|srv| {
+            let name_key = srv.normalized_name();
+            let sig_key = srv.normalized_signature();
+            if name_key.is_empty() || seen_names.contains(&name_key) || seen_sigs.contains(&sig_key)
+            {
+                return false;
+            }
+            seen_names.insert(name_key);
+            seen_sigs.insert(sig_key);
+            true
+        });
+    }
+
+    /// Inserts or updates an MCP server without creating duplicate name or command+args entries.
+    pub fn upsert_mcp_server(&mut self, server: McpServerConfig) {
+        let target_name = server.normalized_name();
+        let target_sig = server.normalized_signature();
+        if let Some(existing) = self
+            .mcp_servers
+            .iter_mut()
+            .find(|s| s.normalized_name() == target_name || s.normalized_signature() == target_sig)
+        {
+            existing.name = server.name;
+            existing.command = server.command;
+            existing.args = server.args;
+            existing.enabled = server.enabled;
+        } else {
+            self.mcp_servers.push(server);
+        }
+        self.deduplicate_mcp_servers();
     }
 
     /// Persists configuration to default location.
@@ -237,5 +300,48 @@ impl AppConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deduplicate_mcp_servers_by_signature_and_name() {
+        let mut cfg = AppConfig::default();
+        cfg.mcp_servers = vec![
+            McpServerConfig {
+                name: "filesystem".to_string(),
+                command: "npx".to_string(),
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-filesystem".to_string(),
+                    ".".to_string(),
+                ],
+                enabled: true,
+            },
+            McpServerConfig {
+                name: "Filesystem MCP".to_string(),
+                command: "NPX".to_string(),
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-filesystem".to_string(),
+                    ".".to_string(),
+                ],
+                enabled: true,
+            },
+            McpServerConfig {
+                name: "fetch".to_string(),
+                command: "uvx".to_string(),
+                args: vec!["mcp-server-fetch".to_string()],
+                enabled: true,
+            },
+        ];
+
+        cfg.deduplicate_mcp_servers();
+        assert_eq!(cfg.mcp_servers.len(), 2);
+        assert_eq!(cfg.mcp_servers[0].name, "filesystem");
+        assert_eq!(cfg.mcp_servers[1].name, "fetch");
     }
 }

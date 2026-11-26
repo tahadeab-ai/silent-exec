@@ -237,6 +237,11 @@ html, body {
   color: var(--success);
 }
 
+.badge-auto {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Centered Conversation Stream */
 .chat-scroll {
   flex: 1;
@@ -586,6 +591,33 @@ html, body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
+}
+
+.memory-form-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-form-row .input {
+  flex: 1;
+  min-width: 160px;
+}
+
+#btnSaveMemory {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.ollama-model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ollama-model-row .input {
+  flex: 1;
 }
 
 .provider-fields {

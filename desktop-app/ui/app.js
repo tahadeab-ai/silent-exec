@@ -1,4 +1,4 @@
-/* SilentExec Desktop v3.1.0 — Pure Tauri v2 Vanilla UI */
+/* SilentExec Desktop v3.2.0 — Pure Tauri v2 Vanilla UI */
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -72,7 +72,7 @@ const I18N = {
     bridge_start: "تشغيل الجسر",
     bridge_stop: "إيقاف الجسر",
     updater_title: "التحديث التلقائي",
-    updater_ready: "الإصدار الحالي: v3.1.0",
+    updater_ready: "الإصدار الحالي: v3.2.0",
     check_update: "التحقق من التحديثات",
     install_update: "تنزيل وتثبيت التحديث",
     up_to_date: "أنت تستخدم أحدث إصدار.",
@@ -148,7 +148,7 @@ const I18N = {
     bridge_start: "Start Bridge",
     bridge_stop: "Stop Bridge",
     updater_title: "Auto-Updater",
-    updater_ready: "Current version: v3.1.0",
+    updater_ready: "Current version: v3.2.0",
     check_update: "Check for Updates",
     install_update: "Download & Install Update",
     up_to_date: "You are on the latest version.",
@@ -522,11 +522,32 @@ function renderBuiltinTools() {
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px;">
           <strong>${state.lang === "ar" ? tool.title_ar : tool.title_en}</strong>
-          <span class="badge badge-success">${t("auto_enabled")}</span>
+          <span class="badge badge-success badge-auto">${t("auto_enabled")}</span>
         </div>
         <div class="muted-text">${state.lang === "ar" ? tool.desc_ar : tool.desc_en}</div>
       </div>`
   ).join("");
+}
+
+function normalizeMcpSignature(command, args) {
+  const cmd = String(command || "").trim().toLowerCase();
+  const normArgs = (args || []).map((a) => String(a).trim()).filter(Boolean).join(" ");
+  return normArgs ? `${cmd} ${normArgs}` : cmd;
+}
+
+function deduplicateMcpList(servers) {
+  const seenNames = new Set();
+  const seenSigs = new Set();
+  return (servers || []).filter((s) => {
+    const nameKey = String(s.name || "").trim().toLowerCase();
+    const sigKey = normalizeMcpSignature(s.command, s.args);
+    if (!nameKey || seenNames.has(nameKey) || seenSigs.has(sigKey)) {
+      return false;
+    }
+    seenNames.add(nameKey);
+    seenSigs.add(sigKey);
+    return true;
+  });
 }
 
 function renderMcpPresets() {
@@ -538,7 +559,17 @@ function renderMcpPresets() {
     btn.addEventListener("click", async () => {
       const preset = MCP_PRESETS.find((p) => p.name === btn.dataset.name);
       if (!preset) return;
-      await invoke("save_mcp_server", { name: preset.name, command: preset.command, args: preset.args, enabled: true });
+      const existing = await invoke("list_mcp_servers").catch(() => []);
+      const presetName = preset.name.trim().toLowerCase();
+      const presetSig = normalizeMcpSignature(preset.command, preset.args);
+      const alreadyExists = (existing || []).some(
+        (s) =>
+          String(s.name || "").trim().toLowerCase() === presetName ||
+          normalizeMcpSignature(s.command, s.args) === presetSig
+      );
+      if (!alreadyExists) {
+        await invoke("save_mcp_server", { name: preset.name, command: preset.command, args: preset.args, enabled: true });
+      }
       loadMcpServers();
     });
   });
@@ -547,7 +578,7 @@ function renderMcpPresets() {
 async function loadMcpServers() {
   const list = document.getElementById("mcpServersList");
   try {
-    const servers = await invoke("list_mcp_servers");
+    const servers = deduplicateMcpList(await invoke("list_mcp_servers"));
     list.innerHTML = servers
       .map(
         (s) => `
@@ -615,6 +646,38 @@ function updateProviderVisibility(backend) {
   document.getElementById("gooseFields").classList.toggle("hidden", backend !== "goose_acp");
 }
 
+async function refreshOllamaModels() {
+  const sel = document.getElementById("selOllamaModel");
+  const inp = document.getElementById("inpOllamaModel");
+  const url = document.getElementById("inpOllamaUrl").value.trim() || null;
+  if (!sel) return;
+
+  sel.innerHTML = `<option value="">...</option>`;
+  try {
+    const models = await invoke("list_ollama_models", { ollamaUrl: url });
+    const current = inp.value.trim();
+    const unique = Array.from(new Set(models || []));
+    if (unique.length === 0) {
+      sel.innerHTML = `<option value="${escapeHtml(current)}">${escapeHtml(current || "No models found")}</option>`;
+      return;
+    }
+    const opts = unique.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`);
+    if (current && !unique.includes(current)) {
+      opts.unshift(`<option value="${escapeHtml(current)}">${escapeHtml(current)} (custom)</option>`);
+    }
+    sel.innerHTML = opts.join("");
+    if (current) {
+      sel.value = current;
+    } else {
+      sel.value = unique[0];
+      inp.value = unique[0];
+    }
+  } catch (_) {
+    const current = inp.value.trim();
+    sel.innerHTML = `<option value="${escapeHtml(current)}">${escapeHtml(current || "Ollama offline")}</option>`;
+  }
+}
+
 function syncConfigBadges(cfg) {
   const labelMap = {
     local_llama: "Local GGUF",
@@ -647,6 +710,9 @@ async function loadConfig() {
   updateProviderVisibility(cfg.backend || "local_llama");
   syncConfigBadges(cfg);
   applyLanguageAndTheme();
+  if ((cfg.backend || "local_llama") === "ollama") {
+    refreshOllamaModels();
+  }
 }
 
 async function saveProviderSettings() {
@@ -740,7 +806,9 @@ function bindEvents() {
 
   document.getElementById("selBackend").addEventListener("change", async (e) => {
     updateProviderVisibility(e.target.value);
-    if (e.target.value === "goose_acp") {
+    if (e.target.value === "ollama") {
+      refreshOllamaModels();
+    } else if (e.target.value === "goose_acp") {
       try {
         const gs = await invoke("get_goose_status");
         document.getElementById("gooseStatusText").textContent = gs.installed
@@ -749,6 +817,14 @@ function bindEvents() {
       } catch (_) {}
     }
   });
+
+  document.getElementById("selOllamaModel").addEventListener("change", (e) => {
+    if (e.target.value) {
+      document.getElementById("inpOllamaModel").value = e.target.value;
+    }
+  });
+
+  document.getElementById("btnRefreshOllamaModels").addEventListener("click", refreshOllamaModels);
 
   document.getElementById("btnInstallGoose").addEventListener("click", async () => {
     const el = document.getElementById("gooseStatusText");

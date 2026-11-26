@@ -1,4 +1,4 @@
-//! Multi-Step Problem-Solving ReAct Loop for SilentExec Desktop (`v3.1.0`).
+//! Multi-Step Problem-Solving ReAct Loop for SilentExec Desktop (`v3.2.0`).
 //!
 //! Implements Observe -> Think -> Act -> Verify (up to 8 turns) with:
 //! - Sub-Goal Progress Checklist (`[DONE]` / `[CURRENT]`)

@@ -14,7 +14,7 @@
         <span class="brand-mark" aria-hidden="true">⚡</span>
         <div class="brand-text">
           <span class="brand-name">SilentExec</span>
-          <span class="brand-version">v3.1.0</span>
+          <span class="brand-version">v3.2.0</span>
         </div>
       </div>
 
@@ -140,7 +140,7 @@
 
           <h2 class="section-heading" data-i18n="memory_heading">الذاكرة الدائمة</h2>
           <div class="card form-card">
-            <div class="form-grid-3">
+            <div class="memory-form-row">
               <input id="memKeyInput" class="input" type="text" data-i18n-placeholder="mem_key_ph" placeholder="المفتاح (مثال: preferred_lang)" />
               <input id="memContentInput" class="input" type="text" data-i18n-placeholder="mem_val_ph" placeholder="المحتوى..." />
               <button id="btnSaveMemory" class="btn btn-primary btn-sm" type="button" data-i18n="save_btn">حفظ</button>
@@ -209,6 +209,10 @@
                 <label class="field-label">Ollama URL</label>
                 <input id="inpOllamaUrl" class="input" type="text" placeholder="http://127.0.0.1:11434" />
                 <label class="field-label">Ollama Model</label>
+                <div class="ollama-model-row">
+                  <select id="selOllamaModel" class="input"></select>
+                  <button id="btnRefreshOllamaModels" class="btn btn-ghost btn-sm" type="button" title="Refresh Ollama Models">↻</button>
+                </div>
                 <input id="inpOllamaModel" class="input" type="text" placeholder="qwen2.5:7b" />
               </div>
 
@@ -248,7 +252,7 @@
             <!-- Auto-Updater -->
             <div class="card">
               <h3 class="card-title" data-i18n="updater_title">التحديث التلقائي</h3>
-              <p id="updateStatusText" class="muted-text" data-i18n="updater_ready">الإصدار الحالي: v3.1.0</p>
+              <p id="updateStatusText" class="muted-text" data-i18n="updater_ready">الإصدار الحالي: v3.2.0</p>
               <div id="updateProgressWrap" class="progress-wrap hidden">
                 <div class="progress-bar"><div id="updateProgressFill" class="progress-fill"></div></div>
                 <span id="updateProgressLabel" class="progress-label">0%</span>

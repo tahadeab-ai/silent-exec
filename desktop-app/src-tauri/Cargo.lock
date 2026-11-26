@@ -3074,7 +3074,7 @@ dependencies = [
 
 [[package]]
 name = "silent-exec-core"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3082,7 +3082,7 @@ dependencies = [
 
 [[package]]
 name = "silent-exec-desktop"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3096,7 +3096,7 @@ dependencies = [
 
 [[package]]
 name = "silent-exec-pc"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "serde",
  "serde_json",

@@ -68,6 +68,27 @@ pub struct McpToolCallResult {
     pub is_error: bool,
 }
 
+/// Builds the platform-appropriate hidden `Command` for spawning an MCP server.
+/// On Windows, `npx`, `uvx`, `npm`, and `.cmd`/`.bat` shims are executed via `cmd /C`
+/// with `CREATE_NO_WINDOW` so they resolve cleanly without flashing a console window.
+pub fn build_mcp_command(config: &McpServerConfig) -> std::process::Command {
+    #[cfg(windows)]
+    {
+        let cmd_lower = config.command.trim().to_ascii_lowercase();
+        let needs_cmd_shim = matches!(cmd_lower.as_str(), "npx" | "uvx" | "npm")
+            || cmd_lower.ends_with(".cmd")
+            || cmd_lower.ends_with(".bat");
+        if needs_cmd_shim {
+            let mut cmd = hidden_command("cmd");
+            cmd.args(["/C", config.command.trim()]).args(&config.args);
+            return cmd;
+        }
+    }
+    let mut cmd = hidden_command(config.command.trim());
+    cmd.args(&config.args);
+    cmd
+}
+
 /// Client session for an external MCP server running over stdio.
 pub struct McpClient {
     pub config: McpServerConfig,
@@ -84,9 +105,8 @@ impl McpClient {
 
     /// Spawns the MCP server child process over stdio.
     pub fn start(&mut self) -> Result<(), String> {
-        let mut cmd = hidden_command(&self.config.command);
-        cmd.args(&self.config.args)
-            .stdin(Stdio::piped())
+        let mut cmd = build_mcp_command(&self.config);
+        cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -291,5 +311,56 @@ impl McpClient {
             details: serde_json::to_string(&res).unwrap_or_default(),
             target_resolved: Some(format!("{}:{}", self.config.name, tool_name)),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_mcp_command_windows_shims() {
+        let cfg = McpServerConfig {
+            name: "filesystem".to_string(),
+            command: "npx".to_string(),
+            args: vec![
+                "-y".to_string(),
+                "@modelcontextprotocol/server-filesystem".to_string(),
+                ".".to_string(),
+            ],
+            enabled: true,
+        };
+        let cmd = build_mcp_command(&cfg);
+        #[cfg(windows)]
+        {
+            assert_eq!(cmd.get_program(), "cmd");
+            let args: Vec<_> = cmd.get_args().collect();
+            assert_eq!(
+                args,
+                &[
+                    "/C",
+                    "npx",
+                    "-y",
+                    "@modelcontextprotocol/server-filesystem",
+                    "."
+                ]
+            );
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(cmd.get_program(), "npx");
+        }
+    }
+
+    #[test]
+    fn test_build_mcp_command_regular_binary() {
+        let cfg = McpServerConfig {
+            name: "custom".to_string(),
+            command: "my-mcp-server".to_string(),
+            args: vec!["--stdio".to_string()],
+            enabled: true,
+        };
+        let cmd = build_mcp_command(&cfg);
+        assert_eq!(cmd.get_program(), "my-mcp-server");
     }
 }

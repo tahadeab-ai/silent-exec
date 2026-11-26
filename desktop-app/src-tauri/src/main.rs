@@ -658,6 +658,54 @@ async fn cancel_model_download(tag: String, state: State<'_, AppState>) -> Resul
 }
 
 #[tauri::command]
+async fn list_ollama_models(ollama_url: Option<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let base_url = ollama_url
+            .filter(|u| !u.trim().is_empty())
+            .unwrap_or_else(|| AppConfig::load().ollama_url);
+        let endpoint = format!("{}/api/tags", base_url.trim().trim_end_matches('/'));
+
+        let output = hidden_command("curl")
+            .args(["-sSf", "--connect-timeout", "3", &endpoint])
+            .output()
+            .map_err(|e| format!("Failed to query Ollama at {}: {}", endpoint, e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Ollama /api/tags failed ({}): {}",
+                endpoint,
+                stderr.trim()
+            ));
+        }
+
+        let body = String::from_utf8_lossy(&output.stdout);
+        let parsed: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| format!("Invalid Ollama /api/tags JSON: {}", e))?;
+
+        let models = parsed
+            .get("models")
+            .and_then(|m| m.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        item.get("name")
+                            .and_then(|n| n.as_str())
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(ToString::to_string)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(models)
+    })
+    .await
+    .map_err(|e| format!("Task execution failed: {}", e))?
+}
+
+#[tauri::command]
 async fn test_ai_backend() -> Result<BackendTestResult, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let cfg = AppConfig::load();
@@ -718,20 +766,17 @@ async fn save_mcp_server(
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut cfg = AppConfig::load();
-        if let Some(existing) = cfg.mcp_servers.iter_mut().find(|s| s.name == name) {
-            existing.command = command;
-            existing.args = args;
-            existing.enabled = enabled;
-        } else {
-            cfg.mcp_servers.push(McpServerConfig {
-                name,
-                command,
-                args,
-                enabled,
-            });
-        }
+        cfg.upsert_mcp_server(McpServerConfig {
+            name,
+            command,
+            args,
+            enabled,
+        });
 
         let path = AppConfig::default_config_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         let data = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
         std::fs::write(&path, data).map_err(|e| e.to_string())?;
         Ok(())
@@ -1115,6 +1160,7 @@ fn main() {
             check_updates,
             check_app_update,
             install_desktop_update,
+            list_ollama_models,
             test_ai_backend,
             list_mcp_servers,
             save_mcp_server,

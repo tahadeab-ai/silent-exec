@@ -17,17 +17,26 @@
 static std::mutex g_llama_mutex;
 static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
-static const llama_model* g_vocab = nullptr;
+static const llama_vocab* g_vocab = nullptr;
 static std::string g_last_error;
+
+static void clear_kv_cache_locked() {
+    if (g_ctx != nullptr) {
+        llama_memory_t mem = llama_get_memory(g_ctx);
+        if (mem != nullptr) {
+            llama_memory_clear(mem, true);
+        }
+    }
+}
 
 static void release_llama_state_locked() {
     if (g_ctx != nullptr) {
-        llama_kv_cache_clear(g_ctx);
+        clear_kv_cache_locked();
         llama_free(g_ctx);
         g_ctx = nullptr;
     }
     if (g_model != nullptr) {
-        llama_free_model(g_model);
+        llama_model_free(g_model);
         g_model = nullptr;
     }
     g_vocab = nullptr;
@@ -84,15 +93,21 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     llama_backend_init();
 
     llama_model_params model_params = llama_model_default_params();
-    g_model = llama_load_model_from_file(path_str.c_str(), model_params);
+    g_model = llama_model_load_from_file(path_str.c_str(), model_params);
 
     if (g_model == nullptr) {
-        g_last_error = "llama_load_model_from_file failed for '" + path_str + "' (corrupt GGUF or unsupported quant/architecture)";
+        g_last_error = "llama_model_load_from_file failed for '" + path_str + "' (corrupt GGUF or unsupported quant/architecture)";
         LOGE("%s", g_last_error.c_str());
         g_vocab = nullptr;
         return JNI_FALSE;
     }
-    g_vocab = g_model;
+    g_vocab = llama_model_get_vocab(g_model);
+    if (g_vocab == nullptr) {
+        g_last_error = "llama_model_get_vocab returned null for '" + path_str + "'";
+        LOGE("%s", g_last_error.c_str());
+        release_llama_state_locked();
+        return JNI_FALSE;
+    }
 
     int hw_threads = static_cast<int>(std::thread::hardware_concurrency());
     if (hw_threads <= 0) {
@@ -109,9 +124,9 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     ctx_params.n_threads = safe_threads;
     ctx_params.n_threads_batch = safe_threads;
 
-    g_ctx = llama_new_context_with_model(g_model, ctx_params);
+    g_ctx = llama_init_from_model(g_model, ctx_params);
     if (g_ctx == nullptr) {
-        g_last_error = "llama_new_context_with_model failed (n_ctx=2048, n_threads=" + std::to_string(safe_threads) + ", insufficient RAM)";
+        g_last_error = "llama_init_from_model failed (n_ctx=2048, n_threads=" + std::to_string(safe_threads) + ", insufficient RAM)";
         LOGE("%s", g_last_error.c_str());
         release_llama_state_locked();
         return JNI_FALSE;
@@ -184,7 +199,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
 
     // Clear KV cache completely before each generation to avoid stale/invalid state crashes
-    llama_kv_cache_clear(g_ctx);
+    clear_kv_cache_locked();
 
     const int limit = max_tokens > 0 ? max_tokens : 160;
     const uint32_t n_ctx = llama_n_ctx(g_ctx);
@@ -242,7 +257,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
 
     if (llama_decode(g_ctx, batch) != 0) {
         llama_batch_free(batch);
-        llama_kv_cache_clear(g_ctx);
+        clear_kv_cache_locked();
         return env->NewStringUTF("{\"error\":\"Prompt decode failed\"}");
     }
     llama_batch_free(batch);
@@ -250,20 +265,16 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
     if (smpl == nullptr) {
-        llama_kv_cache_clear(g_ctx);
+        clear_kv_cache_locked();
         return env->NewStringUTF("{\"error\":\"Failed to initialize sampler chain\"}");
     }
 
     llama_sampler* penalty_smpl = llama_sampler_init_penalties(
-        llama_n_vocab(g_vocab),
-        llama_token_eos(g_vocab),
-        llama_token_nl(g_vocab),
+        llama_vocab_n_tokens(g_vocab),
         64,
         1.15f,
         0.0f,
-        0.0f,
-        false,
-        false
+        0.0f
     );
     if (penalty_smpl != nullptr) {
         llama_sampler_chain_add(smpl, penalty_smpl);
@@ -274,7 +285,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         llama_sampler_chain_add(smpl, greedy_smpl);
     } else {
         llama_sampler_free(smpl);
-        llama_kv_cache_clear(g_ctx);
+        clear_kv_cache_locked();
         return env->NewStringUTF("{\"error\":\"Failed to initialize greedy sampler\"}");
     }
 
@@ -294,7 +305,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         llama_token new_token = llama_sampler_sample(smpl, g_ctx, -1);
         llama_sampler_accept(smpl, new_token);
 
-        if (llama_token_is_eog(g_vocab, new_token)) {
+        if (llama_vocab_is_eog(g_vocab, new_token)) {
             break;
         }
 
@@ -370,7 +381,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
 
     llama_sampler_free(smpl);
-    llama_kv_cache_clear(g_ctx);
+    clear_kv_cache_locked();
 
     return env->NewStringUTF(output_str.c_str());
 }
