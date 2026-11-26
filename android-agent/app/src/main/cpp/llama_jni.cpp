@@ -211,7 +211,17 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Failed to initialize sampler chain\"}");
     }
 
-    llama_sampler* penalty_smpl = llama_sampler_init_penalties(64, 1.15f, 0.0f, 0.0f);
+    llama_sampler* penalty_smpl = llama_sampler_init_penalties(
+        llama_n_vocab(g_vocab),
+        llama_token_eos(g_vocab),
+        llama_token_nl(g_vocab),
+        64,
+        1.15f,
+        0.0f,
+        0.0f,
+        false,
+        false
+    );
     if (penalty_smpl != nullptr) {
         llama_sampler_chain_add(smpl, penalty_smpl);
     }
