@@ -74,9 +74,17 @@ class ModelAdapter(
             // Rich Spec Pills (1.7B, 32K, ~1.4 GB RAM, Recommended)
             layoutModelSpecs.removeAllViews()
             val nameLower = (item.filename + " " + item.tag).lowercase(Locale.US)
-            val isRecommended = nameLower.contains("lfm3") || nameLower.contains("qwen3")
+            val isRecommended = nameLower.contains("qwen3.5") || nameLower.contains("qwen3")
             val specs = when {
-                nameLower.contains("lfm3") || nameLower.contains("qwen3") ->
+                nameLower.contains("qwen3.5") ->
+                    listOf("2B", "Non-Thinking", "~1.28 GB")
+                nameLower.contains("lfm3-vl") ->
+                    listOf("2B VL", "Vision", "XML Tool-Call")
+                nameLower.contains("functiongemma") ->
+                    listOf("270M", "Intent Router", "<250 MB")
+                nameLower.contains("lfm3") ->
+                    listOf("1.7B", "Experimental", "Thinking")
+                nameLower.contains("qwen3") ->
                     listOf("1.7B", "32K", "~1.4 GB RAM")
                 nameLower.contains("0.5b") ->
                     listOf("0.5B", "32K", "~0.5 GB RAM")

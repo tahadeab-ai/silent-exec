@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import java.lang.ref.WeakReference
 
 data class UiElementInfo(
@@ -60,10 +61,43 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Traverses the active window and extracts a pruned, indexed summary of interactive/visible UI elements.
+     * Resolves the foreground non-self, non-overlay window root so SilentExec never inspects its own UI or overlay.
+     */
+    private fun resolveTargetWindowRoot(): AccessibilityNodeInfo? {
+        val selfPkg = applicationContext.packageName
+        val allWindows = windows
+        if (!allWindows.isNullOrEmpty()) {
+            // Prefer active application window that is NOT self and NOT an accessibility overlay
+            for (win in allWindows) {
+                if (win.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+                val root = win.root ?: continue
+                val pkg = root.packageName?.toString().orEmpty()
+                if (pkg.isNotEmpty() && pkg == selfPkg) continue
+                if (win.type == AccessibilityWindowInfo.TYPE_APPLICATION && win.isActive) {
+                    return root
+                }
+            }
+            // Fallback to any non-self, non-overlay application/system window
+            for (win in allWindows) {
+                if (win.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+                val root = win.root ?: continue
+                val pkg = root.packageName?.toString().orEmpty()
+                if (pkg.isNotEmpty() && pkg == selfPkg) continue
+                if (win.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                    return root
+                }
+            }
+        }
+        val fallbackRoot = rootInActiveWindow ?: return null
+        val fallbackPkg = fallbackRoot.packageName?.toString().orEmpty()
+        return if (fallbackPkg == selfPkg) null else fallbackRoot
+    }
+
+    /**
+     * Traverses the active non-self window and extracts a pruned, indexed summary of interactive/visible UI elements.
      */
     fun extractPrunedUiTree(): List<UiElementInfo> {
-        val root = rootInActiveWindow ?: return emptyList()
+        val root = resolveTargetWindowRoot() ?: return emptyList()
         val elements = mutableListOf<UiElementInfo>()
         var counter = 0
 

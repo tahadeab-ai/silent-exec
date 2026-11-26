@@ -6,9 +6,20 @@ import com.silentexec.android.core.ActionType
 import com.silentexec.android.core.MemoryItem
 import com.silentexec.android.core.MemoryStore
 import com.silentexec.android.core.MultiStepPlan
+import com.silentexec.android.core.Platform
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import java.net.URLEncoder
+
+/**
+ * Parsed raw LLM output with `<think>` reasoning traces cleanly separated from action content.
+ */
+data class ParsedRawOutput(
+    val cleanContent: String,
+    val reasoningTrace: String?
+)
 
 /**
  * Result wrapper for parsed LLM outputs: either a MultiStepPlan or a single ActionCommand.
@@ -136,12 +147,105 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
         return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery)
     }
 
+    private val CLOSED_THINK_REGEX = Regex("""<think>([\s\S]*?)</think>""", RegexOption.IGNORE_CASE)
+    private val UNCLOSED_THINK_REGEX = Regex("""<think>[\s\S]*$""", RegexOption.IGNORE_CASE)
+    private val XML_TOOL_CALL_REGEX = Regex(
+        """<tool_call>\s*<function=([^>\s]+)>([\s\S]*?)(?:</function>\s*(?:</tool_call>)?|$)""",
+        RegexOption.IGNORE_CASE
+    )
+    private val XML_PARAM_REGEX = Regex(
+        """<parameter=([^>\s]+)>([\s\S]*?)</parameter>""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * Strips both closed `<think>...</think>` blocks and unclosed `<think>...` traces
+     * (Open-AutoGLM pattern) so raw reasoning text is never dumped as an error.
+     */
+    fun stripThinkBlocks(raw: String): ParsedRawOutput {
+        val traces = mutableListOf<String>()
+        var content = CLOSED_THINK_REGEX.replace(raw) { match ->
+            val inner = match.groupValues[1].trim()
+            if (inner.isNotEmpty()) traces.add(inner)
+            ""
+        }
+        val unclosedMatch = UNCLOSED_THINK_REGEX.find(content)
+        if (unclosedMatch != null) {
+            val inner = unclosedMatch.value.removePrefix("<think>").removePrefix("<THINK>").trim()
+            if (inner.isNotEmpty()) traces.add(inner)
+            content = content.substring(0, unclosedMatch.range.first)
+        }
+        val trace = traces.joinToString("\n").trim().ifEmpty { null }
+        return ParsedRawOutput(cleanContent = content.trim(), reasoningTrace = trace)
+    }
+
+    /**
+     * Native XML tool-call fallback parser for LFM3 (`<tool_call><function=NAME><parameter=KEY>VALUE</parameter></function></tool_call>`).
+     */
+    fun parseXmlToolCall(cleanOutput: String, reasoningTrace: String? = null): ActionCommand? {
+        val match = XML_TOOL_CALL_REGEX.find(cleanOutput) ?: return null
+        val fnName = match.groupValues[1].trim().lowercase()
+        val body = match.groupValues[2]
+
+        val actionType = ActionType.entries.firstOrNull { it.wireName == fnName } ?: return null
+
+        val params = LinkedHashMap<String, String>()
+        for (pMatch in XML_PARAM_REGEX.findAll(body)) {
+            val key = pMatch.groupValues[1].trim()
+            val value = pMatch.groupValues[2].trim()
+            if (key.isNotEmpty()) {
+                params[key] = value
+            }
+        }
+
+        val target = params["target"]
+            ?: params["url"]
+            ?: params["app"]
+            ?: params["query"]
+            ?: params["text"]
+            ?: params["direction"]
+            ?: params["path"]
+            ?: params["element"]
+
+        val folder = params["folder"]
+        val thought = params["thought"] ?: reasoningTrace
+        val confidence = params["confidence"]?.toDoubleOrNull()?.coerceIn(0.0, 1.0) ?: 0.90
+        val platform = when (params["platform"]?.trim()?.lowercase()) {
+            "pc", "windows", "linux", "macos" -> Platform.PC
+            "any" -> Platform.ANY
+            else -> Platform.ANDROID
+        }
+
+        val reservedKeys = setOf("action", "target", "folder", "thought", "platform", "confidence")
+        val extraArgs = params.filterKeys { it !in reservedKeys }
+        val argsJson = if (extraArgs.isNotEmpty()) {
+            buildJsonObject {
+                for ((k, v) in extraArgs) {
+                    put(k, JsonPrimitive(v))
+                }
+            }
+        } else {
+            null
+        }
+
+        return ActionCommand(
+            action = actionType,
+            target = target,
+            folder = folder,
+            args = argsJson,
+            platform = platform,
+            confidence = confidence,
+            thought = thought
+        )
+    }
+
     /**
      * Strictly extracts ActionCommand or MultiStepPlan JSON from raw model output.
-     * Strips ChatML EOS tokens, markdown code fences, and unconditionally rejects conversational chatter.
+     * Strips `<think>` blocks, ChatML EOS tokens, markdown code fences, and unconditionally rejects conversational chatter.
      */
     fun extractActionJson(rawOutput: String): String {
-        val trimmed = rawOutput.trim()
+        val stripped = stripThinkBlocks(rawOutput).cleanContent
+        val trimmed = stripped.trim()
         if (trimmed.isEmpty()) {
             throw IllegalArgumentException("Model output is empty")
         }
@@ -164,12 +268,12 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
 
         val startIdx = cleaned.indexOf('{')
         if (startIdx == -1) {
-            throw IllegalArgumentException("No JSON object found in output: '$rawOutput'")
+            throw IllegalArgumentException("No JSON object found in output: '$cleaned'")
         }
 
         val endIdx = cleaned.lastIndexOf('}')
         if (endIdx < startIdx) {
-            throw IllegalArgumentException("Unterminated JSON object in output: '$rawOutput'")
+            throw IllegalArgumentException("Unterminated JSON object in output: '$cleaned'")
         }
 
         val prefix = cleaned.substring(0, startIdx).trim()
@@ -355,25 +459,35 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
     }
 
     /**
-     * Parses either a `{"steps": [...]}` MultiStepPlan or a single ActionCommand JSON
-     * using the lenient RuntimeActionJson parser so extra LLM keys never crash execution.
+     * Parses either a `{"steps": [...]}` MultiStepPlan, a single ActionCommand JSON,
+     * or an LFM3 XML `<tool_call>` fallback using the lenient RuntimeActionJson parser.
      */
     fun parsePlanOrSingleAction(rawOutput: String): PlanOrAction {
-        val jsonStr = extractActionJson(rawOutput)
+        val parsedRaw = stripThinkBlocks(rawOutput)
+        val cleanContent = parsedRaw.cleanContent
 
-        // 1. Try MultiStepPlan
-        val plan = runCatching { ActionJson.planFromLlmJson(jsonStr) }.getOrNull()
-        if (plan != null) {
-            val normalizedPlan = MultiStepPlan(plan.steps.map { normalizeCommand(it) })
-            return PlanOrAction.Plan(normalizedPlan)
+        val jsonStr = runCatching { extractActionJson(cleanContent) }.getOrNull()
+        if (jsonStr != null) {
+            // 1. Try MultiStepPlan
+            val plan = runCatching { ActionJson.planFromLlmJson(jsonStr) }.getOrNull()
+            if (plan != null) {
+                val normalizedPlan = MultiStepPlan(plan.steps.map { normalizeCommand(it) })
+                return PlanOrAction.Plan(normalizedPlan)
+            }
+
+            // 2. Try single ActionCommand
+            val single = runCatching { ActionJson.fromLlmJson(jsonStr) }.getOrNull()
+            if (single != null) {
+                return PlanOrAction.Action(normalizeCommand(single))
+            }
         }
 
-        // 2. Try single ActionCommand
-        val single = runCatching { ActionJson.fromLlmJson(jsonStr) }.getOrNull()
-        if (single != null) {
-            return PlanOrAction.Action(normalizeCommand(single))
+        // 3. Try LFM3 XML tool-call fallback
+        val xmlCmd = parseXmlToolCall(cleanContent, parsedRaw.reasoningTrace)
+        if (xmlCmd != null) {
+            return PlanOrAction.Action(normalizeCommand(xmlCmd))
         }
 
-        throw IllegalArgumentException("JSON is neither a valid MultiStepPlan nor ActionCommand: '$jsonStr'")
+        throw IllegalArgumentException("Output is neither valid MultiStepPlan/ActionCommand JSON nor XML tool_call: '$cleanContent'")
     }
 }

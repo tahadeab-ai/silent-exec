@@ -181,4 +181,42 @@ class OfflineLlamaTest {
             assertTrue(inferResult.isFailure)
         }
     }
+
+    @Test
+    fun test11_stripThinkBlocksAndXmlToolCallParser() {
+        val withClosedThink = """
+            <think>
+            I need to tap the search bar first.
+            </think>
+            {"thought":"Tap search","action":"ui_click","target":"#0","platform":"android","confidence":0.95}
+        """.trimIndent()
+        val parsedClosed = PromptFormatter.stripThinkBlocks(withClosedThink)
+        assertEquals("I need to tap the search bar first.", parsedClosed.reasoningTrace)
+        assertTrue(parsedClosed.cleanContent.startsWith("{"))
+
+        val actionFromJson = PromptFormatter.parsePlanOrSingleAction(withClosedThink)
+        assertTrue(actionFromJson is com.silentexec.android.nlp.PlanOrAction.Action)
+        assertEquals(ActionType.UI_CLICK, (actionFromJson as com.silentexec.android.nlp.PlanOrAction.Action).actionCommand.action)
+
+        val unclosedThink = "<think>reasoning forever without closing tag"
+        val parsedUnclosed = PromptFormatter.stripThinkBlocks(unclosedThink)
+        assertEquals("", parsedUnclosed.cleanContent)
+
+        val lfm3Xml = """
+            <think>Clicking element #2</think>
+            <tool_call><function=ui_click><parameter=target>#2</parameter><parameter=platform>android</parameter></function></tool_call>
+        """.trimIndent()
+        val parsedXml = PromptFormatter.parsePlanOrSingleAction(lfm3Xml)
+        assertTrue(parsedXml is com.silentexec.android.nlp.PlanOrAction.Action)
+        val xmlCmd = (parsedXml as com.silentexec.android.nlp.PlanOrAction.Action).actionCommand
+        assertEquals(ActionType.UI_CLICK, xmlCmd.action)
+        assertEquals("#2", xmlCmd.target)
+        assertEquals("Clicking element #2", xmlCmd.thought)
+
+        val catalog = com.silentexec.android.net.GitHubReleaseClient.CURATED_EDGE_MODELS
+        assertTrue(catalog.any { it.filename == "Qwen3.5-2B-Q4_K_M.gguf" })
+        assertTrue(catalog.any { it.filename == "LFM3-VL-2B-Q4_K_M.gguf" })
+        assertTrue(catalog.any { it.filename == "FunctionGemma-270M-Q4_K_M.gguf" })
+        assertTrue(catalog.any { it.filename == "LFM3-1.7B-Q4_K_M.gguf" })
+    }
 }

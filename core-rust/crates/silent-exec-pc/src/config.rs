@@ -31,7 +31,7 @@ fn default_ollama_url() -> String {
 }
 
 fn default_ollama_model() -> String {
-    "qwen2.5:1.5b".to_string()
+    "qwen3.5:4b".to_string()
 }
 
 fn default_openai_url() -> String {
@@ -107,9 +107,13 @@ pub struct AppConfig {
     #[serde(default = "default_ollama_url")]
     pub ollama_url: String,
 
-    /// Ollama model name (e.g. qwen2.5:1.5b or qwen2.5:3b)
+    /// Ollama model name (e.g. qwen3.5:4b or qwen3.5:9b-q4_K_M)
     #[serde(default = "default_ollama_model")]
     pub ollama_model: String,
+
+    /// Disable `<think>` reasoning traces on Ollama `/api/chat` (`"think": false`)
+    #[serde(default = "default_true")]
+    pub disable_thinking: bool,
 
     /// OpenAI compatible API base URL
     #[serde(default = "default_openai_url")]
@@ -140,6 +144,7 @@ impl Default for AppConfig {
             goose_model: String::new(),
             ollama_url: default_ollama_url(),
             ollama_model: default_ollama_model(),
+            disable_thinking: true,
             openai_api_base: default_openai_url(),
             openai_api_model: default_openai_model(),
             openai_api_key: String::new(),

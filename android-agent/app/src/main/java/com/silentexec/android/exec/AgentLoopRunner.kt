@@ -139,9 +139,30 @@ class AgentLoopRunner(
         ) {
             onUpdate(
                 AgentStepUpdate.ModelTip(
-                    "💡 نصيحة: النموذج الحالي Qwen2.5-0.5B خفيف؛ للمهام متعددة الخطوات يُفضل التبديل إلى Qwen3-1.7B أو LFM3-1.7B أو Cloud API."
+                    "💡 نصيحة: النموذج الحالي Qwen2.5-0.5B خفيف؛ للمهام متعددة الخطوات يُفضل التبديل إلى Qwen3.5-2B أو Qwen3-1.7B أو Cloud API."
                 )
             )
+        }
+
+        // Prevent Android Self-Inspection Loop: if SilentExec itself is in the foreground before Step 1,
+        // move it to back (or press Home) and poll every 150ms (up to 1200ms) for a non-self package.
+        if (uiObserver == null) {
+            val svc = SilentExecAccessibilityService.get()
+            val selfPkg = executor.getAppPackageName() ?: "com.silentexec.android"
+            if (svc != null && svc.activePackageName() == selfPkg) {
+                if (!executor.moveTaskToBackIfActivity()) {
+                    svc.performUiHome()
+                }
+                var waitedMs = 0L
+                while (waitedMs < 1200L && !isCancelled) {
+                    try { Thread.sleep(150L) } catch (_: InterruptedException) { break }
+                    waitedMs += 150L
+                    val currentPkg = svc.activePackageName()
+                    if (currentPkg.isNotBlank() && currentPkg != selfPkg) {
+                        break
+                    }
+                }
+            }
         }
 
         val stepHistory = mutableListOf<String>()
@@ -480,7 +501,7 @@ class AgentLoopRunner(
             }
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
-                maxTokens = 192
+                maxTokens = 256
             )
             val cmd = res.getOrThrow()
             return ActionJson.toJson(cmd)
@@ -489,7 +510,7 @@ class AgentLoopRunner(
         if (llamaEngine != null && llamaEngine.isLoaded()) {
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
-                maxTokens = 192
+                maxTokens = 256
             )
             val cmd = res.getOrThrow()
             return ActionJson.toJson(cmd)

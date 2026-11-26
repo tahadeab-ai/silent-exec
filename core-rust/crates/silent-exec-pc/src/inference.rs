@@ -45,11 +45,53 @@ pub fn format_prompt(user_query: &str) -> String {
     build_chatml_prompt(&system_prompt, user_query)
 }
 
+/// Strips both closed `<think>...</think>` blocks and unclosed `<think>...` traces
+/// before JSON extraction so thinking traces never cause parse failures.
+pub fn strip_think_blocks(raw: &str) -> (String, Option<String>) {
+    let mut traces: Vec<String> = Vec::new();
+    let mut rest = raw.to_string();
+
+    loop {
+        let lower = rest.to_ascii_lowercase();
+        let Some(start) = lower.find("<think>") else {
+            break;
+        };
+        let after_open = start + "<think>".len();
+        if let Some(rel_end) = lower[after_open..].find("</think>") {
+            let end_inner = after_open + rel_end;
+            let trace = rest[after_open..end_inner].trim();
+            if !trace.is_empty() {
+                traces.push(trace.to_string());
+            }
+            let after_close = end_inner + "</think>".len();
+            rest = format!("{}{}", &rest[..start], &rest[after_close..]);
+        } else {
+            // Unclosed <think> trace
+            let trace = rest[after_open..].trim();
+            if !trace.is_empty() {
+                traces.push(trace.to_string());
+            }
+            rest.truncate(start);
+            break;
+        }
+    }
+
+    let clean = rest.trim().to_string();
+    let joined_trace = traces.join("\n").trim().to_string();
+    let opt_trace = if joined_trace.is_empty() {
+        None
+    } else {
+        Some(joined_trace)
+    };
+    (clean, opt_trace)
+}
+
 /// Strictly extracts ActionCommand JSON from raw model output.
-/// Strips markdown fences (```json ... ``` or ``` ... ```).
+/// Strips `<think>` blocks and markdown fences (```json ... ``` or ``` ... ```).
 /// Rejects conversational chatter and invalid output.
 pub fn extract_action_json(raw: &str) -> Result<String, String> {
-    let trimmed = raw.trim();
+    let (think_stripped, _) = strip_think_blocks(raw);
+    let trimmed = think_stripped.trim();
     if trimmed.is_empty() {
         return Err("Model output is empty".to_string());
     }
@@ -152,6 +194,7 @@ pub enum AiBackend {
     Ollama {
         url: String,
         model: String,
+        disable_thinking: bool,
     },
     OpenAiCompat {
         base_url: String,
@@ -175,9 +218,18 @@ impl AiBackend {
     }
 
     pub fn new_ollama(url: Option<&str>, model: Option<&str>) -> Self {
+        Self::new_ollama_with_thinking(url, model, true)
+    }
+
+    pub fn new_ollama_with_thinking(
+        url: Option<&str>,
+        model: Option<&str>,
+        disable_thinking: bool,
+    ) -> Self {
         Self::Ollama {
             url: url.unwrap_or("http://127.0.0.1:11434").to_string(),
-            model: model.unwrap_or("qwen2.5:1.5b").to_string(),
+            model: model.unwrap_or("qwen3.5:4b").to_string(),
+            disable_thinking,
         }
     }
 
@@ -208,7 +260,11 @@ impl AiBackend {
                 let grammar_str = grammar.as_deref().unwrap_or("");
                 LlamaBackend::complete_server(url, &prompt, grammar_str)?
             }
-            Self::Ollama { url, model } => Self::complete_ollama(url, model, user_query)?,
+            Self::Ollama {
+                url,
+                model,
+                disable_thinking,
+            } => Self::complete_ollama(url, model, user_query, *disable_thinking)?,
             Self::OpenAiCompat {
                 base_url,
                 model,
@@ -228,8 +284,18 @@ impl AiBackend {
         ActionCommand::from_llm_json(&clean_json)
     }
 
-    /// Builds payload for Ollama /api/chat with format: "json" and injected memories
+    /// Builds payload for Ollama `/api/chat` with `format: "json"`, top-level `"think": false`,
+    /// `"keep_alive": "30m"`, and tuned options.
     pub fn build_ollama_payload(model: &str, user_query: &str) -> serde_json::Value {
+        Self::build_ollama_payload_with_thinking(model, user_query, true)
+    }
+
+    /// Builds payload for Ollama `/api/chat` with explicit `disable_thinking` toggle.
+    pub fn build_ollama_payload_with_thinking(
+        model: &str,
+        user_query: &str,
+        disable_thinking: bool,
+    ) -> serde_json::Value {
         let system_prompt = get_effective_system_prompt(user_query);
         serde_json::json!({
             "model": model,
@@ -245,16 +311,26 @@ impl AiBackend {
             ],
             "format": "json",
             "stream": false,
+            "think": !disable_thinking,
+            "keep_alive": "30m",
             "options": {
-                "temperature": 0.0
+                "num_ctx": 8192,
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "repeat_penalty": 1.12
             }
         })
     }
 
-    /// Calls Ollama /api/chat endpoint
-    fn complete_ollama(url: &str, model: &str, user_query: &str) -> Result<String, String> {
+    /// Calls Ollama `/api/chat` endpoint strictly (never `/api/generate` or `/v1/chat/completions` when toggling thinking).
+    fn complete_ollama(
+        url: &str,
+        model: &str,
+        user_query: &str,
+        disable_thinking: bool,
+    ) -> Result<String, String> {
         let endpoint = format!("{}/api/chat", url.trim_end_matches('/'));
-        let payload = Self::build_ollama_payload(model, user_query);
+        let payload = Self::build_ollama_payload_with_thinking(model, user_query, disable_thinking);
         let payload_str = serde_json::to_string(&payload)
             .map_err(|e| format!("Failed to serialize Ollama payload: {}", e))?;
 
@@ -481,16 +557,41 @@ impl LlamaBackend {
     }
 
     /// Generates the canonical JSON request payload for llama-server `/completion` endpoint.
-    /// Explicitly enables `"cache_prompt": true` for KV-cache reuse.
+    /// Explicitly enables `"cache_prompt": true`, `"reasoning_format": "deepseek"`,
+    /// and `"chat_template_kwargs": { "enable_thinking": false }`.
     pub fn build_completion_payload(prompt: &str, grammar: &str) -> serde_json::Value {
+        Self::build_completion_payload_with_options(prompt, grammar, None, false)
+    }
+
+    /// Generates the llama-server `/completion` payload, preferring `response_format` JSON schema
+    /// over raw GBNF when `enable_thinking` is true.
+    pub fn build_completion_payload_with_options(
+        prompt: &str,
+        grammar: &str,
+        response_schema: Option<&serde_json::Value>,
+        enable_thinking: bool,
+    ) -> serde_json::Value {
         let mut payload = serde_json::json!({
             "prompt": prompt,
             "temperature": 0.0,
-            "n_predict": 160,
+            "n_predict": 256,
             "stream": false,
-            "cache_prompt": true
+            "cache_prompt": true,
+            "reasoning_format": "deepseek",
+            "chat_template_kwargs": {
+                "enable_thinking": enable_thinking
+            }
         });
-        if !grammar.trim().is_empty() {
+        if enable_thinking {
+            if let Some(schema) = response_schema {
+                payload["response_format"] = serde_json::json!({
+                    "type": "json_schema",
+                    "schema": schema
+                });
+            } else {
+                payload["response_format"] = serde_json::json!({ "type": "json_object" });
+            }
+        } else if !grammar.trim().is_empty() {
             payload["grammar"] = serde_json::Value::String(grammar.to_string());
         }
         payload

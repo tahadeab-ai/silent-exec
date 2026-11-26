@@ -148,7 +148,7 @@ class OnDeviceLlamaEngine {
     fun inferActionCommand(
         userQuery: String,
         grammarText: String = "",
-        maxTokens: Int = 160
+        maxTokens: Int = 256
     ): Result<ActionCommand> {
         return runCatching {
             if (!isLoaded()) {
@@ -179,8 +179,10 @@ class OnDeviceLlamaEngine {
             } catch (t: Throwable) {
                 throw IllegalStateException("فشل تشغيل النموذج المحلي: ${t.message ?: "Unknown error"}", t)
             }
-            val cleanJson = PromptFormatter.extractActionJson(rawOutput)
-            PromptFormatter.normalizeCommand(ActionJson.fromLlmJson(cleanJson))
+            when (val parsed = PromptFormatter.parsePlanOrSingleAction(rawOutput)) {
+                is PlanOrAction.Action -> parsed.actionCommand
+                is PlanOrAction.Plan -> parsed.multiStepPlan.steps.first()
+            }
         }
     }
 }

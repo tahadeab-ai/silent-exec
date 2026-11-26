@@ -2161,4 +2161,51 @@ mod tests {
             other => panic!("Expected McpCall, got {:?}", other),
         }
     }
+
+    #[test]
+    fn test_78_v4_p1_ollama_payload_think_false_and_presets() {
+        let cfg = AppConfig::default();
+        assert_eq!(cfg.ollama_model, "qwen3.5:4b");
+        assert!(cfg.disable_thinking);
+
+        let payload = AiBackend::build_ollama_payload("qwen3.5:4b", "open downloads");
+        assert_eq!(payload["think"], false);
+        assert_eq!(payload["keep_alive"], "30m");
+        assert_eq!(payload["options"]["num_ctx"], 8192);
+        assert_eq!(payload["options"]["temperature"], 0.2);
+        assert_eq!(payload["options"]["top_p"], 0.9);
+        assert_eq!(payload["options"]["repeat_penalty"], 1.12);
+
+        let presets = ModelManager::desktop_recommended_presets();
+        assert!(presets.iter().any(|p| p.model == "qwen3.5:4b" && p.is_default));
+        assert!(presets.iter().any(|p| p.model == "qwen3.5:9b-q4_K_M"));
+        assert!(presets
+            .iter()
+            .any(|p| p.model == "GUI-Owl-1.5-2B/4B-Instruct"));
+    }
+
+    #[test]
+    fn test_79_v4_p1_llama_server_payload_and_think_stripping() {
+        let payload = LlamaBackend::build_completion_payload("test prompt", "root ::= .*");
+        assert_eq!(payload["cache_prompt"], true);
+        assert_eq!(payload["reasoning_format"], "deepseek");
+        assert_eq!(payload["chat_template_kwargs"]["enable_thinking"], false);
+
+        let thinking_payload = LlamaBackend::build_completion_payload_with_options(
+            "test prompt",
+            "root ::= .*",
+            None,
+            true,
+        );
+        assert_eq!(thinking_payload["response_format"]["type"], "json_object");
+        assert!(thinking_payload.get("grammar").is_none());
+
+        let raw_with_think = "<think>let me reason about this</think>\n{\"action\":\"done\",\"platform\":\"pc\",\"confidence\":1.0}";
+        let clean = crate::inference::extract_action_json(raw_with_think)
+            .expect("should strip <think> and extract JSON");
+        assert!(clean.contains("\"done\""));
+
+        let unclosed = "<think>infinite reasoning loop without closing";
+        assert!(crate::inference::extract_action_json(unclosed).is_err());
+    }
 }

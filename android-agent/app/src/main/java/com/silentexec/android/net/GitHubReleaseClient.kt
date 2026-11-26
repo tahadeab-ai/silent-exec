@@ -239,11 +239,35 @@ class GitHubReleaseClient(
         val CURATED_EDGE_MODELS = listOf(
             ModelReleaseItem(
                 tag = "curated-edge",
+                filename = "Qwen3.5-2B-Q4_K_M.gguf",
+                sizeBytes = 1_374_389_534L, // 1.28 GB
+                downloadUrl = "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
+                checksumsUrl = null,
+                description = "unsloth/Qwen3.5-2B (Recommended Default • Apache-2.0 • Non-Thinking • 201 Languages incl. Arabic)"
+            ),
+            ModelReleaseItem(
+                tag = "curated-edge",
+                filename = "LFM3-VL-2B-Q4_K_M.gguf",
+                sizeBytes = 1_450_000_000L,
+                downloadUrl = "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/main/LFM3-VL-2B-Q4_K_M.gguf?download=true",
+                checksumsUrl = null,
+                description = "LiquidAI/LFM3-VL-2B (Vision-Heavy Preset • XML Tool-Call Mode)"
+            ),
+            ModelReleaseItem(
+                tag = "curated-edge",
+                filename = "FunctionGemma-270M-Q4_K_M.gguf",
+                sizeBytes = 230_000_000L,
+                downloadUrl = "https://huggingface.co/unsloth/functiongemma-270m-it-GGUF/resolve/main/functiongemma-270m-it-Q4_K_M.gguf?download=true",
+                checksumsUrl = null,
+                description = "FunctionGemma-270M (<250 MB • Fast Intent Router Slot)"
+            ),
+            ModelReleaseItem(
+                tag = "curated-edge",
                 filename = "LFM3-1.7B-Q4_K_M.gguf",
                 sizeBytes = 1_099_627_808L,
                 downloadUrl = "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true",
                 checksumsUrl = null,
-                description = "LiquidAI/LFM3-1.7B (Fast Edge Agent)"
+                description = "LiquidAI/LFM3-1.7B (Experimental / Thinking Mode • XML Tool-Call)"
             ),
             ModelReleaseItem(
                 tag = "curated-edge",

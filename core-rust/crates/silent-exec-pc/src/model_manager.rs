@@ -70,7 +70,48 @@ pub struct ModelManager {
     repo: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DesktopOllamaPreset {
+    pub id: String,
+    pub model: String,
+    pub display_name: String,
+    pub hardware_tier: String,
+    pub notes: String,
+    pub is_default: bool,
+}
+
 impl ModelManager {
+    /// Returns the 2026 Desktop recommended Ollama / hybrid MCP+GUI presets.
+    #[must_use]
+    pub fn desktop_recommended_presets() -> Vec<DesktopOllamaPreset> {
+        vec![
+            DesktopOllamaPreset {
+                id: "qwen3.5-4b".to_string(),
+                model: "qwen3.5:4b".to_string(),
+                display_name: "Qwen3.5-4B (Default 16 GB RAM PC)".to_string(),
+                hardware_tier: "16 GB RAM".to_string(),
+                notes: "Recommended default for 16 GB RAM PCs; non-thinking fast JSON".to_string(),
+                is_default: true,
+            },
+            DesktopOllamaPreset {
+                id: "qwen3.5-9b-q4km".to_string(),
+                model: "qwen3.5:9b-q4_K_M".to_string(),
+                display_name: "Qwen3.5-9B-Q4_K_M (12 GB+ GPU)".to_string(),
+                hardware_tier: "12 GB+ GPU".to_string(),
+                notes: "High-accuracy multi-step reasoning for 12 GB+ VRAM GPUs".to_string(),
+                is_default: false,
+            },
+            DesktopOllamaPreset {
+                id: "gui-owl-1.5".to_string(),
+                model: "GUI-Owl-1.5-2B/4B-Instruct".to_string(),
+                display_name: "GUI-Owl-1.5-2B/4B-Instruct (MIT Hybrid MCP+GUI)".to_string(),
+                hardware_tier: "8-16 GB RAM / GPU".to_string(),
+                notes: "MIT-licensed hybrid MCP + GUI grounding agent".to_string(),
+                is_default: false,
+            },
+        ]
+    }
+
     pub fn new(custom_cache: Option<PathBuf>) -> Result<Self, String> {
         let cache_dir = match custom_cache {
             Some(p) => p,
@@ -627,14 +668,41 @@ impl ModelManager {
     ) -> (String, String, String, String, String, bool) {
         let lower_tag = tag.to_lowercase();
         let lower_file = filename.to_lowercase();
-        if lower_tag.contains("lfm3") || lower_file.contains("lfm3") {
+        if lower_tag.contains("qwen3.5-2b") || lower_file.contains("qwen3.5-2b") {
+            (
+                "2B".to_string(),
+                "32K".to_string(),
+                "1.6 GB".to_string(),
+                "Fast".to_string(),
+                "الموصى به — Qwen3.5-2B Non-Thinking (201 Languages incl. Arabic)".to_string(),
+                true,
+            )
+        } else if lower_tag.contains("qwen3.5") || lower_file.contains("qwen3.5") {
+            (
+                "4B".to_string(),
+                "32K".to_string(),
+                "3.2 GB".to_string(),
+                "Fast".to_string(),
+                "الموصى به للكمبيوتر — Qwen3.5-4B (16 GB RAM PC)".to_string(),
+                true,
+            )
+        } else if lower_tag.contains("gui-owl") || lower_file.contains("gui-owl") {
+            (
+                "2B/4B".to_string(),
+                "32K".to_string(),
+                "2.5 GB".to_string(),
+                "Fast".to_string(),
+                "MIT Hybrid MCP+GUI — GUI-Owl-1.5".to_string(),
+                true,
+            )
+        } else if lower_tag.contains("lfm3") || lower_file.contains("lfm3") {
             (
                 "1.7B".to_string(),
                 "32K".to_string(),
                 "1.4 GB".to_string(),
-                "Ultra Fast".to_string(),
-                "أفضل وكيل محلي سريع — LFM3 / Fast Edge Agent".to_string(),
-                true,
+                "Experimental".to_string(),
+                "تجريبي (Thinking / XML) — LFM3-1.7B".to_string(),
+                false,
             )
         } else if lower_tag.contains("qwen3") || lower_file.contains("qwen3") {
             (
@@ -673,8 +741,15 @@ impl ModelManager {
     ) -> Vec<ModelReleaseInfo> {
         let items = [
             (
+                "qwen3.5-2b-gguf",
+                "unsloth/Qwen3.5-2B (Recommended Default • Non-Thinking • 201 Languages)",
+                "Qwen3.5-2B-Q4_K_M.gguf",
+                1_374_389_534u64,
+                Some("https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf".to_string()),
+            ),
+            (
                 "liquidai-lfm3-1.7b",
-                "LiquidAI/LFM3-1.7B (Fast Edge Agent)",
+                "LiquidAI/LFM3-1.7B (Experimental / Thinking • XML Tool-Call)",
                 "LFM3-1.7B-Q4_K_M.gguf",
                 1_099_627_808u64,
                 Some("https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf?download=true".to_string()),

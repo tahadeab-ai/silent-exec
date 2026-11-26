@@ -49,6 +49,16 @@ sealed class AndroidExecutionResult {
 
 class AndroidActionExecutor(private val context: Context? = null) {
 
+    fun getAppPackageName(): String? = context?.packageName
+
+    fun moveTaskToBackIfActivity(): Boolean {
+        val act = context as? android.app.Activity ?: return false
+        act.runOnUiThread {
+            runCatching { act.moveTaskToBack(true) }
+        }
+        return true
+    }
+
     companion object {
         fun calculateVolumeIndex(pct: Int, maxVolume: Int = 15): Int {
             return Math.round((pct.coerceIn(0, 100) / 100.0) * maxVolume).toInt()

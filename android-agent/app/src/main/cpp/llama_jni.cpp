@@ -18,9 +18,11 @@ static std::mutex g_llama_mutex;
 static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
 static const llama_vocab* g_vocab = nullptr;
+static std::vector<llama_token> g_cached_tokens;
 static std::string g_last_error;
 
 static void clear_kv_cache_locked() {
+    g_cached_tokens.clear();
     if (g_ctx != nullptr) {
         llama_memory_t mem = llama_get_memory(g_ctx);
         if (mem != nullptr) {
@@ -123,6 +125,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     ctx_params.n_ctx = 2048;
     ctx_params.n_threads = safe_threads;
     ctx_params.n_threads_batch = safe_threads;
+    ctx_params.type_k = GGML_TYPE_Q8_0;
 
     g_ctx = llama_init_from_model(g_model, ctx_params);
     if (g_ctx == nullptr) {
@@ -198,10 +201,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Empty prompt\"}");
     }
 
-    // Clear KV cache completely before each generation to avoid stale/invalid state crashes
-    clear_kv_cache_locked();
-
-    const int limit = max_tokens > 0 ? max_tokens : 160;
+    const int limit = max_tokens > 0 ? max_tokens : 256;
     const uint32_t n_ctx = llama_n_ctx(g_ctx);
     if (n_ctx == 0 || static_cast<uint32_t>(limit) >= n_ctx) {
         return env->NewStringUTF("{\"error\":\"Invalid context window size\"}");
@@ -237,23 +237,45 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Prompt tokenization failed\"}");
     }
 
-    llama_batch batch = llama_batch_init(n_tokens, 0, 1);
+    // Reuse KV cache for matching prefix (pins static system prompt 0..n_sys across steps)
+    int n_common = 0;
+    const int max_common = std::min(static_cast<int>(g_cached_tokens.size()), n_tokens - 1);
+    while (n_common < max_common &&
+           g_cached_tokens[static_cast<size_t>(n_common)] == prompt_tokens[static_cast<size_t>(n_common)]) {
+        ++n_common;
+    }
+
+    if (n_common > 0) {
+        llama_memory_t mem = llama_get_memory(g_ctx);
+        if (mem != nullptr) {
+            llama_memory_seq_rm(mem, 0, static_cast<llama_pos>(n_common), -1);
+        } else {
+            n_common = 0;
+            clear_kv_cache_locked();
+        }
+    } else {
+        clear_kv_cache_locked();
+    }
+
+    const int n_eval = n_tokens - n_common;
+    llama_batch batch = llama_batch_init(n_eval, 0, 1);
     if (batch.token == nullptr || batch.pos == nullptr || batch.n_seq_id == nullptr ||
         batch.seq_id == nullptr || batch.logits == nullptr) {
         llama_batch_free(batch);
         return env->NewStringUTF("{\"error\":\"Failed to allocate prompt batch\"}");
     }
 
-    for (int i = 0; i < n_tokens; ++i) {
-        batch.token[i] = prompt_tokens[static_cast<size_t>(i)];
-        batch.pos[i] = static_cast<llama_pos>(i);
+    for (int i = 0; i < n_eval; ++i) {
+        const int tok_idx = n_common + i;
+        batch.token[i] = prompt_tokens[static_cast<size_t>(tok_idx)];
+        batch.pos[i] = static_cast<llama_pos>(tok_idx);
         batch.n_seq_id[i] = 1;
         if (batch.seq_id[i] != nullptr) {
             batch.seq_id[i][0] = 0;
         }
-        batch.logits[i] = (i == n_tokens - 1) ? 1 : 0;
+        batch.logits[i] = (tok_idx == n_tokens - 1) ? 1 : 0;
     }
-    batch.n_tokens = static_cast<int32_t>(n_tokens);
+    batch.n_tokens = static_cast<int32_t>(n_eval);
 
     if (llama_decode(g_ctx, batch) != 0) {
         llama_batch_free(batch);
@@ -261,6 +283,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Prompt decode failed\"}");
     }
     llama_batch_free(batch);
+    g_cached_tokens = prompt_tokens;
 
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
@@ -272,7 +295,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     llama_sampler* penalty_smpl = llama_sampler_init_penalties(
         llama_vocab_n_tokens(g_vocab),
         64,
-        1.15f,
+        1.12f,
         0.0f,
         0.0f
     );
@@ -280,13 +303,28 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         llama_sampler_chain_add(smpl, penalty_smpl);
     }
 
-    llama_sampler* greedy_smpl = llama_sampler_init_greedy();
-    if (greedy_smpl != nullptr) {
-        llama_sampler_chain_add(smpl, greedy_smpl);
+    llama_sampler* top_k_smpl = llama_sampler_init_top_k(40);
+    if (top_k_smpl != nullptr) {
+        llama_sampler_chain_add(smpl, top_k_smpl);
+    }
+
+    llama_sampler* top_p_smpl = llama_sampler_init_top_p(0.90f, 1);
+    if (top_p_smpl != nullptr) {
+        llama_sampler_chain_add(smpl, top_p_smpl);
+    }
+
+    llama_sampler* temp_smpl = llama_sampler_init_temp(0.20f);
+    if (temp_smpl != nullptr) {
+        llama_sampler_chain_add(smpl, temp_smpl);
+    }
+
+    llama_sampler* dist_smpl = llama_sampler_init_dist(LLAMA_DEFAULT_SEED);
+    if (dist_smpl != nullptr) {
+        llama_sampler_chain_add(smpl, dist_smpl);
     } else {
         llama_sampler_free(smpl);
         clear_kv_cache_locked();
-        return env->NewStringUTF("{\"error\":\"Failed to initialize greedy sampler\"}");
+        return env->NewStringUTF("{\"error\":\"Failed to initialize dist sampler\"}");
     }
 
     std::string output_str;
@@ -295,6 +333,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     bool escape_next = false;
     int brace_depth = 0;
     size_t scan_idx = 0;
+    bool passed_think = false;
 
     for (int i = 0; i < limit; ++i) {
         const llama_pos next_pos = static_cast<llama_pos>(n_tokens + i);
@@ -326,35 +365,58 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
             break;
         }
 
+        const size_t first_non_ws = output_str.find_first_not_of(" \t\r\n");
+        const bool starts_with_think =
+            (first_non_ws != std::string::npos && output_str.compare(first_non_ws, 7, "<think>") == 0);
+        const size_t think_end_pos =
+            starts_with_think ? output_str.find("</think>", first_non_ws + 7) : std::string::npos;
+
+        // Hard <think> token budget guard: break cleanly if unclosed after 96 tokens
+        if (starts_with_think && think_end_pos == std::string::npos && (i + 1) > 96) {
+            LOGI("Hard <think> budget guard triggered at token %d", i + 1);
+            break;
+        }
+
+        if (starts_with_think && think_end_pos != std::string::npos && !passed_think) {
+            passed_think = true;
+            scan_idx = think_end_pos + 8;
+            saw_open_brace = false;
+            in_string = false;
+            escape_next = false;
+            brace_depth = 0;
+        }
+
         bool json_complete = false;
-        while (scan_idx < output_str.size()) {
-            const char ch = output_str[scan_idx];
-            if (escape_next) {
-                escape_next = false;
-            } else if (in_string) {
-                if (ch == '\\') {
-                    escape_next = true;
-                } else if (ch == '"') {
-                    in_string = false;
-                }
-            } else {
-                if (ch == '"') {
-                    in_string = true;
-                } else if (ch == '{') {
-                    saw_open_brace = true;
-                    ++brace_depth;
-                } else if (ch == '}') {
-                    if (saw_open_brace) {
-                        --brace_depth;
-                        if (brace_depth <= 0) {
-                            output_str.resize(scan_idx + 1);
-                            json_complete = true;
-                            break;
+        if (!starts_with_think || passed_think) {
+            while (scan_idx < output_str.size()) {
+                const char ch = output_str[scan_idx];
+                if (escape_next) {
+                    escape_next = false;
+                } else if (in_string) {
+                    if (ch == '\\') {
+                        escape_next = true;
+                    } else if (ch == '"') {
+                        in_string = false;
+                    }
+                } else {
+                    if (ch == '"') {
+                        in_string = true;
+                    } else if (ch == '{') {
+                        saw_open_brace = true;
+                        ++brace_depth;
+                    } else if (ch == '}') {
+                        if (saw_open_brace) {
+                            --brace_depth;
+                            if (brace_depth <= 0) {
+                                output_str.resize(scan_idx + 1);
+                                json_complete = true;
+                                break;
+                            }
                         }
                     }
                 }
+                ++scan_idx;
             }
-            ++scan_idx;
         }
         if (json_complete) {
             break;
@@ -381,7 +443,6 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     }
 
     llama_sampler_free(smpl);
-    clear_kv_cache_locked();
 
     return env->NewStringUTF(output_str.c_str());
 }

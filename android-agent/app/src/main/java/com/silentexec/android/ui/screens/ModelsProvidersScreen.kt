@@ -155,9 +155,9 @@ fun ModelsProvidersScreen(
                         } else {
                             Text(
                                 text = if (ar) {
-                                    "اختر نموذج LFM3-1.7B أو Qwen3-1.7B بالأسفل للتحميل والتشغيل المحلي."
+                                    "اختر نموذج Qwen3.5-2B (الموصى به) أو LFM3-VL-2B أو FunctionGemma-270M بالأسفل للتحميل والتشغيل المحلي."
                                 } else {
-                                    "Download and activate LFM3-1.7B or Qwen3-1.7B below for 100% offline inference."
+                                    "Download and activate Qwen3.5-2B (Recommended), LFM3-VL-2B, or FunctionGemma-270M below for 100% offline inference."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
