@@ -60,6 +60,8 @@ import com.silentexec.android.net.AppReleaseItem
 import com.silentexec.android.net.AppUpdater
 import com.silentexec.android.net.GitHubReleaseClient
 import com.silentexec.android.net.LanBridgeClient
+import com.silentexec.android.net.McpHttpClient
+import com.silentexec.android.net.McpServerStore
 import com.silentexec.android.net.ModelDownloader
 import com.silentexec.android.net.ModelReleaseItem
 import com.silentexec.android.net.UpdateCheckResult
@@ -95,8 +97,21 @@ class MainActivity : AppCompatActivity() {
     // Containers
     private lateinit var bottomNav: BottomNavigationView
     private lateinit var layoutTabExecute: View
+    private lateinit var layoutTabSkills: View
     private lateinit var layoutTabModels: View
     private lateinit var layoutTabSettings: View
+
+    // Tab 1.5 (Skills & MCP) Views
+    private lateinit var layoutProSkillsList: LinearLayout
+    private lateinit var etSkillName: EditText
+    private lateinit var etSkillPrompt: EditText
+    private lateinit var btnSaveSkill: Button
+    private lateinit var layoutCustomSkillsList: LinearLayout
+    private lateinit var layoutMcpPresets: LinearLayout
+    private lateinit var etMcpName: EditText
+    private lateinit var etMcpUrl: EditText
+    private lateinit var btnAddMcp: Button
+    private lateinit var layoutMcpServers: LinearLayout
 
     // Tab 1 Views
     private lateinit var tvHeaderMode: TextView
@@ -185,6 +200,7 @@ class MainActivity : AppCompatActivity() {
         settings.applyTheme()
         MemoryStore.init(this)
         SkillStore.init(this)
+        McpServerStore.init(this)
 
         setContentView(R.layout.activity_main)
         applySystemBarAppearance()
@@ -206,6 +222,7 @@ class MainActivity : AppCompatActivity() {
         loadGrammarAsset()
         setupBottomNavigation()
         setupExecuteTab()
+        setupSkillsTab()
         setupModelsTab()
         setupSettingsTab()
 
@@ -287,8 +304,21 @@ class MainActivity : AppCompatActivity() {
     private fun bindViews() {
         bottomNav = findViewById(R.id.bottomNav)
         layoutTabExecute = findViewById(R.id.layoutTabExecute)
+        layoutTabSkills = findViewById(R.id.layoutTabSkills)
         layoutTabModels = findViewById(R.id.layoutTabModels)
         layoutTabSettings = findViewById(R.id.layoutTabSettings)
+
+        // Tab 1.5 (Skills & MCP)
+        layoutProSkillsList = findViewById(R.id.layoutProSkillsList)
+        etSkillName = findViewById(R.id.etSkillName)
+        etSkillPrompt = findViewById(R.id.etSkillPrompt)
+        btnSaveSkill = findViewById(R.id.btnSaveSkill)
+        layoutCustomSkillsList = findViewById(R.id.layoutCustomSkillsList)
+        layoutMcpPresets = findViewById(R.id.layoutMcpPresets)
+        etMcpName = findViewById(R.id.etMcpName)
+        etMcpUrl = findViewById(R.id.etMcpUrl)
+        btnAddMcp = findViewById(R.id.btnAddMcp)
+        layoutMcpServers = findViewById(R.id.layoutMcpServers)
 
         // Tab 1
         tvHeaderMode = findViewById(R.id.tvHeaderMode)
@@ -372,10 +402,287 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectTabLayout(tabId: Int) {
         layoutTabExecute.visibility = if (tabId == R.id.nav_execute) View.VISIBLE else View.GONE
+        layoutTabSkills.visibility = if (tabId == R.id.nav_skills) View.VISIBLE else View.GONE
         layoutTabModels.visibility = if (tabId == R.id.nav_models) View.VISIBLE else View.GONE
         layoutTabSettings.visibility = if (tabId == R.id.nav_settings) View.VISIBLE else View.GONE
         if (tabId == R.id.nav_models && modelItems.isEmpty()) {
             fetchGitHubModels()
+        } else if (tabId == R.id.nav_skills) {
+            renderCustomSkillsList()
+            renderMcpServersList()
+        }
+    }
+
+    // =========================================================================
+    // TAB 1.5: SKILLS & MCP
+    // =========================================================================
+
+    private fun setupSkillsTab() {
+        val isArabic = settings.language == "ar"
+        val proSkills = listOf(
+            Triple(
+                if (isArabic) "تصفح يوتيوب الذكي" else "YouTube ReAct Navigator",
+                if (isArabic) "فتح يوتيوب والبحث والتنقل خطوة بخطوة" else "Open YouTube, search, and navigate UI",
+                if (isArabic) "افتح اليوتيوب وابحث عن nlp" else "open YouTube and search for nlp"
+            ),
+            Triple(
+                if (isArabic) "بحث الويب والتلخيص" else "Web Search & Summarize",
+                if (isArabic) "البحث في جوجل وعرض النتائج مباشرة" else "Search Google and open results",
+                if (isArabic) "افتح المتصفح وابحث عن الذكاء الاصطناعي" else "search google for edge AI"
+            ),
+            Triple(
+                if (isArabic) "صياغة الرسائل الذكية" else "Smart Message Drafter",
+                if (isArabic) "كتابة مسودة رسالة احترافية فوراً" else "Draft a crisp professional message",
+                if (isArabic) "اكتب رسالة اعتذار قصيرة عن تأخير الاجتماع" else "reply draft a short polite email confirming tomorrow's meeting"
+            ),
+            Triple(
+                if (isArabic) "روتين الدراسة والتركيز" else "Study & Focus Routine",
+                if (isArabic) "خفض الصوت إلى 20% وتهيئة الجهاز" else "Lower volume to 20% for focus",
+                if (isArabic) "اضبط الصوت 20" else "set volume 20"
+            ),
+            Triple(
+                if (isArabic) "ترجمة وتلخيص الحافظة" else "Clipboard Translate / Summarize",
+                if (isArabic) "نسخ وتلخيص المحتوى وحفظه كملاحظة" else "Summarize clipboard text and save note",
+                if (isArabic) "لخص واحفظ في الملاحظات" else "summarize and save note"
+            ),
+            Triple(
+                if (isArabic) "إدارة الملفات والملاحظات" else "File & Notes Manager",
+                if (isArabic) "إنشاء ملاحظات سريعة وتنظيم الملفات" else "Create notes and organize local files",
+                if (isArabic) "اكتب ملاحظة باسم أفكار سريعة" else "create note Quick Ideas"
+            ),
+            Triple(
+                if (isArabic) "التبديل السريع للتطبيقات" else "App Switcher",
+                if (isArabic) "تشغيل أي تطبيق مثبت فوراً" else "Launch installed Android apps",
+                if (isArabic) "افتح الإعدادات" else "open settings"
+            ),
+            Triple(
+                if (isArabic) "إعدادات الجهاز والصوت" else "Device Settings & Volume",
+                if (isArabic) "كتم الصوت أو ضبط السطوع والإعدادات" else "Mute audio or adjust device settings",
+                if (isArabic) "اكتم الصوت 0" else "set volume 0"
+            ),
+            Triple(
+                if (isArabic) "الذاكرة الدائمة" else "Persistent Memory",
+                if (isArabic) "حفظ تفضيلاتك في memory.json" else "Store user preferences in memory.json",
+                if (isArabic) "احفظ في الذاكرة لغتي المفضلة هي العربية" else "remember preferred language is English"
+            ),
+            Triple(
+                if (isArabic) "ملاح واجهة الشاشة" else "Screen UI Navigator",
+                if (isArabic) "التفاعل مع عناصر الشاشة عبر Accessibility" else "Click, type, and scroll screen elements",
+                if (isArabic) "انزل لأسفل" else "scroll down"
+            )
+        )
+
+        layoutProSkillsList.removeAllViews()
+        for ((title, desc, prompt) in proSkills) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, 10, 0, 10)
+            }
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            textCol.addView(TextView(this).apply {
+                text = title
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                textSize = 13.5f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            })
+            textCol.addView(TextView(this).apply {
+                text = desc
+                setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                textSize = 11.5f
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            })
+            val btnTry = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TonalButton).apply {
+                text = getString(R.string.skill_try_btn)
+                textSize = 11.5f
+                setOnClickListener {
+                    selectTab(R.id.nav_execute)
+                    etCommand.setText(prompt)
+                    handleCommand(prompt)
+                }
+            }
+            row.addView(textCol)
+            row.addView(btnTry)
+            layoutProSkillsList.addView(row)
+        }
+
+        btnSaveSkill.setOnClickListener {
+            val name = etSkillName.text.toString().trim()
+            val promptText = etSkillPrompt.text.toString().trim()
+            if (name.isEmpty() || promptText.isEmpty()) return@setOnClickListener
+            val step = ActionCommand(
+                action = ActionType.REPLY,
+                target = promptText,
+                platform = Platform.ANDROID,
+                confidence = 0.95,
+                thought = "Custom user routine: $name"
+            )
+            SkillStore.saveSkill(
+                name = name,
+                triggers = listOf(name, promptText),
+                steps = listOf(step),
+                description = promptText
+            )
+            etSkillName.setText("")
+            etSkillPrompt.setText("")
+            renderCustomSkillsList()
+            Toast.makeText(this, R.string.custom_skill_saved, Toast.LENGTH_SHORT).show()
+        }
+
+        // 1-Click MCP Presets
+        val presets = listOf(
+            "Fetch Web MCP" to "http://127.0.0.1:8765/mcp/fetch",
+            "Memory MCP" to "http://127.0.0.1:8765/mcp/memory",
+            "PC LAN MCP" to "http://${settings.bridgeHost.ifBlank { "192.168.1.100" }}:${settings.bridgePort}/mcp"
+        )
+        layoutMcpPresets.removeAllViews()
+        for ((pName, pUrl) in presets) {
+            val chipBtn = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_OutlinedButton).apply {
+                text = pName
+                textSize = 11f
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                lp.marginEnd = 6
+                layoutParams = lp
+                setOnClickListener {
+                    McpServerStore.saveServer(pName, pUrl, enabled = true)
+                    renderMcpServersList()
+                    Toast.makeText(this@MainActivity, "$pName ✓", Toast.LENGTH_SHORT).show()
+                }
+            }
+            layoutMcpPresets.addView(chipBtn)
+        }
+
+        btnAddMcp.setOnClickListener {
+            val name = etMcpName.text.toString().trim()
+            val url = etMcpUrl.text.toString().trim()
+            if (name.isEmpty() || url.isEmpty()) return@setOnClickListener
+            McpServerStore.saveServer(name, url, enabled = true)
+            etMcpName.setText("")
+            etMcpUrl.setText("")
+            renderMcpServersList()
+        }
+
+        renderCustomSkillsList()
+        renderMcpServersList()
+    }
+
+    private fun renderCustomSkillsList() {
+        layoutCustomSkillsList.removeAllViews()
+        val skills = SkillStore.listSkills()
+        for (skill in skills) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, 8, 0, 8)
+            }
+            val tv = TextView(this).apply {
+                text = "${skill.name} — ${skill.description}"
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                textSize = 12.5f
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            }
+            val btnRun = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
+                text = getString(R.string.skill_try_btn)
+                textSize = 11.5f
+                setOnClickListener {
+                    selectTab(R.id.nav_execute)
+                    val q = skill.description.ifBlank { skill.name }
+                    etCommand.setText(q)
+                    handleCommand(q)
+                }
+            }
+            val btnDel = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
+                text = getString(R.string.memory_btn_delete)
+                setTextColor(ContextCompat.getColor(context, R.color.danger_red))
+                textSize = 11.5f
+                setOnClickListener {
+                    SkillStore.deleteSkill(skill.id)
+                    renderCustomSkillsList()
+                }
+            }
+            row.addView(tv)
+            row.addView(btnRun)
+            row.addView(btnDel)
+            layoutCustomSkillsList.addView(row)
+        }
+    }
+
+    private fun renderMcpServersList() {
+        layoutMcpServers.removeAllViews()
+        val servers = McpServerStore.listServers()
+        if (servers.isEmpty()) {
+            layoutMcpServers.addView(TextView(this).apply {
+                text = getString(R.string.mcp_empty)
+                setTextColor(ContextCompat.getColor(context, R.color.text_muted))
+                textSize = 12.5f
+                setPadding(0, 8, 0, 4)
+            })
+            return
+        }
+        for (srv in servers) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, 8, 0, 8)
+            }
+            val infoCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            infoCol.addView(TextView(this).apply {
+                text = srv.name
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                textSize = 13f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            })
+            infoCol.addView(TextView(this).apply {
+                text = srv.url
+                setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                textSize = 11f
+            })
+            val btnTest = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TonalButton).apply {
+                text = getString(R.string.mcp_test_btn)
+                textSize = 11f
+                setOnClickListener {
+                    Toast.makeText(this@MainActivity, R.string.mcp_testing, Toast.LENGTH_SHORT).show()
+                    thread {
+                        val res = McpHttpClient.testConnection(srv.url)
+                        mainHandler.post {
+                            res.onSuccess { tools ->
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    getString(R.string.mcp_test_ok, srv.name, tools.size),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }.onFailure { err ->
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    getString(R.string.mcp_test_fail, srv.name, err.message ?: "Error"),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }
+            }
+            val btnDel = Button(this, null, 0, com.google.android.material.R.style.Widget_Material3_Button_TextButton).apply {
+                text = getString(R.string.memory_btn_delete)
+                setTextColor(ContextCompat.getColor(context, R.color.danger_red))
+                textSize = 11f
+                setOnClickListener {
+                    McpServerStore.deleteServer(srv.id)
+                    renderMcpServersList()
+                }
+            }
+            row.addView(infoCol)
+            row.addView(btnTest)
+            row.addView(btnDel)
+            layoutMcpServers.addView(row)
         }
     }
 

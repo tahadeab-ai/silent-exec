@@ -45,7 +45,8 @@ sealed class AgentStreamItem {
         var replyText: String? = null,
         var tipText: String? = null,
         val technicalLogs: MutableList<String> = mutableListOf(),
-        var isDetailsExpanded: Boolean = false
+        var isDetailsExpanded: Boolean = false,
+        var isThinkingExpanded: Boolean = false
     ) : AgentStreamItem()
 }
 
@@ -129,6 +130,8 @@ class AgentStreamAdapter(
         private val pbAgentThinking: ProgressBar = view.findViewById(R.id.pbAgentThinking)
         private val tvAgentStatus: TextView = view.findViewById(R.id.tvAgentStatus)
         private val tvAgentTimestamp: TextView = view.findViewById(R.id.tvAgentTimestamp)
+        private val btnToggleThinking: TextView = view.findViewById(R.id.btnToggleThinking)
+        private val tvAgentThinking: TextView = view.findViewById(R.id.tvAgentThinking)
         private val layoutStepPills: LinearLayout = view.findViewById(R.id.layoutStepPills)
         private val layoutReplyCard: LinearLayout = view.findViewById(R.id.layoutReplyCard)
         private val tvReplyText: TextView = view.findViewById(R.id.tvReplyText)
@@ -153,6 +156,27 @@ class AgentStreamAdapter(
             )
             tvAgentTimestamp.text = card.timestamp
 
+            // Collapsible Thinking Block
+            val thoughts = card.stepPills.mapNotNull { it.thought?.takeIf { t -> t.isNotBlank() } }.distinct()
+            if (thoughts.isNotEmpty()) {
+                btnToggleThinking.visibility = View.VISIBLE
+                btnToggleThinking.text = if (card.isThinkingExpanded) {
+                    ctx.getString(R.string.thinking_hide)
+                } else {
+                    ctx.getString(R.string.thinking_show)
+                }
+                tvAgentThinking.visibility = if (card.isThinkingExpanded) View.VISIBLE else View.GONE
+                tvAgentThinking.text = thoughts.joinToString("\n")
+                btnToggleThinking.setOnClickListener {
+                    card.isThinkingExpanded = !card.isThinkingExpanded
+                    val pos = adapterPosition
+                    if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
+                }
+            } else {
+                btnToggleThinking.visibility = View.GONE
+                tvAgentThinking.visibility = View.GONE
+            }
+
             // Render step pills cleanly
             layoutStepPills.removeAllViews()
             if (!card.tipText.isNullOrBlank() || card.stepPills.isNotEmpty()) {
@@ -167,15 +191,6 @@ class AgentStreamAdapter(
                     layoutStepPills.addView(tvTip)
                 }
                 for (pill in card.stepPills) {
-                    if (!pill.thought.isNullOrBlank()) {
-                        val tvThought = TextView(ctx).apply {
-                            text = "💭 التفكير: ${pill.thought}"
-                            setTextColor(ContextCompat.getColor(ctx, R.color.text_secondary))
-                            textSize = 11.5f
-                            setPadding(0, 4, 0, 1)
-                        }
-                        layoutStepPills.addView(tvThought)
-                    }
                     val icon = when (pill.state) {
                         PillState.PENDING -> "⏳"
                         PillState.RUNNING -> "⚡"

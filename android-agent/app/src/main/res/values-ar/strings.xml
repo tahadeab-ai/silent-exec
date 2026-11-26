@@ -4,6 +4,7 @@
 
     <!-- Navigation -->
     <string name="nav_execute">التنفيذ</string>
+    <string name="nav_skills">المهارات</string>
     <string name="nav_models">النماذج</string>
     <string name="nav_settings">الإعدادات</string>
 
@@ -169,4 +170,27 @@
     <string name="skill_prompt_web">افتح المتصفح وابحث عن </string>
     <string name="skill_prompt_mute">اكتم الصوت 0</string>
     <string name="skill_prompt_summarize">لخص واحفظ في الملاحظات</string>
+
+    <!-- v2.0.0: Skills & MCP Tab, Thinking Toggle, Model Spec Pills -->
+    <string name="skills_tab_title">المهارات و MCP</string>
+    <string name="skills_pro_title">مهارات احترافية جاهزة</string>
+    <string name="skill_try_btn">تشغيل</string>
+    <string name="custom_skill_title">إنشاء روتين مخصص</string>
+    <string name="custom_skill_name_hint">اسم المهارة (مثال: وضع الدراسة)</string>
+    <string name="custom_skill_prompt_hint">الأمر / الخطوات (مثال: اضبط الصوت 20)</string>
+    <string name="custom_skill_add_btn">+ إضافة مهارة</string>
+    <string name="custom_skill_saved">تم حفظ المهارة في skills.json</string>
+    <string name="mcp_section_title">موصلات MCP للأندرويد</string>
+    <string name="mcp_presets_label">إضافات بنقرة واحدة</string>
+    <string name="mcp_name_hint">اسم الخادم (مثال: Fetch MCP)</string>
+    <string name="mcp_url_hint">رابط HTTP/SSE (مثال: http://192.168.1.100:8765/mcp)</string>
+    <string name="mcp_add_btn">+ إضافة خادم</string>
+    <string name="mcp_test_btn">اختبار</string>
+    <string name="mcp_testing">جارٍ اختبار خادم MCP...</string>
+    <string name="mcp_test_ok">%1$s: تم اكتشاف %2$d أداة</string>
+    <string name="mcp_test_fail">فشل %1$s: %2$s</string>
+    <string name="mcp_empty">لا توجد موصلات MCP مضافة بعد.</string>
+    <string name="thinking_show">💭 التفكير</string>
+    <string name="thinking_hide">💭 إخفاء التفكير</string>
+    <string name="recommended_badge">⭐ موصى به</string>
 </resources>

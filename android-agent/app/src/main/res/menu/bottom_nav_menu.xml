@@ -5,6 +5,10 @@
         android:icon="@android:drawable/ic_media_play"
         android:title="@string/nav_execute" />
     <item
+        android:id="@+id/nav_skills"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="@string/nav_skills" />
+    <item
         android:id="@+id/nav_models"
         android:icon="@android:drawable/ic_menu_save"
         android:title="@string/nav_models" />

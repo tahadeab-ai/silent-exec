@@ -4,9 +4,9 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="4dp"
-    android:layout_marginBottom="10dp"
-    app:cardBackgroundColor="@color/surface_elevated"
-    app:cardCornerRadius="14dp"
+    android:layout_marginBottom="12dp"
+    app:cardBackgroundColor="@color/surface_dark"
+    app:cardCornerRadius="20dp"
     app:cardElevation="0dp"
     app:strokeColor="@color/surface_variant"
     app:strokeWidth="1dp">
@@ -15,21 +15,31 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="16dp">
 
-        <!-- Status Header -->
+        <!-- SilentExec Identity & Status Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/tvAgentBrand"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
             <ProgressBar
                 android:id="@+id/pbAgentThinking"
                 style="?android:attr/progressBarStyleSmall"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="15dp"
+                android:layout_height="15dp"
+                android:layout_marginEnd="6dp"
                 android:visibility="visible" />
 
             <TextView
@@ -38,6 +48,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/stream_thinking"
+                android:textAlignment="viewStart"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -50,7 +61,32 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Step Progress Pills Container -->
+        <!-- Collapsible Thinking Block -->
+        <TextView
+            android:id="@+id/btnToggleThinking"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:paddingVertical="3dp"
+            android:text="@string/thinking_show"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvAgentThinking"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@color/surface_elevated"
+            android:padding="10dp"
+            android:textAlignment="viewStart"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- Step Progress Rows Container -->
         <LinearLayout
             android:id="@+id/layoutStepPills"
             android:layout_width="match_parent"
@@ -64,10 +100,10 @@
             android:id="@+id/layoutReplyCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@color/surface_dark"
+            android:layout_marginTop="10dp"
+            android:background="@color/surface_elevated"
             android:orientation="vertical"
-            android:padding="10dp"
+            android:padding="12dp"
             android:visibility="gone">
 
             <TextView
@@ -75,6 +111,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:lineSpacingExtra="3dp"
+                android:textAlignment="viewStart"
                 android:textColor="@color/text_primary"
                 android:textIsSelectable="true"
                 android:textSize="14sp" />
@@ -113,7 +150,8 @@
             android:layout_marginTop="4dp"
             android:background="@color/bg_dark"
             android:fontFamily="monospace"
-            android:padding="8dp"
+            android:padding="10dp"
+            android:textAlignment="viewStart"
             android:textColor="@color/text_secondary"
             android:textIsSelectable="true"
             android:textSize="11sp"

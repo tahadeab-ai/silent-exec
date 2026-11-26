@@ -47,6 +47,7 @@ class ModelAdapter(
     inner class ModelViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvModelName: TextView = itemView.findViewById(R.id.tvModelName)
         private val tvModelDetails: TextView = itemView.findViewById(R.id.tvModelDetails)
+        private val layoutModelSpecs: android.widget.LinearLayout = itemView.findViewById(R.id.layoutModelSpecs)
         private val tvModelActiveBadge: TextView = itemView.findViewById(R.id.tvModelActiveBadge)
         private val pbModelDownload: ProgressBar = itemView.findViewById(R.id.pbModelDownload)
         private val layoutDownloadMetrics: View = itemView.findViewById(R.id.layoutDownloadMetrics)
@@ -69,6 +70,48 @@ class ModelAdapter(
                 label,
                 item.sizeMb
             )
+
+            // Rich Spec Pills (1.7B, 32K, ~1.4 GB RAM, Recommended)
+            layoutModelSpecs.removeAllViews()
+            val nameLower = (item.filename + " " + item.tag).lowercase(Locale.US)
+            val isRecommended = nameLower.contains("lfm3") || nameLower.contains("qwen3")
+            val specs = when {
+                nameLower.contains("lfm3") || nameLower.contains("qwen3") ->
+                    listOf("1.7B", "32K", "~1.4 GB RAM")
+                nameLower.contains("0.5b") ->
+                    listOf("0.5B", "32K", "~0.5 GB RAM")
+                nameLower.contains("1.5b") ->
+                    listOf("1.5B", "32K", "~1.2 GB RAM")
+                else -> listOf("GGUF", "32K")
+            }
+            val ctx = itemView.context
+            for (spec in specs) {
+                val pill = TextView(ctx).apply {
+                    text = spec
+                    textSize = 10.5f
+                    setTextColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.text_secondary))
+                    setBackgroundColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.surface_elevated))
+                    setPadding(12, 4, 12, 4)
+                    val lp = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    lp.marginEnd = 8
+                    layoutParams = lp
+                }
+                layoutModelSpecs.addView(pill)
+            }
+            if (isRecommended) {
+                val recPill = TextView(ctx).apply {
+                    text = ctx.getString(R.string.recommended_badge)
+                    textSize = 10.5f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.accent_green))
+                    setBackgroundColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.surface_elevated))
+                    setPadding(12, 4, 12, 4)
+                }
+                layoutModelSpecs.addView(recPill)
+            }
 
             val isDownloaded = modelDownloader.isModelDownloaded(item.filename)
             val isActive = item.filename.equals(currentActive, ignoreCase = true)
