@@ -145,10 +145,11 @@ fun ModelsProvidersScreen(
                         Spacer(Modifier.height(6.dp))
                         val downloadedModel = state.models.firstOrNull { it.isDownloaded }
                         if (downloadedModel != null && !downloadedModel.isActive) {
+                            val label = downloadedModel.release.filename.removeSuffix(".gguf")
                             Button(onClick = { onActivateModel(downloadedModel) }) {
                                 Text(
-                                    if (ar) "تفعيل ${downloadedModel.release.displayName}"
-                                    else "Activate ${downloadedModel.release.displayName}"
+                                    if (ar) "تفعيل $label"
+                                    else "Activate $label"
                                 )
                             }
                         } else {
