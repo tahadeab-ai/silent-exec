@@ -1,1280 +1,823 @@
-/**
- * SilentExec Desktop v2.0.0 — Frontend Controller
- * Pure Vanilla JS + Tauri v2 IPC
- */
-(function () {
-  'use strict';
+/* SilentExec Desktop v3.1.0 — Pure Tauri v2 Vanilla UI */
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
 
-  const I18N = {
-    ar: {
-      app_title: 'SilentExec v2.0.0',
-      nav_agent: 'الوكيل',
-      nav_models: 'النماذج',
-      nav_tools: 'المهارات و MCP',
-      nav_memory: 'الذاكرة',
-      nav_settings: 'الإعدادات',
-      status_idle: 'جاهز',
-      status_running: 'جارٍ التنفيذ...',
-      runtime_checking: 'جارٍ فحص المحرك...',
-      runtime_ready: 'المحرك جاهز',
-      runtime_not_ready: 'غير مثبت',
-      popover_select_model: 'تبديل النموذج النشط',
-      btn_manage_models: 'إدارة النماذج',
-      agent_welcome_title: 'SilentExec جاهز للتنفيذ',
-      agent_welcome_desc: 'نفّذ أوامر النظام، أدر الملفات، ابحث عبر الويب، أو صغ الأكواد والردود محلياً بأمان.',
-      ex_downloads: 'افتح التنزيلات',
-      ex_youtube: 'بحث يوتيوب عن Rust',
-      ex_note: 'إنشاء ملاحظة',
-      ex_volume: 'ضبط الصوت 50%',
-      confirm_required_title: 'تأكيد تنفيذ الخطوة',
-      btn_execute_step: 'تنفيذ',
-      btn_skip_step: 'تخطي',
-      prompt_placeholder: 'اكتب أمراً أو مهمة متعددة الخطوات...',
-      mode_silent: 'صامت',
-      mode_interactive: 'تفاعلي',
-      mode_dry_run: 'محاكاة',
-      btn_clear_session: 'جلسة جديدة',
-      btn_stop: 'إيقاف',
-      btn_run: 'تنفيذ',
-      thinking_label: 'التفكير',
-      steps_completed: 'خطوات مكتملة',
-      status_failed: 'فشل التنفيذ',
-      status_blocked: 'محظور',
-      status_confirm: 'بانتظار التأكيد',
-      copy_code: 'نسخ',
-      copied: 'تم النسخ',
-      runtime_title: 'محرك التشغيل المحلي (llama-server)',
-      runtime_desc: 'تشغيل محلي كامل مع قواعد GBNF الصارمة وإعادة استخدام ذاكرة KV Cache.',
-      btn_setup_runtime: 'إعداد / فحص البيئة',
-      models_catalog_title: 'مستودع النماذج (GGUF)',
-      models_catalog_desc: 'نماذج مدمجة محسّنة للاستجابة السريعة والأوامر العربية والإنجليزية.',
-      btn_refresh_models: 'تحديث',
-      model_active: 'النشط',
-      model_cached: 'محمّل',
-      model_remote: 'متاح للتحميل',
-      btn_download: 'تحميل',
-      btn_pause: 'إيقاف مؤقت',
-      btn_resume: 'استئناف',
-      btn_cancel: 'إلغاء',
-      btn_activate: 'تفعيل',
-      btn_delete: 'حذف',
-      recommended_badge: 'موصى به',
-      custom_routines_title: 'إنشاء روتين مخصص',
-      custom_routines_desc: 'احفظ اختصارات متعددة الخطوات في ذاكرة SilentExec لاستدعائها فوراً.',
-      routine_name_label: 'اسم الروتين',
-      routine_name_ph: 'وضع الدراسة',
-      routine_steps_label: 'الأمر / الخطوات',
-      routine_steps_ph: 'افتح المتصفح واضبط الصوت على 30%',
-      btn_save_routine: 'حفظ الروتين',
-      btn_run_routine: 'تشغيل',
-      mcp_title: 'خوادم أدوات MCP',
-      mcp_desc: 'تفعيل بنقرة واحدة للإضافات الرسمية أو ربط خادم MCP مخصص.',
-      btn_add_mcp: '+ إضافة خادم',
-      mcp_name_label: 'الاسم',
-      mcp_cmd_label: 'الأمر',
-      mcp_args_label: 'المعاملات',
-      btn_save: 'حفظ',
-      btn_test: 'اختبار',
-      btn_enable: '+ تفعيل',
-      btn_enabled: 'مفعّل ✓',
-      memory_title: 'ذاكرة SilentExec الدائمة',
-      memory_desc: 'حقائق وتفضيلات محفوظة محلياً في memory.json تُحقن تلقائياً في سياق الوكيل.',
-      btn_refresh: 'تحديث',
-      btn_add_memory: '+ إضافة للذاكرة',
-      memory_key_label: 'المفتاح',
-      memory_category_label: 'التصنيف',
-      memory_content_label: 'المحتوى',
-      category_preference: 'تفضيل',
-      category_fact: 'حقيقة / مسار',
-      category_skill: 'مهارة / روتين',
-      no_memories: 'لا توجد ذواكر محفوظة بعد.',
-      no_mcp: 'لا توجد خوادم MCP مفعّلة بعد.',
-      settings_general_title: 'المظهر واللغة والتوجيه',
-      setting_lang_label: 'لغة الواجهة',
-      setting_lang_hint: 'تبديل فوري مع عكس اتجاه الواجهة (RTL / LTR).',
-      setting_theme_label: 'المظهر',
-      setting_theme_hint: 'داكن مريح للعين أو نهاري واضح.',
-      theme_dark: 'داكن',
-      theme_light: 'نهاري',
-      setting_fast_router_label: 'الموجه الحتمي السريع',
-      setting_fast_router_hint: 'تنفيذ الأوامر البسيطة في أقل من 15ms قبل استدعاء الذكاء الاصطناعي.',
-      settings_ai_title: 'محرك الذكاء الاصطناعي (AI Brain)',
-      settings_ai_desc: 'اختر بين التشغيل المحلي GGUF أو Ollama أو واجهة OpenAI-Compatible.',
-      btn_test_connection: 'اختبار الاتصال',
-      brain_local_title: 'Local GGUF',
-      brain_local_desc: 'خصوصية تامة عبر llama-server',
-      brain_ollama_desc: 'خادم Ollama محلي أو شبكي',
-      brain_api_desc: 'OpenAI / DeepSeek / Groq',
-      ollama_url_label: 'رابط Ollama',
-      ollama_model_label: 'اسم النموذج',
-      btn_save_settings: 'حفظ الإعدادات',
-      bridge_title: 'جسر الشبكة المحلية (LAN Bridge)',
-      bridge_desc: 'السماح لتطبيق SilentExec Android بإرسال الأوامر إلى هذا الجهاز عبر Wi-Fi.',
-      bridge_url_label: 'العنوان:',
-      bridge_token_label: 'الرمز:',
-      updates_title: 'التحديثات التلقائية',
-      version_label: 'الإصدار الحالي: v2.0.0',
-      btn_check_updates: 'التحقق من التحديثات',
-      btn_install_update: 'تحميل وتثبيت التحديث',
-      update_latest: 'أنت تستخدم أحدث إصدار.',
-      update_available: 'يتوفر إصدار جديد:',
-      saved_ok: 'تم الحفظ بنجاح'
-    },
-    en: {
-      app_title: 'SilentExec v2.0.0',
-      nav_agent: 'Agent',
-      nav_models: 'Models',
-      nav_tools: 'Skills & MCP',
-      nav_memory: 'Memory',
-      nav_settings: 'Settings',
-      status_idle: 'Ready',
-      status_running: 'Running...',
-      runtime_checking: 'Checking runtime...',
-      runtime_ready: 'Runtime Ready',
-      runtime_not_ready: 'Not Installed',
-      popover_select_model: 'Switch Active Model',
-      btn_manage_models: 'Manage Models',
-      agent_welcome_title: 'SilentExec Ready',
-      agent_welcome_desc: 'Execute OS actions, manage files, search the web, and draft code locally with deterministic safety.',
-      ex_downloads: 'Open Downloads',
-      ex_youtube: 'Search YouTube for Rust',
-      ex_note: 'Create a Note',
-      ex_volume: 'Set Volume 50%',
-      confirm_required_title: 'Confirm Step Execution',
-      btn_execute_step: 'Execute',
-      btn_skip_step: 'Skip',
-      prompt_placeholder: 'Type a command or multi-step goal...',
-      mode_silent: 'Silent',
-      mode_interactive: 'Interactive',
-      mode_dry_run: 'Simulate',
-      btn_clear_session: 'New Session',
-      btn_stop: 'Stop',
-      btn_run: 'Run',
-      thinking_label: 'Thinking',
-      steps_completed: 'steps completed',
-      status_failed: 'Failed',
-      status_blocked: 'Blocked',
-      status_confirm: 'Awaiting Confirmation',
-      copy_code: 'Copy',
-      copied: 'Copied',
-      runtime_title: 'Local Runtime Engine (llama-server)',
-      runtime_desc: 'Fully local execution with strict GBNF grammar constraints and KV cache reuse.',
-      btn_setup_runtime: 'Setup / Verify Runtime',
-      models_catalog_title: 'AI Models Hub (GGUF)',
-      models_catalog_desc: 'Compact edge models tuned for fast bilingual Arabic & English execution.',
-      btn_refresh_models: 'Refresh',
-      model_active: 'Active',
-      model_cached: 'Downloaded',
-      model_remote: 'Available',
-      btn_download: 'Download',
-      btn_pause: 'Pause',
-      btn_resume: 'Resume',
-      btn_cancel: 'Cancel',
-      btn_activate: 'Activate',
-      btn_delete: 'Delete',
-      recommended_badge: 'Recommended',
-      custom_routines_title: 'Custom Routine Builder',
-      custom_routines_desc: 'Save multi-step shortcuts in SilentExec Memory for instant replay.',
-      routine_name_label: 'Routine Name',
-      routine_name_ph: 'Study Mode',
-      routine_steps_label: 'Command / Steps',
-      routine_steps_ph: 'Open browser and set volume to 30%',
-      btn_save_routine: 'Save Routine',
-      btn_run_routine: 'Run',
-      mcp_title: 'MCP Tool Servers',
-      mcp_desc: '1-click enable for official presets or connect a custom MCP server.',
-      btn_add_mcp: '+ Add Server',
-      mcp_name_label: 'Name',
-      mcp_cmd_label: 'Command',
-      mcp_args_label: 'Arguments',
-      btn_save: 'Save',
-      btn_test: 'Test',
-      btn_enable: '+ Enable',
-      btn_enabled: 'Enabled ✓',
-      memory_title: 'SilentExec Persistent Memory',
-      memory_desc: 'Facts and preferences stored locally in memory.json and automatically injected into agent context.',
-      btn_refresh: 'Refresh',
-      btn_add_memory: '+ Add Memory',
-      memory_key_label: 'Key',
-      memory_category_label: 'Category',
-      memory_content_label: 'Content',
-      category_preference: 'Preference',
-      category_fact: 'Fact / Path',
-      category_skill: 'Skill / Routine',
-      no_memories: 'No memories saved yet.',
-      no_mcp: 'No MCP servers configured yet.',
-      settings_general_title: 'Appearance, Language & Routing',
-      setting_lang_label: 'Interface Language',
-      setting_lang_hint: 'Instant switch with full RTL / LTR layout mirroring.',
-      setting_theme_label: 'Theme',
-      setting_theme_hint: 'Focused neutral-dark or crisp daylight palette.',
-      theme_dark: 'Dark',
-      theme_light: 'Light',
-      setting_fast_router_label: 'Fast Deterministic Router',
-      setting_fast_router_hint: 'Resolve simple commands in <15ms before invoking AI.',
-      settings_ai_title: 'AI Brain Configuration',
-      settings_ai_desc: 'Choose between local GGUF, Ollama, or OpenAI-Compatible APIs.',
-      btn_test_connection: 'Test Connection',
-      brain_local_title: 'Local GGUF',
-      brain_local_desc: '100% private via llama-server',
-      brain_ollama_desc: 'Local or LAN Ollama server',
-      brain_api_desc: 'OpenAI / DeepSeek / Groq',
-      ollama_url_label: 'Ollama URL',
-      ollama_model_label: 'Model Name',
-      btn_save_settings: 'Save Settings',
-      bridge_title: 'LAN Bridge (Android <-> Desktop)',
-      bridge_desc: 'Allow SilentExec Android to send commands to this PC over Wi-Fi.',
-      bridge_url_label: 'URL:',
-      bridge_token_label: 'Token:',
-      updates_title: 'Software Updates',
-      version_label: 'Current Version: v2.0.0',
-      btn_check_updates: 'Check for Updates',
-      btn_install_update: 'Download & Install Update',
-      update_latest: 'You are on the latest version.',
-      update_available: 'Update available:',
-      saved_ok: 'Saved successfully'
-    }
-  };
+const I18N = {
+  ar: {
+    nav_agent: "الوكيل",
+    nav_models: "النماذج",
+    nav_tools: "الأدوات و MCP",
+    nav_settings: "الإعدادات",
+    clear_chat: "محادثة جديدة",
+    composer_placeholder: "اطلب من SilentExec تنفيذ مهمة، كتابة كود، أو البحث...",
+    send_btn: "إرسال",
+    stop_btn: "إيقاف",
+    hero_title: "مساعد SilentExec الذكي",
+    hero_sub: "وكيل حل المشكلات متعدد الخطوات: يبحث في الويب، يقرأ ويكتب الملفات، ويشغل أدوات النظام وMCP بأمان.",
+    chip_1: "ابحث في الويب عن أحدث إصدار Rust ولخّصه",
+    chip_2: "اكتب دالة Python لفرز قائمة مع شرحها",
+    chip_3: "افتح مجلد المستندات",
+    thinking_label: "💭 التفكير والخطوات",
+    copy_btn: "نسخ",
+    copied_btn: "تم النسخ ✓",
+    allow_btn: "✓ سماح",
+    deny_btn: "✗ رفض",
+    models_title: "النماذج المحلية ووقت التشغيل",
+    models_subtitle: "إدارة محرك llama-server وتحميل نماذج GGUF محلياً مع استئناف التنزيل.",
+    setup_runtime: "تثبيت llama-server",
+    runtime_checking: "جارٍ فحص llama-server...",
+    runtime_running: "llama-server يعمل وجاهز",
+    runtime_stopped: "llama-server غير مشغّل",
+    refresh: "تحديث",
+    recommended: "موصى به",
+    download: "تنزيل",
+    pause: "إيقاف مؤقت",
+    resume: "استئناف",
+    cancel: "إلغاء",
+    activate: "تفعيل",
+    active_badge: "نشط",
+    delete_btn: "حذف",
+    tools_title: "الأدوات المدمجة وخوادم MCP",
+    tools_subtitle: "أدوات احترافية مفعّلة تلقائياً مع دعم خوادم MCP والذاكرة الدائمة.",
+    builtin_tools_heading: "الأدوات المدمجة (مفعّلة تلقائياً)",
+    mcp_presets_heading: "خوادم MCP الجاهزة",
+    add_mcp_title: "إضافة خادم MCP مخصص",
+    mcp_name_ph: "الاسم (مثال: docs)",
+    mcp_cmd_ph: "الأمر (مثال: npx)",
+    mcp_args_ph: "المعاملات",
+    add_btn: "إضافة",
+    memory_heading: "الذاكرة الدائمة",
+    mem_key_ph: "المفتاح (مثال: preferred_lang)",
+    mem_val_ph: "المحتوى...",
+    save_btn: "حفظ",
+    discover_tools: "فحص الأدوات",
+    settings_title: "الإعدادات",
+    settings_subtitle: "اللغة، المظهر، مزود الذكاء الاصطناعي، الجسر المحلي، والتحديث التلقائي.",
+    general_settings: "عام",
+    language_label: "اللغة",
+    theme_label: "المظهر",
+    theme_dark: "داكن",
+    theme_light: "فاتح",
+    exec_mode_label: "وضع التنفيذ",
+    mode_silent: "صامت (Silent)",
+    mode_interactive: "تفاعلي (Interactive)",
+    mode_dry_run: "محاكاة (Dry Run)",
+    fast_router_label: "الموجه السريع (<15ms)",
+    provider_settings: "مزود الذكاء الاصطناعي",
+    provider_label: "المزود",
+    install_goose: "تثبيت Goose",
+    test_connection: "اختبار الاتصال",
+    bridge_title: "الجسر المحلي للأندرويد (LAN Bridge)",
+    bridge_desc: "اسمح لتطبيق SilentExec على Android بالتحكم الآمن في هذا الجهاز عبر الشبكة المحلية.",
+    bridge_start: "تشغيل الجسر",
+    bridge_stop: "إيقاف الجسر",
+    updater_title: "التحديث التلقائي",
+    updater_ready: "الإصدار الحالي: v3.1.0",
+    check_update: "التحقق من التحديثات",
+    install_update: "تنزيل وتثبيت التحديث",
+    up_to_date: "أنت تستخدم أحدث إصدار.",
+    update_available: "تحديث جديد متوفر:",
+    auto_enabled: "مفعّل تلقائياً",
+  },
+  en: {
+    nav_agent: "Agent",
+    nav_models: "Models",
+    nav_tools: "Tools & MCP",
+    nav_settings: "Settings",
+    clear_chat: "New Chat",
+    composer_placeholder: "Ask SilentExec to solve a problem, write code, or run a task...",
+    send_btn: "Send",
+    stop_btn: "Stop",
+    hero_title: "SilentExec Desktop Agent",
+    hero_sub: "Multi-step problem solver: researches the web, reads & writes files, and controls PC & MCP tools safely.",
+    chip_1: "Search the web for the latest Rust release and summarize it",
+    chip_2: "Write a clean Python quicksort function with explanation",
+    chip_3: "Open Documents folder",
+    thinking_label: "💭 Thinking & Steps",
+    copy_btn: "Copy",
+    copied_btn: "Copied ✓",
+    allow_btn: "✓ Allow",
+    deny_btn: "✗ Deny",
+    models_title: "Local Models & Runtime",
+    models_subtitle: "Manage llama-server and download GGUF models locally with pause/resume.",
+    setup_runtime: "Setup llama-server",
+    runtime_checking: "Checking llama-server...",
+    runtime_running: "llama-server is running",
+    runtime_stopped: "llama-server is stopped",
+    refresh: "Refresh",
+    recommended: "Recommended",
+    download: "Download",
+    pause: "Pause",
+    resume: "Resume",
+    cancel: "Cancel",
+    activate: "Activate",
+    active_badge: "Active",
+    delete_btn: "Delete",
+    tools_title: "Built-In Pro Tools & MCP",
+    tools_subtitle: "Auto-enabled built-in capabilities plus 1-click MCP presets and persistent memory.",
+    builtin_tools_heading: "Built-In Pro Tools (Auto-Enabled)",
+    mcp_presets_heading: "1-Click MCP Presets",
+    add_mcp_title: "Add Custom MCP Server",
+    mcp_name_ph: "Name (e.g. docs)",
+    mcp_cmd_ph: "Command (e.g. npx)",
+    mcp_args_ph: "Arguments",
+    add_btn: "Add",
+    memory_heading: "Persistent Memory",
+    mem_key_ph: "Key (e.g. preferred_lang)",
+    mem_val_ph: "Content...",
+    save_btn: "Save",
+    discover_tools: "Discover Tools",
+    settings_title: "Settings",
+    settings_subtitle: "Language, theme, AI provider, Android LAN bridge, and auto-updater.",
+    general_settings: "General",
+    language_label: "Language",
+    theme_label: "Theme",
+    theme_dark: "Dark",
+    theme_light: "Light",
+    exec_mode_label: "Execution Mode",
+    mode_silent: "Silent",
+    mode_interactive: "Interactive",
+    mode_dry_run: "Dry Run",
+    fast_router_label: "Fast Router (<15ms)",
+    provider_settings: "AI Provider",
+    provider_label: "Provider",
+    install_goose: "Install Goose",
+    test_connection: "Test Connection",
+    bridge_title: "Android LAN Bridge",
+    bridge_desc: "Allow SilentExec Android to securely control this PC over your local network.",
+    bridge_start: "Start Bridge",
+    bridge_stop: "Stop Bridge",
+    updater_title: "Auto-Updater",
+    updater_ready: "Current version: v3.1.0",
+    check_update: "Check for Updates",
+    install_update: "Download & Install Update",
+    up_to_date: "You are on the latest version.",
+    update_available: "New update available:",
+    auto_enabled: "Auto-Enabled",
+  },
+};
 
-  const MCP_PRESETS = [
-    { name: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '.'], arDesc: 'قراءة وإدارة الملفات ضمن المجلد المحدد', enDesc: 'Read and manage files in allowed workspace' },
-    { name: 'fetch', command: 'uvx', args: ['mcp-server-fetch'], arDesc: 'جلب محتوى صفحات الويب والـ APIs', enDesc: 'Fetch web pages and API responses' },
-    { name: 'memory', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'], arDesc: 'رسم بياني للمعرفة الدائمة', enDesc: 'Knowledge graph persistent memory' },
-    { name: 'git', command: 'uvx', args: ['mcp-server-git'], arDesc: 'فحص سجل Git والفروقات البرمجية', enDesc: 'Inspect Git status, diffs, and history' }
-  ];
+const BUILTIN_PRO_TOOLS = [
+  { id: "web_fetch", title_ar: "البحث وجلب الويب", title_en: "Web Research & Fetch", desc_ar: "جلب صفحات الويب ونتائج البحث", desc_en: "Fetches URLs & web search results" },
+  { id: "files", title_ar: "قراءة وكتابة الملفات", title_en: "Workspace File Tools", desc_ar: "read_file, write_file, search_files", desc_en: "read_file, write_file, search_files" },
+  { id: "system", title_ar: "تحكم النظام والتطبيقات", title_en: "System & App Controller", desc_ar: "launch_app, open_folder, open_url, volume", desc_en: "launch_app, open_folder, open_url, volume" },
+  { id: "memory", title_ar: "الذاكرة الدائمة", title_en: "Persistent Memory", desc_ar: "تذكر تفضيلاتك عبر الجلسات", desc_en: "Remembers user context across sessions" },
+  { id: "reply", title_ar: "التفكير وكتابة الأكواد", title_en: "Rich Markdown & Code", desc_ar: "إجابات مفصلة ونسخ الكود بنقرة", desc_en: "Detailed answers & 1-click code copy" },
+];
 
-  const MODEL_SPECS = {
-    'lfm3': ['1.7B', '32K Context', '~1.4 GB RAM', true],
-    'qwen3': ['1.7B', '32K Context', '~1.4 GB RAM', true],
-    'qwen2.5-0.5b': ['0.5B', '32K Context', '~0.5 GB RAM', false],
-    'qwen2.5-1.5b': ['1.5B', '32K Context', '~1.2 GB RAM', false]
-  };
+const MCP_PRESETS = [
+  { name: "filesystem", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "."] },
+  { name: "fetch", command: "uvx", args: ["mcp-server-fetch"] },
+  { name: "memory", command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"] },
+  { name: "git", command: "uvx", args: ["mcp-server-git"] },
+];
 
-  const State = {
-    lang: localStorage.getItem('se_lang') || 'ar',
-    theme: localStorage.getItem('se_theme') || 'dark',
-    mode: 'silent',
-    backend: 'local_llama',
-    activeModelTag: null,
-    fastRouterEnabled: true,
-    isRunning: false,
-    pendingStepIndex: null,
-    models: [],
-    downloadStates: {}, // tag -> { status, percent, speed_mbps, eta_seconds }
-    mcpServers: [],
-    memories: [],
-    activeView: 'viewAgent',
-    latestUpdateTag: null
-  };
+const MODEL_SPECS = {
+  "v0.3.0-model": { params: "1.7B", ctx: "32K", ram: "~1.4 GB RAM", rec: true },
+  "v0.2.0-model": { params: "1.7B", ctx: "32K", ram: "~1.4 GB RAM", rec: false },
+  "v0.1.0-model": { params: "0.5B", ctx: "32K", ram: "~0.6 GB RAM", rec: false },
+};
 
-  const hasTauri = () => Boolean(window.__TAURI__ && window.__TAURI__.core);
+const state = {
+  lang: "ar",
+  theme: localStorage.getItem("silentexec_theme") || "dark",
+  config: null,
+  isRunning: false,
+  abortRequested: false,
+  messages: [],
+  downloadProgress: {},
+  downloadPaused: {},
+  latestUpdateTag: null,
+};
 
-  async function invokeTauri(cmd, args = {}) {
-    if (!hasTauri()) {
-      return mockTauri(cmd, args);
-    }
-    return await window.__TAURI__.core.invoke(cmd, args);
+function t(key) {
+  return (I18N[state.lang] && I18N[state.lang][key]) || I18N.en[key] || key;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderMarkdown(rawText) {
+  const text = String(rawText || "");
+  const codeBlocks = [];
+  const placeholderText = text.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length;
+    const escapedCode = escapeHtml(code.trimEnd());
+    const langLabel = escapeHtml(lang || "code");
+    codeBlocks.push(
+      `<div class="code-block-wrap"><div class="code-block-header"><span>${langLabel}</span><button class="btn btn-ghost btn-sm copy-code-btn" type="button" data-code="${encodeURIComponent(code.trimEnd())}">${t("copy_btn")}</button></div><pre><code>${escapedCode}</code></pre></div>`
+    );
+    return `@@CODEBLOCK_${idx}@@`;
+  });
+
+  let html = escapeHtml(placeholderText)
+    .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n{2,}/g, "</p><p>")
+    .replace(/\n/g, "<br/>");
+
+  html = `<div class="md-body"><p>${html}</p></div>`;
+  codeBlocks.forEach((block, idx) => {
+    html = html.replace(`@@CODEBLOCK_${idx}@@`, block);
+  });
+  return html;
+}
+
+function applyLanguageAndTheme() {
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = state.lang === "ar" ? "rtl" : "ltr";
+  document.documentElement.setAttribute("data-theme", state.theme);
+
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (key) el.setAttribute("placeholder", t(key));
+  });
+  renderChat();
+  renderBuiltinTools();
+  renderMcpPresets();
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tabName);
+  });
+  document.querySelectorAll(".tab-view").forEach((sec) => {
+    sec.classList.toggle("active", sec.id === `tab-${tabName}`);
+  });
+  if (tabName === "models") {
+    refreshRuntimeStatus();
+    loadModels();
+  } else if (tabName === "tools") {
+    loadMcpServers();
+    loadMemories();
   }
+}
 
-  async function listenTauri(event, handler) {
-    if (window.__TAURI__ && window.__TAURI__.event) {
-      return await window.__TAURI__.event.listen(event, handler);
-    }
-    return () => {};
-  }
-
-  function mockTauri(cmd, args) {
-    if (cmd === 'get_app_config') {
-      return {
-        language: State.lang,
-        mode: 'silent',
-        active_model_tag: 'lfm3-1.7b',
-        fast_router_enabled: true,
-        backend: 'local_llama',
-        ollama_url: 'http://127.0.0.1:11434',
-        ollama_model: 'qwen2.5:1.5b',
-        openai_api_base: 'https://api.openai.com/v1',
-        openai_api_model: 'gpt-4o-mini',
-        openai_api_key: '',
-        bridge_running: false,
-        bridge_url: null,
-        bridge_token: null
-      };
-    }
-    if (cmd === 'list_models') {
-      return [
-        { tag: 'lfm3-1.7b', name: 'LFM3-1.7B Instruct (Q4_K_M)', filename: 'lfm3-1.7b.gguf', size_display: '1.1 GB', description: 'Fast bilingual edge model', cached: true, active: true },
-        { tag: 'qwen3-1.7b', name: 'Qwen3-1.7B Instruct (Q4_K_M)', filename: 'qwen3-1.7b.gguf', size_display: '1.2 GB', description: 'Balanced reasoning & tool calling', cached: false, active: false }
-      ];
-    }
-    if (cmd === 'check_runtime_status') return { is_running: true, endpoint: 'http://127.0.0.1:8080', server_path: 'llama-server' };
-    if (cmd === 'list_mcp_servers') return [];
-    if (cmd === 'list_memories') return [];
-    if (cmd === 'execute_query') {
-      return {
-        success: true,
-        query: args.query,
-        steps: [{ step_index: 1, total_steps: 1, stage: 'completed', description: 'Preview simulation', action: 'reply', details: 'Tauri runtime not attached (browser preview mode).', thought: 'Simulated step' }],
-        message: 'Done',
-        requires_confirm: false,
-        pending_step_index: null
-      };
-    }
-    return {};
-  }
-
-  function t() {
-    return I18N[State.lang] || I18N.ar;
-  }
-
-  function escapeHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function showToast(msg, type = 'info') {
-    const host = document.getElementById('toastHost');
-    if (!host) return;
-    const el = document.createElement('div');
-    el.className = `toast-item ${type}`;
-    el.textContent = msg;
-    host.appendChild(el);
-    setTimeout(() => el.remove(), 3500);
-  }
-
-  function applyTheme(theme) {
-    State.theme = theme === 'light' ? 'light' : 'dark';
-    localStorage.setItem('se_theme', State.theme);
-    document.documentElement.setAttribute('data-theme', State.theme);
-    const icon = document.getElementById('themeQuickIcon');
-    if (icon) icon.textContent = State.theme === 'dark' ? '☀️' : '🌙';
-    document.querySelectorAll('#themeSegmented .seg-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.theme === State.theme);
+function renderChat() {
+  const stream = document.getElementById("chatStream");
+  if (state.messages.length === 0) {
+    stream.innerHTML = `
+      <div class="empty-hero">
+        <div class="empty-hero-icon">⚡</div>
+        <h2 class="empty-hero-title">${t("hero_title")}</h2>
+        <p class="empty-hero-sub">${t("hero_sub")}</p>
+        <div class="quick-chips">
+          <button class="chip-btn" type="button" data-prompt="${escapeHtml(t("chip_1"))}">${escapeHtml(t("chip_1"))}</button>
+          <button class="chip-btn" type="button" data-prompt="${escapeHtml(t("chip_2"))}">${escapeHtml(t("chip_2"))}</button>
+          <button class="chip-btn" type="button" data-prompt="${escapeHtml(t("chip_3"))}">${escapeHtml(t("chip_3"))}</button>
+        </div>
+      </div>`;
+    stream.querySelectorAll(".chip-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        document.getElementById("composerInput").value = b.dataset.prompt || "";
+        sendQuery();
+      });
     });
+    return;
   }
 
-  function applyLanguage(lang) {
-    State.lang = lang === 'en' ? 'en' : 'ar';
-    localStorage.setItem('se_lang', State.lang);
-    document.documentElement.lang = State.lang;
-    document.documentElement.dir = State.lang === 'ar' ? 'rtl' : 'ltr';
+  stream.innerHTML = state.messages
+    .map((m, idx) => {
+      if (m.role === "user") {
+        return `<div class="msg-user">${escapeHtml(m.text)}</div>`;
+      }
+      const stepsHtml =
+        m.steps && m.steps.length
+          ? `<details class="thinking-details"${m.requiresConfirm ? " open" : ""}>
+              <summary>${t("thinking_label")} (${m.steps.length})</summary>
+              <div class="step-badges">
+                ${m.steps
+                  .map(
+                    (s) => `
+                  <div class="step-badge-row">
+                    <span class="step-pill">${escapeHtml(s.action || s.stage)}</span>
+                    <span>${escapeHtml(s.thought || s.description || "")}</span>
+                  </div>`
+                  )
+                  .join("")}
+              </div>
+            </details>`
+          : "";
 
-    const dict = t();
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-      const key = el.getAttribute('data-i18n');
-      if (dict[key]) el.textContent = dict[key];
+      const confirmHtml = m.requiresConfirm
+        ? `<div class="confirm-card" data-msg-idx="${idx}">
+            <div>${escapeHtml(m.message || "")}</div>
+            <div class="confirm-actions">
+              <button class="btn btn-primary btn-sm btn-confirm-allow" type="button" data-step="${m.pendingStepIndex || 1}">${t("allow_btn")}</button>
+              <button class="btn btn-ghost btn-sm btn-confirm-deny" type="button" data-step="${m.pendingStepIndex || 1}">${t("deny_btn")}</button>
+            </div>
+          </div>`
+        : "";
+
+      return `<div class="msg-assistant">${stepsHtml}${renderMarkdown(m.text)}${confirmHtml}</div>`;
+    })
+    .join("");
+
+  stream.querySelectorAll(".copy-code-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const raw = decodeURIComponent(btn.dataset.code || "");
+      await navigator.clipboard.writeText(raw);
+      btn.textContent = t("copied_btn");
+      setTimeout(() => {
+        btn.textContent = t("copy_btn");
+      }, 1500);
     });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-      const key = el.getAttribute('data-i18n-placeholder');
-      if (dict[key]) el.placeholder = dict[key];
+  });
+
+  stream.querySelectorAll(".btn-confirm-allow").forEach((btn) => {
+    btn.addEventListener("click", () => handleConfirm(Number(btn.dataset.step || 1), true));
+  });
+  stream.querySelectorAll(".btn-confirm-deny").forEach((btn) => {
+    btn.addEventListener("click", () => handleConfirm(Number(btn.dataset.step || 1), false));
+  });
+
+  const scroll = document.getElementById("chatScroll");
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+async function sendQuery() {
+  const input = document.getElementById("composerInput");
+  const query = input.value.trim();
+  if (!query || state.isRunning) return;
+
+  input.value = "";
+  state.isRunning = true;
+  state.abortRequested = false;
+  document.getElementById("btnSend").classList.add("hidden");
+  document.getElementById("btnStop").classList.remove("hidden");
+
+  state.messages.push({ role: "user", text: query });
+  renderChat();
+
+  try {
+    const report = await invoke("execute_query", { query, mode: null });
+    if (state.abortRequested) return;
+    state.messages.push({
+      role: "assistant",
+      text: report.message || "",
+      steps: report.steps || [],
+      requiresConfirm: Boolean(report.requires_confirm),
+      pendingStepIndex: report.pending_step_index,
+      message: report.message,
     });
-
-    const langBtnText = document.getElementById('langQuickText');
-    if (langBtnText) langBtnText.textContent = State.lang === 'ar' ? 'EN' : 'AR';
-
-    document.querySelectorAll('#langSegmented .seg-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.lang === State.lang);
-    });
-
-    updateTopbarTitle();
-    renderMcpPresets();
-    renderModels();
-    renderMemories();
-    renderMcpServers();
+  } catch (err) {
+    if (!state.abortRequested) {
+      state.messages.push({
+        role: "assistant",
+        text: `Error: ${err}`,
+        steps: [],
+      });
+    }
+  } finally {
+    state.isRunning = false;
+    document.getElementById("btnSend").classList.remove("hidden");
+    document.getElementById("btnStop").classList.add("hidden");
+    renderChat();
   }
+}
 
-  function updateTopbarTitle() {
-    const dict = t();
-    const map = {
-      viewAgent: dict.nav_agent,
-      viewModels: dict.nav_models,
-      viewTools: dict.nav_tools,
-      viewMemory: dict.nav_memory,
-      viewSettings: dict.nav_settings
-    };
-    const titleEl = document.getElementById('topbarViewTitle');
-    if (titleEl) titleEl.textContent = map[State.activeView] || dict.nav_agent;
+async function handleConfirm(stepIndex, proceed) {
+  try {
+    const report = await invoke("confirm_step", { stepIndex, proceed });
+    const last = state.messages[state.messages.length - 1];
+    if (last && last.requiresConfirm) {
+      last.requiresConfirm = false;
+    }
+    state.messages.push({
+      role: "assistant",
+      text: report.message || "",
+      steps: report.steps || [],
+    });
+    renderChat();
+  } catch (err) {
+    state.messages.push({ role: "assistant", text: `Confirmation error: ${err}` });
+    renderChat();
   }
+}
 
-  function switchView(viewId) {
-    State.activeView = viewId;
-    document.querySelectorAll('.workspace-view').forEach(v => v.classList.toggle('active', v.id === viewId));
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
-    updateTopbarTitle();
+async function refreshRuntimeStatus() {
+  try {
+    const status = await invoke("check_runtime_status");
+    const dot = document.getElementById("runtimeDot");
+    const title = document.getElementById("runtimeTitle");
+    const desc = document.getElementById("runtimeDesc");
+    dot.classList.toggle("offline", !status.is_running);
+    title.textContent = status.is_running ? t("runtime_running") : t("runtime_stopped");
+    desc.textContent = status.server_path || status.endpoint;
+  } catch (_) {}
+}
 
-    if (viewId === 'viewModels') {
-      loadRuntimeStatus();
+async function loadModels() {
+  const grid = document.getElementById("modelsGrid");
+  try {
+    const models = await invoke("list_models");
+    grid.innerHTML = models
+      .map((m) => {
+        const spec = MODEL_SPECS[m.tag] || { params: "GGUF", ctx: "32K", ram: "Local", rec: false };
+        const prog = state.downloadProgress[m.tag];
+        const isPaused = state.downloadPaused[m.tag];
+        const isDownloading = prog && !isPaused && prog.percent < 100;
+
+        let actions = "";
+        if (m.is_downloaded) {
+          actions = `
+            ${m.is_active ? `<span class="badge badge-success">${t("active_badge")}</span>` : `<button class="btn btn-primary btn-sm btn-activate-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("activate")}</button>`}
+            <button class="btn btn-ghost btn-sm btn-delete-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("delete_btn")}</button>`;
+        } else if (isDownloading) {
+          actions = `
+            <button class="btn btn-ghost btn-sm btn-pause-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("pause")}</button>
+            <button class="btn btn-danger btn-sm btn-cancel-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("cancel")}</button>`;
+        } else if (isPaused) {
+          actions = `
+            <button class="btn btn-primary btn-sm btn-resume-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("resume")}</button>
+            <button class="btn btn-danger btn-sm btn-cancel-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("cancel")}</button>`;
+        } else {
+          actions = `<button class="btn btn-primary btn-sm btn-dl-model" type="button" data-tag="${escapeHtml(m.tag)}">${t("download")}</button>`;
+        }
+
+        const progHtml = prog
+          ? `<div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" style="width:${prog.percent.toFixed(1)}%"></div></div><span class="progress-label">${prog.percent.toFixed(0)}% · ${(prog.speed_mbps || 0).toFixed(1)} MB/s</span></div>`
+          : "";
+
+        return `
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <div class="card-title" style="margin:0;">${escapeHtml(m.name)}</div>
+              ${spec.rec ? `<span class="badge badge-accent">${t("recommended")}</span>` : ""}
+            </div>
+            <div class="specs-row">
+              <span class="badge badge-subtle">${spec.params}</span>
+              <span class="badge badge-subtle">${spec.ctx}</span>
+              <span class="badge badge-subtle">${spec.ram}</span>
+            </div>
+            ${progHtml}
+            <div class="form-actions">${actions}</div>
+          </div>`;
+      })
+      .join("");
+
+    grid.querySelectorAll(".btn-dl-model").forEach((b) => b.addEventListener("click", () => startModelDl(b.dataset.tag)));
+    grid.querySelectorAll(".btn-resume-model").forEach((b) => b.addEventListener("click", () => startModelDl(b.dataset.tag)));
+    grid.querySelectorAll(".btn-pause-model").forEach((b) => b.addEventListener("click", async () => {
+      state.downloadPaused[b.dataset.tag] = true;
+      await invoke("pause_model_download", { tag: b.dataset.tag });
       loadModels();
-    } else if (viewId === 'viewTools') {
-      loadMcpServers();
-      loadMemories();
-    } else if (viewId === 'viewMemory') {
-      loadMemories();
-    }
+    }));
+    grid.querySelectorAll(".btn-cancel-model").forEach((b) => b.addEventListener("click", async () => {
+      delete state.downloadProgress[b.dataset.tag];
+      delete state.downloadPaused[b.dataset.tag];
+      await invoke("cancel_model_download", { tag: b.dataset.tag });
+      loadModels();
+    }));
+    grid.querySelectorAll(".btn-activate-model").forEach((b) => b.addEventListener("click", async () => {
+      await invoke("activate_model", { tag: b.dataset.tag });
+      loadModels();
+    }));
+    grid.querySelectorAll(".btn-delete-model").forEach((b) => b.addEventListener("click", async () => {
+      await invoke("delete_model", { tag: b.dataset.tag });
+      loadModels();
+    }));
+  } catch (err) {
+    grid.innerHTML = `<div class="card">${escapeHtml(err)}</div>`;
   }
-
-  function updateModelIndicators() {
-    const label = State.backend === 'ollama'
-      ? `Ollama`
-      : State.backend === 'openai_compat'
-        ? `API`
-        : (State.activeModelTag || 'Local GGUF');
-
-    const topText = document.getElementById('topModelText');
-    const compText = document.getElementById('composerModelLabel');
-    if (topText) topText.textContent = label;
-    if (compText) compText.textContent = label;
-
-    const topDot = document.getElementById('topModelDot');
-    const compDot = document.getElementById('composerModelDot');
-    const ready = State.backend !== 'local_llama' || Boolean(State.activeModelTag);
-    [topDot, compDot].forEach(d => {
-      if (d) d.className = `status-dot ${ready ? 'ready' : 'warn'}`;
-    });
-  }
-
-  function syncModeUI(mode) {
-    State.mode = mode || 'silent';
-    const sel = document.getElementById('composerModeSelect');
-    if (sel) sel.value = State.mode;
-    const badge = document.getElementById('topModeBadgeText');
-    const dict = t();
-    const labelMap = {
-      silent: dict.mode_silent,
-      interactive: dict.mode_interactive,
-      dry_run: dict.mode_dry_run
-    };
-    if (badge) badge.textContent = labelMap[State.mode] || State.mode;
-  }
-
-  // ---------------- Agent Console ----------------
-  async function handleRunQuery(overrideQuery = null) {
-    if (State.isRunning) return;
-    const input = document.getElementById('promptInput');
-    const query = (overrideQuery !== null ? overrideQuery : input.value).trim();
-    if (!query) return;
-
-    if (overrideQuery === null) {
-      input.value = '';
-      input.style.height = 'auto';
-    }
-
-    const welcome = document.getElementById('streamWelcomeCard');
-    if (welcome) welcome.style.display = 'none';
-
-    const messages = document.getElementById('streamMessages');
-    const userTurn = document.createElement('div');
-    userTurn.className = 'turn-user';
-    userTurn.innerHTML = `<div class="user-bubble">${escapeHtml(query)}</div>`;
-    messages.appendChild(userTurn);
-
-    const runningTurn = createRunningTurnElement();
-    messages.appendChild(runningTurn);
-    scrollToBottom();
-
-    setRunningState(true);
-    try {
-      const report = await invokeTauri('execute_query', { query, mode: State.mode });
-      runningTurn.remove();
-      renderAgentReport(report);
-    } catch (err) {
-      runningTurn.remove();
-      renderAgentReport({
-        success: false,
-        query,
-        steps: [{
-          step_index: 1,
-          total_steps: 1,
-          stage: 'failed',
-          description: t().status_failed,
-          action: null,
-          details: String(err),
-          thought: null
-        }],
-        message: String(err),
-        requires_confirm: false,
-        pending_step_index: null
-      });
-    } finally {
-      setRunningState(false);
-      scrollToBottom();
-    }
-  }
-
-  function setRunningState(running) {
-    State.isRunning = running;
-    const runBtn = document.getElementById('runBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const counter = document.getElementById('topbarCounter');
-    if (runBtn) runBtn.disabled = running;
-    if (stopBtn) stopBtn.style.display = running ? 'inline-flex' : 'none';
-    if (counter) counter.textContent = running ? t().status_running : t().status_idle;
-  }
-
-  function createRunningTurnElement() {
-    const el = document.createElement('div');
-    el.className = 'turn-agent';
-    el.innerHTML = `
-      <div class="agent-header">
-        <div class="agent-identity">
-          <span class="agent-logo-mini">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5L12 2Z"/>
-            </svg>
-          </span>
-          <span>SilentExec</span>
-        </div>
-        <span class="semantic-badge running pulse-running">⏳ ${escapeHtml(t().status_running)}</span>
-      </div>
-    `;
-    return el;
-  }
-
-  function renderAgentReport(report) {
-    const dict = t();
-    const messages = document.getElementById('streamMessages');
-    const steps = Array.isArray(report.steps) ? report.steps : [];
-
-    const hasFailed = !report.success || steps.some(s => s.stage === 'failed');
-    const hasBlocked = steps.some(s => s.stage === 'blocked');
-    const isConfirm = Boolean(report.requires_confirm);
-
-    let badgeClass = 'success';
-    let badgeText = `✓ ${steps.length} ${dict.steps_completed}`;
-    let turnStatusClass = '';
-
-    if (isConfirm) {
-      badgeClass = 'warn';
-      badgeText = `🛡️ ${dict.status_confirm}`;
-    } else if (hasBlocked) {
-      badgeClass = 'warn';
-      badgeText = `🛡️ ${dict.status_blocked}`;
-      turnStatusClass = 'status-blocked';
-    } else if (hasFailed) {
-      badgeClass = 'error';
-      badgeText = `✗ ${dict.status_failed}`;
-      turnStatusClass = 'status-failed';
-    }
-
-    const thoughts = steps.map(s => s.thought).filter(Boolean);
-    const thinkingHtml = thoughts.length > 0 ? `
-      <details class="thinking-details">
-        <summary>💭 ${escapeHtml(dict.thinking_label)}</summary>
-        <div class="thinking-body">${escapeHtml(thoughts.join('\n'))}</div>
-      </details>
-    ` : '';
-
-    let stepsHtml = '';
-    let cardsHtml = '';
-
-    steps.forEach((step) => {
-      const stage = step.stage || '';
-      let rowClass = 'step-success';
-      let icon = '✓';
-      if (stage === 'failed') {
-        rowClass = 'step-error';
-        icon = '✗';
-      } else if (stage === 'blocked' || stage === 'awaiting_confirm') {
-        rowClass = 'step-warn';
-        icon = '🛡️';
-      } else if (stage === 'understanding' || stage === 'planned' || stage === 'running') {
-        rowClass = 'step-running';
-        icon = '⏳';
-      }
-
-      stepsHtml += `
-        <div class="step-row ${rowClass}">
-          <div class="step-row-main">
-            <span class="step-icon">${icon}</span>
-            <div class="step-text-wrap">
-              <div class="step-title">${escapeHtml(step.description || stage)}</div>
-              ${step.details ? `<div class="step-detail">${escapeHtml(step.details)}</div>` : ''}
-            </div>
-          </div>
-          ${step.action ? `<span class="step-action-code">${escapeHtml(step.action)}</span>` : ''}
-        </div>
-      `;
-
-      const act = (step.action || '').toLowerCase();
-      if (act === 'reply' && step.details && stage === 'completed') {
-        cardsHtml += `<div class="output-card">${escapeHtml(step.details)}</div>`;
-      } else if (act === 'write_file' && step.details && stage === 'completed') {
-        const cid = 'code_' + Math.random().toString(36).slice(2, 9);
-        cardsHtml += `
-          <div class="code-output-card">
-            <div class="code-output-head">
-              <span>${escapeHtml(step.description)}</span>
-              <button class="btn btn-ghost btn-xs" onclick="window.silentExec.copyCode('${cid}')">${escapeHtml(dict.copy_code)}</button>
-            </div>
-            <pre class="code-output-body" id="${cid}">${escapeHtml(step.details)}</pre>
-          </div>
-        `;
-      }
-    });
-
-    if ((hasFailed || hasBlocked) && !cardsHtml) {
-      const reason = report.message || steps.find(s => s.details)?.details || dict.status_failed;
-      cardsHtml = `<div class="output-card ${hasBlocked ? 'warn-card' : 'error-card'}">${escapeHtml(reason)}</div>`;
-    }
-
-    const turnEl = document.createElement('div');
-    turnEl.className = `turn-agent ${turnStatusClass}`;
-    turnEl.innerHTML = `
-      <div class="agent-header">
-        <div class="agent-identity">
-          <span class="agent-logo-mini">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5L12 2Z"/>
-            </svg>
-          </span>
-          <span>SilentExec</span>
-          <span class="mode-tag">${escapeHtml(State.mode)}</span>
-        </div>
-        <span class="semantic-badge ${badgeClass}">${escapeHtml(badgeText)}</span>
-      </div>
-      ${thinkingHtml}
-      ${stepsHtml ? `<div class="steps-list">${stepsHtml}</div>` : ''}
-      ${cardsHtml}
-    `;
-    messages.appendChild(turnEl);
-
-    const confirmBar = document.getElementById('confirmBar');
-    if (isConfirm && confirmBar) {
-      State.pendingStepIndex = report.pending_step_index;
-      document.getElementById('confirmDesc').textContent = report.message || '';
-      confirmBar.style.display = 'block';
-    } else if (confirmBar) {
-      confirmBar.style.display = 'none';
-    }
-  }
-
-  function scrollToBottom() {
-    const sc = document.getElementById('streamContainer');
-    if (sc) sc.scrollTop = sc.scrollHeight;
-  }
-
-  // ---------------- Models Hub ----------------
-  async function loadRuntimeStatus() {
-    try {
-      const st = await invokeTauri('check_runtime_status');
-      const pill = document.getElementById('runtimeStatusPill');
-      const ep = document.getElementById('runtimeEndpointLabel');
-      const sideDot = document.getElementById('sidebarRuntimeDot');
-      const sideText = document.getElementById('sidebarRuntimeText');
-      const ready = Boolean(st && (st.is_running || st.server_path));
-
-      if (pill) {
-        pill.className = `semantic-badge ${ready ? 'success' : 'warn'}`;
-        pill.textContent = ready ? t().runtime_ready : t().runtime_not_ready;
-      }
-      if (ep && st.endpoint) ep.textContent = st.endpoint;
-      if (sideDot) sideDot.className = `status-dot ${ready ? 'ready' : 'warn'}`;
-      if (sideText) sideText.textContent = ready ? t().runtime_ready : t().runtime_not_ready;
-    } catch (_) {}
-  }
-
-  async function loadModels() {
-    try {
-      const list = await invokeTauri('list_models');
-      State.models = Array.isArray(list) ? list : [];
-      const active = State.models.find(m => m.active);
-      if (active) State.activeModelTag = active.tag;
-      updateModelIndicators();
-      renderModels();
-      renderModelPopover();
-    } catch (err) {
-      showToast(String(err), 'error');
-    }
-  }
-
-  function getModelSpecs(model) {
-    const tagLower = (model.tag || '').toLowerCase();
-    for (const key of Object.keys(MODEL_SPECS)) {
-      if (tagLower.includes(key)) return MODEL_SPECS[key];
-    }
-    return [model.size_display || 'GGUF', '32K Context', '~1.5 GB RAM', false];
-  }
-
-  function renderModels() {
-    const grid = document.getElementById('modelsGrid');
-    if (!grid) return;
-    const dict = t();
-
-    grid.innerHTML = State.models.map(m => {
-      const [params, ctx, ram, recommended] = getModelSpecs(m);
-      const dl = State.downloadStates[m.tag];
-      const isDownloading = dl && dl.status === 'downloading';
-      const isPaused = dl && dl.status === 'paused';
-
-      let statusBadge = `<span class="semantic-badge">${escapeHtml(dict.model_remote)}</span>`;
-      if (m.active) statusBadge = `<span class="semantic-badge success">${escapeHtml(dict.model_active)}</span>`;
-      else if (m.cached) statusBadge = `<span class="semantic-badge">${escapeHtml(dict.model_cached)}</span>`;
-
-      let actionsHtml = '';
-      if (isDownloading) {
-        actionsHtml = `
-          <button class="btn btn-secondary btn-sm" onclick="window.silentExec.pauseDownload('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_pause)}</button>
-          <button class="btn btn-danger btn-sm" onclick="window.silentExec.cancelDownload('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_cancel)}</button>
-        `;
-      } else if (isPaused) {
-        actionsHtml = `
-          <button class="btn btn-primary btn-sm" onclick="window.silentExec.resumeDownload('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_resume)}</button>
-          <button class="btn btn-danger btn-sm" onclick="window.silentExec.cancelDownload('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_cancel)}</button>
-        `;
-      } else if (m.cached) {
-        actionsHtml = `
-          ${m.active ? '' : `<button class="btn btn-primary btn-sm" onclick="window.silentExec.activateModel('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_activate)}</button>`}
-          <button class="btn btn-ghost btn-sm" onclick="window.silentExec.deleteModel('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_delete)}</button>
-        `;
-      } else {
-        actionsHtml = `<button class="btn btn-primary btn-sm" onclick="window.silentExec.startDownload('${escapeHtml(m.tag)}')">${escapeHtml(dict.btn_download)}</button>`;
-      }
-
-      const progressHtml = (isDownloading || isPaused) ? `
-        <div class="progress-wrap">
-          <div class="progress-track"><div class="progress-fill" style="width: ${dl.percent.toFixed(1)}%;"></div></div>
-          <div class="progress-meta">${dl.percent.toFixed(1)}% · ${dl.speed_mbps.toFixed(1)} MB/s · ETA ${dl.eta_seconds}s</div>
-        </div>
-      ` : '';
-
-      return `
-        <div class="model-card ${m.active ? 'active-model' : ''}">
-          <div class="model-card-head">
-            <div class="model-name">${escapeHtml(m.name || m.tag)}</div>
-            ${statusBadge}
-          </div>
-          <div class="model-badges">
-            <span class="spec-badge">${escapeHtml(params)}</span>
-            <span class="spec-badge">${escapeHtml(ctx)}</span>
-            <span class="spec-badge">${escapeHtml(ram)}</span>
-            ${recommended ? `<span class="spec-badge recommended">${escapeHtml(dict.recommended_badge)}</span>` : ''}
-          </div>
-          <div class="model-desc">${escapeHtml(m.description || m.filename || '')}</div>
-          ${progressHtml}
-          <div class="model-actions">${actionsHtml}</div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  function renderModelPopover() {
-    const list = document.getElementById('modelPopoverList');
-    if (!list) return;
-    const cached = State.models.filter(m => m.cached);
-    list.innerHTML = cached.map(m => `
-      <button class="popover-item ${m.active ? 'active' : ''}" onclick="window.silentExec.activateModel('${escapeHtml(m.tag)}')">
-        <span>${escapeHtml(m.name || m.tag)}</span>
-        ${m.active ? '<span>✓</span>' : ''}
-      </button>
-    `).join('');
-  }
-
-  // ---------------- Skills & MCP ----------------
-  function renderMcpPresets() {
-    const grid = document.getElementById('mcpPresetsGrid');
-    if (!grid) return;
-    const dict = t();
-    grid.innerHTML = MCP_PRESETS.map(p => {
-      const enabled = State.mcpServers.some(s => s.name === p.name && s.enabled);
-      return `
-        <div class="mini-card">
-          <div>
-            <div class="mini-card-title">${escapeHtml(p.name)}</div>
-            <div class="mini-card-desc">${escapeHtml(State.lang === 'ar' ? p.arDesc : p.enDesc)}</div>
-          </div>
-          <button class="btn ${enabled ? 'btn-secondary' : 'btn-primary'} btn-xs" onclick="window.silentExec.enablePreset('${escapeHtml(p.name)}')">
-            ${escapeHtml(enabled ? dict.btn_enabled : dict.btn_enable)}
-          </button>
-        </div>
-      `;
-    }).join('');
-  }
-
-  async function loadMcpServers() {
-    try {
-      const servers = await invokeTauri('list_mcp_servers');
-      State.mcpServers = Array.isArray(servers) ? servers : [];
-      renderMcpPresets();
-      renderMcpServers();
-    } catch (_) {}
-  }
-
-  function renderMcpServers() {
-    const list = document.getElementById('mcpList');
-    if (!list) return;
-    const dict = t();
-    if (State.mcpServers.length === 0) {
-      list.innerHTML = `<div class="status-feedback">${escapeHtml(dict.no_mcp)}</div>`;
-      return;
-    }
-    list.innerHTML = State.mcpServers.map(s => `
-      <div class="list-row-card">
-        <div>
-          <div class="mini-card-title">${escapeHtml(s.name)}</div>
-          <div class="mono-text">${escapeHtml(s.command)} ${escapeHtml((s.args || []).join(' '))}</div>
-        </div>
-        <div class="btn-group">
-          <button class="btn btn-secondary btn-xs" onclick="window.silentExec.testMcp('${escapeHtml(s.name)}')">${escapeHtml(dict.btn_test)}</button>
-          <button class="btn btn-danger btn-xs" onclick="window.silentExec.deleteMcp('${escapeHtml(s.name)}')">${escapeHtml(dict.btn_delete)}</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  // ---------------- Memory & Routines ----------------
-  async function loadMemories() {
-    try {
-      const items = await invokeTauri('list_memories');
-      State.memories = Array.isArray(items) ? items : [];
-      renderMemories();
-      renderCustomRoutines();
-    } catch (_) {}
-  }
-
-  function renderMemories() {
-    const list = document.getElementById('memoryList');
-    if (!list) return;
-    const dict = t();
-    if (State.memories.length === 0) {
-      list.innerHTML = `<div class="status-feedback">${escapeHtml(dict.no_memories)}</div>`;
-      return;
-    }
-    list.innerHTML = State.memories.map(m => `
-      <div class="list-row-card">
-        <div>
-          <div class="mini-card-title">${escapeHtml(m.key)} <span class="mode-tag">${escapeHtml(m.category || 'fact')}</span></div>
-          <div class="mini-card-desc">${escapeHtml(m.content)}</div>
-        </div>
-        <button class="btn btn-ghost btn-xs" onclick="window.silentExec.deleteMemory('${escapeHtml(m.id || m.key)}')">${escapeHtml(dict.btn_delete)}</button>
-      </div>
-    `).join('');
-  }
-
-  function renderCustomRoutines() {
-    const list = document.getElementById('customRoutinesList');
-    if (!list) return;
-    const dict = t();
-    const routines = State.memories.filter(m => m.category === 'skill');
-    list.innerHTML = routines.map(r => `
-      <div class="list-row-card mt-8">
-        <div>
-          <div class="mini-card-title">${escapeHtml(r.key)}</div>
-          <div class="mini-card-desc">${escapeHtml(r.content)}</div>
-        </div>
-        <div class="btn-group">
-          <button class="btn btn-primary btn-xs" onclick="window.silentExec.runRoutine('${escapeHtml(r.content)}')">${escapeHtml(dict.btn_run_routine)}</button>
-          <button class="btn btn-ghost btn-xs" onclick="window.silentExec.deleteMemory('${escapeHtml(r.id || r.key)}')">${escapeHtml(dict.btn_delete)}</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  // ---------------- Settings & Updates ----------------
-  function selectBrain(backend) {
-    State.backend = backend || 'local_llama';
-    document.querySelectorAll('#brainCardsGrid .brain-card').forEach(c => {
-      c.classList.toggle('active', c.dataset.backend === State.backend);
-    });
-    const ollamaBox = document.getElementById('ollamaConfigBox');
-    const openaiBox = document.getElementById('openaiConfigBox');
-    const gooseBox = document.getElementById('gooseConfigBox');
-    if (ollamaBox) ollamaBox.style.display = State.backend === 'ollama' ? 'block' : 'none';
-    if (openaiBox) openaiBox.style.display = State.backend === 'openai_compat' ? 'block' : 'none';
-    if (gooseBox) {
-      gooseBox.style.display = State.backend === 'goose_acp' ? 'block' : 'none';
-      if (State.backend === 'goose_acp') refreshGooseStatus();
-    }
-    updateModelIndicators();
-  }
-
-  async function refreshGooseStatus() {
-    const el = document.getElementById('gooseStatusText');
-    if (!el) return;
-    try {
-      const st = await invokeTauri('get_goose_status');
-      el.textContent = st.installed
-        ? `✓ Installed: ${st.version || st.binary_path}`
-        : 'Not installed yet — click Install to fetch aaif-goose/goose release.';
-    } catch (e) {
-      el.textContent = String(e);
-    }
-  }
-
-  const installGooseBtn = document.getElementById('installGooseBtn');
-  if (installGooseBtn) {
-    installGooseBtn.addEventListener('click', async () => {
-      const el = document.getElementById('gooseStatusText');
-      installGooseBtn.disabled = true;
-      if (el) el.textContent = 'Downloading aaif-goose/goose release...';
-      try {
-        const st = await invokeTauri('install_goose_cli');
-        if (el) el.textContent = `✓ Installed: ${st.version || st.binary_path}`;
-      } catch (e) {
-        if (el) el.textContent = `✕ ${e}`;
-      } finally {
-        installGooseBtn.disabled = false;
-      }
-    });
-  }
-
-  async function saveSettings() {
-    try {
-      await invokeTauri('save_app_config', {
-        language: State.lang,
-        mode: State.mode,
-        activeModelTag: State.activeModelTag,
-        fastRouterEnabled: document.getElementById('fastRouterToggle')?.checked ?? true,
-        backend: State.backend,
-        ollamaUrl: document.getElementById('ollamaUrlInput')?.value || '',
-        ollamaModel: document.getElementById('ollamaModelInput')?.value || '',
-        openaiApiBase: document.getElementById('openaiBaseInput')?.value || '',
-        openaiApiModel: document.getElementById('openaiModelInput')?.value || '',
-        openaiApiKey: document.getElementById('openaiKeyInput')?.value || ''
-      });
-      showToast(t().saved_ok, 'success');
-    } catch (err) {
-      showToast(String(err), 'error');
-    }
-  }
-
-  // ---------------- Global Public Actions ----------------
-  window.silentExec = {
-    copyCode(id) {
-      const el = document.getElementById(id);
-      if (el) {
-        navigator.clipboard?.writeText(el.textContent || '');
-        showToast(t().copied, 'success');
-      }
-    },
-    async startDownload(tag) {
-      State.downloadStates[tag] = { status: 'downloading', percent: 0, speed_mbps: 0, eta_seconds: 0 };
-      renderModels();
-      const unlisten = await listenTauri(`download-progress:${tag}`, (ev) => {
-        const p = ev.payload || {};
-        const pct = p.total_bytes > 0 ? (p.downloaded_bytes / p.total_bytes) * 100 : 0;
-        State.downloadStates[tag] = {
-          status: 'downloading',
-          percent: pct,
-          speed_mbps: p.speed_mbps || 0,
-          eta_seconds: p.eta_seconds || 0
-        };
-        renderModels();
-      });
-      try {
-        await invokeTauri('start_model_download', { tag });
-        delete State.downloadStates[tag];
-        await loadModels();
-      } catch (err) {
-        delete State.downloadStates[tag];
-        renderModels();
-        showToast(String(err), 'error');
-      } finally {
-        unlisten();
-      }
-    },
-    async pauseDownload(tag) {
-      await invokeTauri('pause_model_download', { tag });
-      if (State.downloadStates[tag]) State.downloadStates[tag].status = 'paused';
-      renderModels();
-    },
-    async resumeDownload(tag) {
-      await window.silentExec.startDownload(tag);
-    },
-    async cancelDownload(tag) {
-      await invokeTauri('cancel_model_download', { tag });
-      delete State.downloadStates[tag];
-      renderModels();
-    },
-    async activateModel(tag) {
-      await invokeTauri('activate_model', { tag });
-      State.activeModelTag = tag;
-      const pop = document.getElementById('modelPopover');
-      if (pop) pop.style.display = 'none';
-      await loadModels();
-    },
-    async deleteModel(tag) {
-      await invokeTauri('delete_model', { tag });
-      await loadModels();
-    },
-    async enablePreset(name) {
-      const preset = MCP_PRESETS.find(p => p.name === name);
-      if (!preset) return;
-      await invokeTauri('save_mcp_server', { name: preset.name, command: preset.command, args: preset.args, enabled: true });
-      await loadMcpServers();
-      showToast(`${name} ✓`, 'success');
-    },
-    async testMcp(name) {
-      try {
-        const tools = await invokeTauri('test_mcp_server', { name });
-        showToast(`${name}: ${(tools || []).length} tools ✓`, 'success');
-      } catch (err) {
-        showToast(`${name}: ${err}`, 'error');
-      }
-    },
-    async deleteMcp(name) {
-      await invokeTauri('delete_mcp_server', { name });
-      await loadMcpServers();
-    },
-    async deleteMemory(id) {
-      await invokeTauri('delete_memory', { idOrKey: id });
-      await loadMemories();
-    },
-    runRoutine(stepsText) {
-      switchView('viewAgent');
-      handleRunQuery(stepsText);
-    }
-  };
-
-  // ---------------- Event Wiring & Init ----------------
-  async function init() {
-    applyTheme(State.theme);
-    applyLanguage(State.lang);
-
-    document.querySelectorAll('.nav-item').forEach(btn => {
-      btn.addEventListener('click', () => switchView(btn.dataset.view));
-    });
-
-    document.getElementById('langQuickBtn')?.addEventListener('click', () => {
-      applyLanguage(State.lang === 'ar' ? 'en' : 'ar');
-      saveSettings();
-    });
-    document.getElementById('themeQuickBtn')?.addEventListener('click', () => {
-      applyTheme(State.theme === 'dark' ? 'light' : 'dark');
-    });
-
-    document.querySelectorAll('#langSegmented .seg-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        applyLanguage(btn.dataset.lang);
-        saveSettings();
-      });
-    });
-    document.querySelectorAll('#themeSegmented .seg-btn').forEach(btn => {
-      btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
-    });
-
-    // Agent Console
-    const promptInput = document.getElementById('promptInput');
-    promptInput?.addEventListener('input', () => {
-      promptInput.style.height = 'auto';
-      promptInput.style.height = Math.min(promptInput.scrollHeight, 160) + 'px';
-    });
-    promptInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleRunQuery();
-      }
-    });
-    document.getElementById('runBtn')?.addEventListener('click', () => handleRunQuery());
-    document.getElementById('clearSessionBtn')?.addEventListener('click', () => {
-      document.getElementById('streamMessages').innerHTML = '';
-      document.getElementById('streamWelcomeCard').style.display = 'block';
-      document.getElementById('confirmBar').style.display = 'none';
-    });
-    document.getElementById('composerModeSelect')?.addEventListener('change', (e) => {
-      syncModeUI(e.target.value);
-      saveSettings();
-    });
-
-    document.querySelectorAll('#quickExamplesRow .chip-btn').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const text = State.lang === 'ar' ? chip.dataset.promptAr : chip.dataset.promptEn;
-        handleRunQuery(text);
-      });
-    });
-
-    // Confirm bar
-    document.getElementById('confirmProceedBtn')?.addEventListener('click', async () => {
-      if (State.pendingStepIndex == null) return;
-      document.getElementById('confirmBar').style.display = 'none';
-      const rep = await invokeTauri('confirm_step', { stepIndex: State.pendingStepIndex, proceed: true });
-      renderAgentReport(rep);
-    });
-    document.getElementById('confirmSkipBtn')?.addEventListener('click', async () => {
-      if (State.pendingStepIndex == null) return;
-      document.getElementById('confirmBar').style.display = 'none';
-      const rep = await invokeTauri('confirm_step', { stepIndex: State.pendingStepIndex, proceed: false });
-      renderAgentReport(rep);
-    });
-
-    // Model Popover
-    const topModelBadge = document.getElementById('topModelBadge');
-    const modelPopover = document.getElementById('modelPopover');
-    topModelBadge?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      modelPopover.style.display = modelPopover.style.display === 'none' ? 'block' : 'none';
-    });
-    document.getElementById('composerModelPill')?.addEventListener('click', () => switchView('viewModels'));
-    document.getElementById('popoverManageModelsBtn')?.addEventListener('click', () => {
-      modelPopover.style.display = 'none';
-      switchView('viewModels');
-    });
-    document.addEventListener('click', () => {
-      if (modelPopover) modelPopover.style.display = 'none';
-    });
-
-    // Models Hub
-    document.getElementById('refreshModelsBtn')?.addEventListener('click', loadModels);
-    document.getElementById('setupRuntimeBtn')?.addEventListener('click', async () => {
-      try {
-        await invokeTauri('setup_runtime', { modelTag: State.activeModelTag });
-        await loadRuntimeStatus();
-        showToast(t().runtime_ready, 'success');
-      } catch (err) {
-        showToast(String(err), 'error');
-      }
-    });
-
-    // Custom Routines
-    document.getElementById('saveRoutineBtn')?.addEventListener('click', async () => {
-      const key = document.getElementById('routineNameInput').value.trim();
-      const content = document.getElementById('routineStepsInput').value.trim();
-      if (!key || !content) return;
-      await invokeTauri('save_memory', { key, content, category: 'skill' });
-      document.getElementById('routineNameInput').value = '';
-      document.getElementById('routineStepsInput').value = '';
-      await loadMemories();
-      showToast(t().saved_ok, 'success');
-    });
-
-    // MCP Form
-    document.getElementById('addMcpBtn')?.addEventListener('click', () => {
-      document.getElementById('mcpFormBox').style.display = 'block';
-    });
-    document.getElementById('cancelMcpBtn')?.addEventListener('click', () => {
-      document.getElementById('mcpFormBox').style.display = 'none';
-    });
-    document.getElementById('saveMcpSubmitBtn')?.addEventListener('click', async () => {
-      const name = document.getElementById('mcpNameInput').value.trim();
-      const command = document.getElementById('mcpCommandInput').value.trim();
-      const argsStr = document.getElementById('mcpArgsInput').value.trim();
-      if (!name || !command) return;
-      await invokeTauri('save_mcp_server', { name, command, args: argsStr ? argsStr.split(/\s+/) : [], enabled: true });
-      document.getElementById('mcpFormBox').style.display = 'none';
-      await loadMcpServers();
-    });
-
-    // Memory Form
-    document.getElementById('refreshMemoriesBtn')?.addEventListener('click', loadMemories);
-    document.getElementById('addMemoryBtn')?.addEventListener('click', () => {
-      document.getElementById('memoryFormBox').style.display = 'block';
-    });
-    document.getElementById('cancelMemoryBtn')?.addEventListener('click', () => {
-      document.getElementById('memoryFormBox').style.display = 'none';
-    });
-    document.getElementById('saveMemorySubmitBtn')?.addEventListener('click', async () => {
-      const key = document.getElementById('memoryKeyInput').value.trim();
-      const content = document.getElementById('memoryContentInput').value.trim();
-      const category = document.getElementById('memoryCategoryInput').value;
-      if (!key || !content) return;
-      await invokeTauri('save_memory', { key, content, category });
-      document.getElementById('memoryFormBox').style.display = 'none';
-      document.getElementById('memoryKeyInput').value = '';
-      document.getElementById('memoryContentInput').value = '';
-      await loadMemories();
-    });
-
-    // Settings
-    document.querySelectorAll('#brainCardsGrid .brain-card').forEach(card => {
-      card.addEventListener('click', () => selectBrain(card.dataset.backend));
-    });
-    document.getElementById('saveAiConfigBtn')?.addEventListener('click', saveSettings);
-    document.getElementById('fastRouterToggle')?.addEventListener('change', saveSettings);
-    document.getElementById('testBackendBtn')?.addEventListener('click', async () => {
-      const out = document.getElementById('backendTestResult');
-      try {
-        const res = await invokeTauri('test_ai_backend');
-        out.className = `status-feedback ${res.success ? 'ok' : 'err'}`;
-        out.textContent = `${res.message} (${res.latency_ms}ms)`;
-      } catch (err) {
-        out.className = 'status-feedback err';
-        out.textContent = String(err);
-      }
-    });
-
-    // LAN Bridge
-    document.getElementById('lanBridgeToggle')?.addEventListener('change', async (e) => {
-      try {
-        const res = await invokeTauri('toggle_lan_bridge', { enable: e.target.checked });
-        const box = document.getElementById('bridgeInfoBox');
-        if (res.is_running) {
-          box.style.display = 'flex';
-          document.getElementById('bridgeUrlVal').textContent = res.address || '';
-          document.getElementById('bridgeTokenVal').textContent = res.token || '';
-        } else {
-          box.style.display = 'none';
-        }
-      } catch (err) {
-        showToast(String(err), 'error');
-      }
-    });
-
-    // Updates
-    document.getElementById('checkUpdatesBtn')?.addEventListener('click', async () => {
-      const box = document.getElementById('updateStatusBox');
-      const txt = document.getElementById('updateStatusText');
-      const installBtn = document.getElementById('installUpdateBtn');
-      box.style.display = 'block';
-      try {
-        const info = await invokeTauri('check_app_update');
-        if (info.update_available) {
-          State.latestUpdateTag = info.tag_name;
-          txt.textContent = `${t().update_available} ${info.latest_version}`;
-          installBtn.style.display = 'inline-flex';
-          document.getElementById('topUpdateBadge').style.display = 'inline-flex';
-          document.getElementById('topUpdateBadgeText').textContent = info.tag_name;
-        } else {
-          txt.textContent = t().update_latest;
-          installBtn.style.display = 'none';
-        }
-      } catch (err) {
-        txt.textContent = String(err);
-      }
-    });
-
-    document.getElementById('installUpdateBtn')?.addEventListener('click', async () => {
-      if (!State.latestUpdateTag) return;
-      document.getElementById('updateProgressWrap').style.display = 'flex';
-      await invokeTauri('install_desktop_update', { tag: State.latestUpdateTag });
-    });
-
-    await listenTauri('update-progress', (ev) => {
-      const p = ev.payload || {};
-      const bar = document.getElementById('updateProgressBar');
-      const txt = document.getElementById('updateProgressText');
-      if (bar) bar.style.width = `${(p.percent || 0).toFixed(1)}%`;
-      if (txt) txt.textContent = `${(p.percent || 0).toFixed(1)}% · ${p.status || ''}`;
-    });
-
-    // Load initial backend config
-    try {
-      const cfg = await invokeTauri('get_app_config');
-      if (cfg.language) applyLanguage(cfg.language);
-      if (cfg.mode) syncModeUI(cfg.mode);
-      if (cfg.active_model_tag) State.activeModelTag = cfg.active_model_tag;
-      if (typeof cfg.fast_router_enabled === 'boolean') {
-        const ft = document.getElementById('fastRouterToggle');
-        if (ft) ft.checked = cfg.fast_router_enabled;
-      }
-      if (cfg.backend) selectBrain(cfg.backend);
-      if (cfg.ollama_url) document.getElementById('ollamaUrlInput').value = cfg.ollama_url;
-      if (cfg.ollama_model) document.getElementById('ollamaModelInput').value = cfg.ollama_model;
-      if (cfg.openai_api_base) document.getElementById('openaiBaseInput').value = cfg.openai_api_base;
-      if (cfg.openai_api_model) document.getElementById('openaiModelInput').value = cfg.openai_api_model;
-      if (cfg.openai_api_key) document.getElementById('openaiKeyInput').value = cfg.openai_api_key;
-      if (cfg.bridge_running) {
-        document.getElementById('lanBridgeToggle').checked = true;
-        document.getElementById('bridgeInfoBox').style.display = 'flex';
-        document.getElementById('bridgeUrlVal').textContent = cfg.bridge_url || '';
-        document.getElementById('bridgeTokenVal').textContent = cfg.bridge_token || '';
-      }
-    } catch (_) {}
-
-    loadRuntimeStatus();
+}
+
+async function startModelDl(tag) {
+  state.downloadPaused[tag] = false;
+  state.downloadProgress[tag] = { percent: 0, speed_mbps: 0 };
+  loadModels();
+
+  const unlisten = await listen(`download-progress:${tag}`, (event) => {
+    const p = event.payload;
+    const pct = p.total_bytes > 0 ? (p.downloaded_bytes / p.total_bytes) * 100 : 0;
+    state.downloadProgress[tag] = { percent: pct, speed_mbps: p.speed_mbps || 0 };
+    loadModels();
+  });
+
+  try {
+    await invoke("start_model_download", { tag });
+    delete state.downloadProgress[tag];
+    delete state.downloadPaused[tag];
+    await invoke("activate_model", { tag });
+  } catch (_) {
+  } finally {
+    unlisten();
     loadModels();
   }
+}
 
-  document.addEventListener('DOMContentLoaded', init);
-})();
+function renderBuiltinTools() {
+  const el = document.getElementById("builtinToolsGrid");
+  el.innerHTML = BUILTIN_PRO_TOOLS.map(
+    (tool) => `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px;">
+          <strong>${state.lang === "ar" ? tool.title_ar : tool.title_en}</strong>
+          <span class="badge badge-success">${t("auto_enabled")}</span>
+        </div>
+        <div class="muted-text">${state.lang === "ar" ? tool.desc_ar : tool.desc_en}</div>
+      </div>`
+  ).join("");
+}
+
+function renderMcpPresets() {
+  const row = document.getElementById("mcpPresetsRow");
+  row.innerHTML = MCP_PRESETS.map(
+    (p) => `<button class="chip-btn btn-mcp-preset" type="button" data-name="${p.name}">+ ${p.name}</button>`
+  ).join("");
+  row.querySelectorAll(".btn-mcp-preset").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const preset = MCP_PRESETS.find((p) => p.name === btn.dataset.name);
+      if (!preset) return;
+      await invoke("save_mcp_server", { name: preset.name, command: preset.command, args: preset.args, enabled: true });
+      loadMcpServers();
+    });
+  });
+}
+
+async function loadMcpServers() {
+  const list = document.getElementById("mcpServersList");
+  try {
+    const servers = await invoke("list_mcp_servers");
+    list.innerHTML = servers
+      .map(
+        (s) => `
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div>
+            <strong>${escapeHtml(s.name)}</strong>
+            <div class="muted-text">${escapeHtml(s.command)} ${escapeHtml((s.args || []).join(" "))}</div>
+            <div class="muted-text" id="mcpTools_${escapeHtml(s.name)}"></div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm btn-discover-mcp" type="button" data-name="${escapeHtml(s.name)}">${t("discover_tools")}</button>
+            <button class="btn btn-danger btn-sm btn-del-mcp" type="button" data-name="${escapeHtml(s.name)}">${t("delete_btn")}</button>
+          </div>
+        </div>`
+      )
+      .join("");
+
+    list.querySelectorAll(".btn-discover-mcp").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const outEl = document.getElementById(`mcpTools_${b.dataset.name}`);
+        outEl.textContent = "...";
+        try {
+          const tools = await invoke("list_mcp_tools", { serverName: b.dataset.name });
+          outEl.textContent = tools.length ? tools.join(", ") : "No tools";
+        } catch (err) {
+          outEl.textContent = String(err);
+        }
+      });
+    });
+
+    list.querySelectorAll(".btn-del-mcp").forEach((b) => {
+      b.addEventListener("click", async () => {
+        await invoke("delete_mcp_server", { name: b.dataset.name });
+        loadMcpServers();
+      });
+    });
+  } catch (_) {}
+}
+
+async function loadMemories() {
+  const list = document.getElementById("memoryList");
+  try {
+    const items = await invoke("list_memories");
+    list.innerHTML = items
+      .map(
+        (m) => `
+        <div class="setting-row">
+          <div><strong>${escapeHtml(m.key)}</strong>: <span class="muted-text">${escapeHtml(m.content)}</span></div>
+          <button class="btn btn-ghost btn-sm btn-del-mem" type="button" data-id="${escapeHtml(m.id)}">${t("delete_btn")}</button>
+        </div>`
+      )
+      .join("");
+    list.querySelectorAll(".btn-del-mem").forEach((b) => {
+      b.addEventListener("click", async () => {
+        await invoke("delete_memory", { idOrKey: b.dataset.id });
+        loadMemories();
+      });
+    });
+  } catch (_) {}
+}
+
+function updateProviderVisibility(backend) {
+  document.getElementById("ollamaFields").classList.toggle("hidden", backend !== "ollama");
+  document.getElementById("openaiFields").classList.toggle("hidden", backend !== "openai_compat");
+  document.getElementById("gooseFields").classList.toggle("hidden", backend !== "goose_acp");
+}
+
+function syncConfigBadges(cfg) {
+  const labelMap = {
+    local_llama: "Local GGUF",
+    ollama: `Ollama · ${cfg.ollama_model || ""}`,
+    openai_compat: `API · ${cfg.openai_api_model || ""}`,
+    goose_acp: "goose acp",
+  };
+  const label = labelMap[cfg.backend] || "Local GGUF";
+  document.getElementById("sidebarProviderLabel").textContent = label;
+  document.getElementById("topBackendBadge").textContent = label;
+  document.getElementById("topModeBadge").textContent = (cfg.mode || "silent").toUpperCase();
+}
+
+async function loadConfig() {
+  const cfg = await invoke("get_app_config");
+  state.config = cfg;
+  state.lang = cfg.language === "en" ? "en" : "ar";
+
+  document.getElementById("selLanguage").value = state.lang;
+  document.getElementById("selTheme").value = state.theme;
+  document.getElementById("selExecMode").value = cfg.mode || "silent";
+  document.getElementById("chkFastRouter").checked = Boolean(cfg.fast_router_enabled);
+  document.getElementById("selBackend").value = cfg.backend || "local_llama";
+  document.getElementById("inpOllamaUrl").value = cfg.ollama_url || "";
+  document.getElementById("inpOllamaModel").value = cfg.ollama_model || "";
+  document.getElementById("inpOpenAiBase").value = cfg.openai_api_base || "";
+  document.getElementById("inpOpenAiModel").value = cfg.openai_api_model || "";
+  document.getElementById("inpOpenAiKey").value = cfg.openai_api_key || "";
+
+  updateProviderVisibility(cfg.backend || "local_llama");
+  syncConfigBadges(cfg);
+  applyLanguageAndTheme();
+}
+
+async function saveProviderSettings() {
+  await invoke("save_app_config", {
+    backend: document.getElementById("selBackend").value,
+    ollamaUrl: document.getElementById("inpOllamaUrl").value.trim(),
+    ollamaModel: document.getElementById("inpOllamaModel").value.trim(),
+    openaiApiBase: document.getElementById("inpOpenAiBase").value.trim(),
+    openaiApiModel: document.getElementById("inpOpenAiModel").value.trim(),
+    openaiApiKey: document.getElementById("inpOpenAiKey").value.trim(),
+  });
+  await loadConfig();
+}
+
+function bindEvents() {
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+  document.getElementById("btnSidebarProvider").addEventListener("click", () => switchTab("settings"));
+  document.getElementById("btnClearChat").addEventListener("click", () => {
+    state.messages = [];
+    renderChat();
+  });
+
+  const composer = document.getElementById("composerInput");
+  composer.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendQuery();
+    }
+  });
+  document.getElementById("btnSend").addEventListener("click", sendQuery);
+  document.getElementById("btnStop").addEventListener("click", () => {
+    state.abortRequested = true;
+    state.isRunning = false;
+    document.getElementById("btnSend").classList.remove("hidden");
+    document.getElementById("btnStop").classList.add("hidden");
+  });
+
+  document.getElementById("btnSetupRuntime").addEventListener("click", async () => {
+    document.getElementById("runtimeTitle").textContent = "...";
+    try {
+      await invoke("setup_runtime", { modelTag: null });
+    } catch (_) {}
+    refreshRuntimeStatus();
+  });
+  document.getElementById("btnRefreshRuntime").addEventListener("click", refreshRuntimeStatus);
+
+  document.getElementById("btnAddMcp").addEventListener("click", async () => {
+    const name = document.getElementById("mcpNameInput").value.trim();
+    const command = document.getElementById("mcpCmdInput").value.trim();
+    const args = document.getElementById("mcpArgsInput").value.trim().split(/\s+/).filter(Boolean);
+    if (!name || !command) return;
+    await invoke("save_mcp_server", { name, command, args, enabled: true });
+    document.getElementById("mcpNameInput").value = "";
+    document.getElementById("mcpCmdInput").value = "";
+    document.getElementById("mcpArgsInput").value = "";
+    loadMcpServers();
+  });
+
+  document.getElementById("btnSaveMemory").addEventListener("click", async () => {
+    const key = document.getElementById("memKeyInput").value.trim();
+    const content = document.getElementById("memContentInput").value.trim();
+    if (!key || !content) return;
+    await invoke("save_memory", { key, content, category: "general" });
+    document.getElementById("memKeyInput").value = "";
+    document.getElementById("memContentInput").value = "";
+    loadMemories();
+  });
+
+  document.getElementById("selLanguage").addEventListener("change", async (e) => {
+    state.lang = e.target.value;
+    await invoke("save_app_config", { language: state.lang });
+    applyLanguageAndTheme();
+  });
+
+  document.getElementById("selTheme").addEventListener("change", (e) => {
+    state.theme = e.target.value;
+    localStorage.setItem("silentexec_theme", state.theme);
+    applyLanguageAndTheme();
+  });
+
+  document.getElementById("selExecMode").addEventListener("change", async (e) => {
+    await invoke("save_app_config", { mode: e.target.value });
+    loadConfig();
+  });
+
+  document.getElementById("chkFastRouter").addEventListener("change", async (e) => {
+    await invoke("save_app_config", { fastRouterEnabled: e.target.checked });
+  });
+
+  document.getElementById("selBackend").addEventListener("change", async (e) => {
+    updateProviderVisibility(e.target.value);
+    if (e.target.value === "goose_acp") {
+      try {
+        const gs = await invoke("get_goose_status");
+        document.getElementById("gooseStatusText").textContent = gs.installed
+          ? `Goose CLI: ${gs.version || gs.binary_path}`
+          : "Goose CLI: not installed";
+      } catch (_) {}
+    }
+  });
+
+  document.getElementById("btnInstallGoose").addEventListener("click", async () => {
+    const el = document.getElementById("gooseStatusText");
+    el.textContent = "Installing Goose...";
+    try {
+      const gs = await invoke("install_goose_cli");
+      el.textContent = gs.installed ? `Goose CLI: ${gs.version || gs.binary_path}` : "Install failed";
+    } catch (err) {
+      el.textContent = String(err);
+    }
+  });
+
+  document.getElementById("btnSaveProvider").addEventListener("click", saveProviderSettings);
+
+  document.getElementById("btnTestProvider").addEventListener("click", async () => {
+    await saveProviderSettings();
+    const out = document.getElementById("providerTestResult");
+    out.classList.remove("hidden");
+    out.textContent = "...";
+    try {
+      const res = await invoke("test_ai_backend");
+      out.textContent = `${res.success ? "✓" : "✕"} ${res.message} (${res.latency_ms}ms)`;
+    } catch (err) {
+      out.textContent = `✕ ${err}`;
+    }
+  });
+
+  let bridgeRunning = false;
+  document.getElementById("btnToggleBridge").addEventListener("click", async () => {
+    const res = await invoke("toggle_lan_bridge", { enable: !bridgeRunning });
+    bridgeRunning = Boolean(res.is_running);
+    document.getElementById("btnToggleBridge").textContent = bridgeRunning ? t("bridge_stop") : t("bridge_start");
+    const info = document.getElementById("bridgeInfo");
+    info.classList.toggle("hidden", !bridgeRunning);
+    if (bridgeRunning) {
+      info.textContent = `URL: ${res.address}\nToken: ${res.token}`;
+    }
+  });
+
+  document.getElementById("btnCheckUpdate").addEventListener("click", async () => {
+    const txt = document.getElementById("updateStatusText");
+    txt.textContent = "...";
+    try {
+      const info = await invoke("check_app_update");
+      if (info.update_available) {
+        state.latestUpdateTag = info.tag_name;
+        txt.textContent = `${t("update_available")} v${info.latest_version}`;
+        document.getElementById("btnInstallUpdate").classList.remove("hidden");
+      } else {
+        txt.textContent = t("up_to_date");
+      }
+    } catch (err) {
+      txt.textContent = String(err);
+    }
+  });
+
+  document.getElementById("btnInstallUpdate").addEventListener("click", async () => {
+    if (!state.latestUpdateTag) return;
+    document.getElementById("updateProgressWrap").classList.remove("hidden");
+    await listen("update-progress", (e) => {
+      const p = e.payload;
+      document.getElementById("updateProgressFill").style.width = `${(p.percent || 0).toFixed(1)}%`;
+      document.getElementById("updateProgressLabel").textContent = `${(p.percent || 0).toFixed(0)}% (${p.status})`;
+    });
+    await invoke("install_desktop_update", { tag: state.latestUpdateTag });
+  });
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  bindEvents();
+  await loadConfig();
+});

@@ -1,6 +1,7 @@
 //! SilentExec PC Executor, Arabic/English Fuzzy Indexer, Inference & LAN Bridge Library
 
 pub mod agent_engine;
+pub mod agent_loop;
 pub mod bridge;
 pub mod config;
 pub mod executor;
@@ -20,6 +21,7 @@ pub mod updater;
 pub use agent_engine::{
     AgentTurnDecision, GooseAcpRunner, GooseStatus, ToolCallingAgent, ToolLoopStep,
 };
+pub use agent_loop::PcAgentLoop;
 pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
 pub use config::{AppConfig, McpServerConfig};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
@@ -2103,8 +2105,9 @@ mod tests {
         let lookup = vec![("filesystem", &mcp_tool)];
         let schema = ToolCallingAgent::build_tools_schema(&lookup);
         let arr = schema.as_array().expect("tools should be JSON array");
-        assert_eq!(arr.len(), 2);
-        assert_eq!(arr[1]["function"]["name"], "mcp__filesystem__read_file");
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[1]["function"]["name"], "builtin_web_fetch");
+        assert_eq!(arr[2]["function"]["name"], "mcp__filesystem__read_file");
 
         let resp_pc = r#"{
             "choices": [{

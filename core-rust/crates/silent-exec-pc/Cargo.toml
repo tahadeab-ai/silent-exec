@@ -1,6 +1,6 @@
 [package]
 name = "silent-exec-pc"
-version = "3.0.0"
+version = "3.1.0"
 edition = "2021"
 authors = ["tahadeab-ai"]
 description = "PC Executor, Arabic/English Fuzzy Indexer and Model Downloader for SilentExec"

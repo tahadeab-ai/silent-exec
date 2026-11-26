@@ -258,38 +258,57 @@ pub struct ToolCallingAgent;
 
 impl ToolCallingAgent {
     pub fn build_tools_schema(mcp_tools: &[(&str, &McpTool)]) -> Value {
-        let mut tools = vec![json!({
-            "type": "function",
-            "function": {
-                "name": "execute_pc_action",
-                "description": "Execute a single Windows PC action or return final answer with action='done' or 'reply'.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "thought": {
-                            "type": "string",
-                            "description": "Brief 1-sentence reasoning about the current goal and next step."
+        let mut tools = vec![
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "execute_pc_action",
+                    "description": "Execute a single Windows PC action or return final answer with action='done' or 'reply'.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "thought": {
+                                "type": "string",
+                                "description": "Brief 1-sentence reasoning about the current goal and next step."
+                            },
+                            "action": {
+                                "type": "string",
+                                "enum": [
+                                    "open_folder", "open_file", "launch_app", "search_files",
+                                    "set_volume", "set_brightness", "create_note", "copy_to_clipboard",
+                                    "delete_file", "move_file", "system_power", "open_url",
+                                    "ui_click", "ui_type", "ui_scroll", "read_file",
+                                    "write_file", "memory_save", "reply", "done"
+                                ]
+                            },
+                            "target": { "type": "string" },
+                            "folder": { "type": "string" },
+                            "args": { "type": "object" },
+                            "platform": { "type": "string", "enum": ["pc", "any"] },
+                            "confidence": { "type": "number" }
                         },
-                        "action": {
-                            "type": "string",
-                            "enum": [
-                                "open_folder", "open_file", "launch_app", "search_files",
-                                "set_volume", "set_brightness", "create_note", "copy_to_clipboard",
-                                "delete_file", "move_file", "system_power", "open_url",
-                                "ui_click", "ui_type", "ui_scroll", "read_file",
-                                "write_file", "memory_save", "reply", "done"
-                            ]
-                        },
-                        "target": { "type": "string" },
-                        "folder": { "type": "string" },
-                        "args": { "type": "object" },
-                        "platform": { "type": "string", "enum": ["pc", "any"] },
-                        "confidence": { "type": "number" }
-                    },
-                    "required": ["thought", "action", "platform", "confidence"]
+                        "required": ["thought", "action", "platform", "confidence"]
+                    }
                 }
-            }
-        })];
+            }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "builtin_web_fetch",
+                    "description": "Fetch a web URL or search the web for information and return clean plain text.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "Full https:// URL or search query."
+                            }
+                        },
+                        "required": ["target"]
+                    }
+                }
+            }),
+        ];
 
         for (server_name, tool) in mcp_tools {
             let fn_name = format!(
@@ -356,6 +375,21 @@ impl ToolCallingAgent {
                 if name == "execute_pc_action" {
                     let cmd = ActionCommand::from_llm_json(&args_val)?;
                     return Ok(AgentTurnDecision::Action(cmd));
+                }
+
+                if name == "builtin_web_fetch" {
+                    let parsed_args: Value =
+                        serde_json::from_str(&args_val).unwrap_or_else(|_| json!({}));
+                    let thought = msg
+                        .get("content")
+                        .and_then(|c| c.as_str())
+                        .map(|s| s.to_string());
+                    return Ok(AgentTurnDecision::McpCall {
+                        server_name: "builtin".to_string(),
+                        tool_name: "web_fetch".to_string(),
+                        arguments: parsed_args,
+                        thought,
+                    });
                 }
 
                 if name.starts_with("mcp__") {

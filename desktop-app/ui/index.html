@@ -1,502 +1,261 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl" data-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title data-i18n="app_title">SilentExec v3.0.0</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SilentExec Desktop</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app-shell">
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="brand-header">
-        <div class="brand-mark" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5L12 2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-            <path d="M12 7L16 9.5V14.5L12 17L8 14.5V9.5L12 7Z" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        <div class="brand-meta">
+    <!-- Narrow Navigation Sidebar -->
+    <aside class="sidebar" aria-label="Primary Navigation">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">⚡</span>
+        <div class="brand-text">
           <span class="brand-name">SilentExec</span>
-          <span class="brand-version">v3.0.0</span>
+          <span class="brand-version">v3.1.0</span>
         </div>
       </div>
 
-      <nav class="sidebar-nav" aria-label="Primary Navigation">
-        <button class="nav-item active" data-view="viewAgent">
-          <svg class="nav-svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
+      <nav class="nav-list">
+        <button class="nav-item active" data-tab="agent" type="button">
+          <span class="nav-icon" aria-hidden="true">✦</span>
           <span data-i18n="nav_agent">الوكيل</span>
         </button>
-        <button class="nav-item" data-view="viewModels">
-          <svg class="nav-svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="4" y="4" width="16" height="16" rx="2"/>
-            <rect x="9" y="9" width="6" height="6"/>
-            <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>
-          </svg>
+        <button class="nav-item" data-tab="models" type="button">
+          <span class="nav-icon" aria-hidden="true">◈</span>
           <span data-i18n="nav_models">النماذج</span>
         </button>
-        <button class="nav-item" data-view="viewTools">
-          <svg class="nav-svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-          </svg>
-          <span data-i18n="nav_tools">المهارات و MCP</span>
+        <button class="nav-item" data-tab="tools" type="button">
+          <span class="nav-icon" aria-hidden="true">⚙</span>
+          <span data-i18n="nav_tools">الأدوات و MCP</span>
         </button>
-        <button class="nav-item" data-view="viewMemory">
-          <svg class="nav-svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/>
-            <path d="M9 22h6"/>
-          </svg>
-          <span data-i18n="nav_memory">الذاكرة</span>
-        </button>
-        <button class="nav-item" data-view="viewSettings">
-          <svg class="nav-svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
+        <button class="nav-item" data-tab="settings" type="button">
+          <span class="nav-icon" aria-hidden="true">☰</span>
           <span data-i18n="nav_settings">الإعدادات</span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="runtime-mini-status" id="sidebarRuntimeStatus">
-          <span class="status-dot" id="sidebarRuntimeDot"></span>
-          <span class="runtime-mini-label" id="sidebarRuntimeText" data-i18n="runtime_checking">جارٍ فحص المحرك...</span>
-        </div>
-        <div class="sidebar-quick-controls">
-          <button class="icon-btn" id="langQuickBtn" title="Switch Language">
-            <span id="langQuickText">EN</span>
-          </button>
-          <button class="icon-btn" id="themeQuickBtn" title="Toggle Theme">
-            <span id="themeQuickIcon">☀️</span>
-          </button>
-        </div>
+        <button id="btnSidebarProvider" class="provider-pill" type="button" title="Configure AI Provider">
+          <span class="status-dot" id="sidebarStatusDot"></span>
+          <span class="provider-pill-label" id="sidebarProviderLabel">Local GGUF</span>
+        </button>
       </div>
     </aside>
 
     <!-- Main Content Area -->
-    <main class="main-workspace">
-      <!-- Top Bar -->
-      <header class="topbar">
-        <div class="topbar-title-group">
-          <h1 class="topbar-title" id="topbarViewTitle" data-i18n="nav_agent">الوكيل</h1>
-          <span class="topbar-subtitle" id="topbarCounter" data-i18n="status_idle">جاهز</span>
-        </div>
-
-        <div class="topbar-actions">
-          <button class="top-pill update-pill" id="topUpdateBadge" style="display: none;">
-            <span class="dot-amber"></span>
-            <span id="topUpdateBadgeText">v2.0.0</span>
-          </button>
-
-          <div class="model-popover-anchor">
-            <button class="top-pill" id="topModelBadge">
-              <span class="status-dot" id="topModelDot"></span>
-              <span id="topModelText">Local GGUF</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            <div class="model-popover" id="modelPopover" style="display: none;">
-              <div class="popover-head" data-i18n="popover_select_model">تبديل النموذج النشط</div>
-              <div class="popover-list" id="modelPopoverList"></div>
-              <div class="popover-foot">
-                <button class="btn btn-ghost btn-xs full-width" id="popoverManageModelsBtn" data-i18n="btn_manage_models">إدارة النماذج</button>
-              </div>
-            </div>
+    <main class="main-area">
+      <!-- 1. Agent Workspace -->
+      <section id="tab-agent" class="tab-view active">
+        <header class="view-topbar">
+          <div class="topbar-meta">
+            <span class="badge badge-subtle" id="topModeBadge">SILENT</span>
+            <span class="badge badge-accent" id="topBackendBadge">Local GGUF</span>
           </div>
+          <button id="btnClearChat" class="btn btn-ghost btn-sm" type="button" data-i18n="clear_chat">محادثة جديدة</button>
+        </header>
 
-          <button class="top-pill mode-pill" id="topModeBadge">
-            <span id="topModeBadgeText">Silent</span>
-          </button>
-        </div>
-      </header>
-
-      <!-- VIEW 1: AGENT CONSOLE -->
-      <section class="workspace-view active view-agent" id="viewAgent">
-        <div class="agent-scroll-area" id="streamContainer">
-          <div class="agent-column">
-            <!-- Welcome Empty State -->
-            <div class="welcome-card" id="streamWelcomeCard">
-              <div class="welcome-icon">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L20 6.5V17.5L12 22L4 17.5V6.5L12 2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                  <path d="M12 7L16 9.5V14.5L12 17L8 14.5V9.5L12 7Z" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                </svg>
-              </div>
-              <h2 class="welcome-title" data-i18n="agent_welcome_title">SilentExec جاهز للتنفيذ</h2>
-              <p class="welcome-desc" data-i18n="agent_welcome_desc">نفّذ أوامر النظام، أدر الملفات، ابحث عبر الويب، أو صغ الأكواد والردود محلياً بأمان.</p>
-              <div class="quick-prompts" id="quickExamplesRow">
-                <button class="chip-btn" data-prompt-ar="افتح المجلد التنزيلات" data-prompt-en="Open Downloads folder">
-                  <span data-i18n="ex_downloads">افتح التنزيلات</span>
-                </button>
-                <button class="chip-btn" data-prompt-ar="افتح يوتيوب وابحث عن Rust" data-prompt-en="Open YouTube and search for Rust">
-                  <span data-i18n="ex_youtube">بحث يوتيوب عن Rust</span>
-                </button>
-                <button class="chip-btn" data-prompt-ar="اكتب ملاحظة باسم أفكار المشروع" data-prompt-en="Create a note named Project Ideas">
-                  <span data-i18n="ex_note">إنشاء ملاحظة</span>
-                </button>
-                <button class="chip-btn" data-prompt-ar="اضبط الصوت على 50%" data-prompt-en="Set volume to 50%">
-                  <span data-i18n="ex_volume">ضبط الصوت 50%</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Conversation Turns -->
-            <div class="stream-messages" id="streamMessages"></div>
+        <div id="chatScroll" class="chat-scroll">
+          <div id="chatStream" class="chat-stream">
+            <!-- Empty state rendered by app.js -->
           </div>
         </div>
 
-        <!-- Inline Confirmation Banner -->
-        <div class="confirm-dock" id="confirmBar" style="display: none;">
-          <div class="confirm-dock-inner">
-            <div class="confirm-info">
-              <span class="confirm-badge">🛡️</span>
-              <div>
-                <div class="confirm-title" data-i18n="confirm_required_title">تأكيد تنفيذ الخطوة</div>
-                <div class="confirm-desc" id="confirmDesc"></div>
-              </div>
-            </div>
-            <div class="confirm-actions">
-              <button class="btn btn-primary btn-sm" id="confirmProceedBtn" data-i18n="btn_execute_step">تنفيذ</button>
-              <button class="btn btn-ghost btn-sm" id="confirmSkipBtn" data-i18n="btn_skip_step">تخطي</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Pinned Bottom Composer -->
-        <div class="composer-dock">
+        <footer class="composer-wrap">
           <div class="composer-box">
             <textarea
-              id="promptInput"
-              class="composer-textarea"
+              id="composerInput"
+              class="composer-input"
               rows="1"
-              data-i18n-placeholder="prompt_placeholder"
-              placeholder="اكتب أمراً أو مهمة متعددة الخطوات..."
+              data-i18n-placeholder="composer_placeholder"
+              placeholder="اطلب من SilentExec تنفيذ مهمة، كتابة كود، أو البحث..."
             ></textarea>
-            <div class="composer-toolbar">
-              <div class="composer-left">
-                <button class="composer-pill" id="composerModelPill" type="button">
-                  <span class="status-dot" id="composerModelDot"></span>
-                  <span id="composerModelLabel">Local GGUF</span>
-                </button>
-                <select id="composerModeSelect" class="composer-select" aria-label="Execution Mode">
-                  <option value="silent" data-i18n="mode_silent">صامت</option>
-                  <option value="interactive" data-i18n="mode_interactive">تفاعلي</option>
-                  <option value="dry_run" data-i18n="mode_dry_run">محاكاة</option>
-                </select>
-                <button class="btn btn-ghost btn-xs" id="clearSessionBtn" type="button" data-i18n="btn_clear_session">جلسة جديدة</button>
-              </div>
-              <div class="composer-right">
-                <button class="btn btn-danger btn-sm" id="stopBtn" type="button" style="display: none;" data-i18n="btn_stop">إيقاف</button>
-                <button class="btn btn-primary btn-sm" id="runBtn" type="button">
-                  <span data-i18n="btn_run">تنفيذ</span>
-                </button>
-              </div>
+            <div class="composer-actions">
+              <button id="btnStop" class="btn btn-danger btn-sm hidden" type="button" data-i18n="stop_btn">إيقاف</button>
+              <button id="btnSend" class="btn btn-primary btn-sm" type="button" data-i18n="send_btn">إرسال</button>
             </div>
           </div>
-        </div>
+        </footer>
       </section>
 
-      <!-- VIEW 2: MODELS HUB -->
-      <section class="workspace-view" id="viewModels">
-        <div class="view-container">
-          <!-- Runtime Setup Card -->
-          <div class="surface-card runtime-card">
-            <div class="card-row-between">
-              <div class="card-head-info">
-                <h2 class="card-title" data-i18n="runtime_title">محرك التشغيل المحلي (llama-server)</h2>
-                <p class="card-desc" data-i18n="runtime_desc">تشغيل محلي كامل مع قواعد GBNF الصارمة وإعادة استخدام ذاكرة KV Cache.</p>
-                <div class="runtime-meta-line">
-                  <span class="semantic-badge" id="runtimeStatusPill" data-i18n="runtime_not_ready">غير مثبت</span>
-                  <span class="mono-text" id="runtimeEndpointLabel">http://127.0.0.1:8080</span>
-                </div>
-              </div>
-              <button class="btn btn-secondary btn-sm" id="setupRuntimeBtn" data-i18n="btn_setup_runtime">إعداد / فحص البيئة</button>
-            </div>
-          </div>
-
-          <!-- Models Header -->
-          <div class="section-header">
+      <!-- 2. Models View -->
+      <section id="tab-models" class="tab-view">
+        <div class="page-container">
+          <header class="page-header">
             <div>
-              <h2 class="section-title" data-i18n="models_catalog_title">مستودع النماذج (GGUF)</h2>
-              <p class="section-desc" data-i18n="models_catalog_desc">نماذج مدمجة محسّنة للاستجابة السريعة والأوامر العربية والإنجليزية.</p>
+              <h1 class="page-title" data-i18n="models_title">النماذج المحلية ووقت التشغيل</h1>
+              <p class="page-subtitle" data-i18n="models_subtitle">إدارة محرك llama-server وتحميل نماذج GGUF محلياً مع استئناف التنزيل.</p>
             </div>
-            <button class="btn btn-ghost btn-sm" id="refreshModelsBtn" data-i18n="btn_refresh_models">تحديث</button>
+            <button id="btnSetupRuntime" class="btn btn-primary" type="button" data-i18n="setup_runtime">تثبيت llama-server</button>
+          </header>
+
+          <div id="runtimeBanner" class="banner-card">
+            <div class="banner-info">
+              <span class="status-dot" id="runtimeDot"></span>
+              <div>
+                <div class="banner-title" id="runtimeTitle" data-i18n="runtime_checking">جارٍ فحص llama-server...</div>
+                <div class="banner-desc" id="runtimeDesc">http://127.0.0.1:8080</div>
+              </div>
+            </div>
+            <button id="btnRefreshRuntime" class="btn btn-ghost btn-sm" type="button" data-i18n="refresh">تحديث</button>
           </div>
 
-          <div class="models-grid" id="modelsGrid"></div>
+          <div id="modelsGrid" class="cards-grid"></div>
         </div>
       </section>
 
-      <!-- VIEW 3: SKILLS & MCP -->
-      <section class="workspace-view" id="viewTools">
-        <div class="view-container">
-          <!-- Custom Routine Builder -->
-          <div class="surface-card">
-            <div class="card-row-between mb-12">
-              <div>
-                <h2 class="card-title" data-i18n="custom_routines_title">إنشاء روتين مخصص</h2>
-                <p class="card-desc" data-i18n="custom_routines_desc">احفظ اختصارات متعددة الخطوات في ذاكرة SilentExec لاستدعائها فوراً.</p>
-              </div>
+      <!-- 3. Tools & MCP View -->
+      <section id="tab-tools" class="tab-view">
+        <div class="page-container">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title" data-i18n="tools_title">الأدوات المدمجة وخوادم MCP</h1>
+              <p class="page-subtitle" data-i18n="tools_subtitle">أدوات احترافية مفعّلة تلقائياً مع دعم خوادم MCP والذاكرة الدائمة.</p>
             </div>
+          </header>
+
+          <h2 class="section-heading" data-i18n="builtin_tools_heading">الأدوات المدمجة (مفعّلة تلقائياً)</h2>
+          <div id="builtinToolsGrid" class="pro-tools-grid"></div>
+
+          <div class="section-row">
+            <h2 class="section-heading" data-i18n="mcp_presets_heading">خوادم MCP الجاهزة</h2>
+          </div>
+          <div id="mcpPresetsRow" class="presets-row"></div>
+
+          <div id="mcpServersList" class="stack-list"></div>
+
+          <div class="card form-card">
+            <h3 class="card-title" data-i18n="add_mcp_title">إضافة خادم MCP مخصص</h3>
             <div class="form-grid-3">
-              <div class="field-group">
-                <label class="field-label" data-i18n="routine_name_label">اسم الروتين</label>
-                <input type="text" id="routineNameInput" class="field-input" data-i18n-placeholder="routine_name_ph" placeholder="وضع الدراسة">
-              </div>
-              <div class="field-group span-2">
-                <label class="field-label" data-i18n="routine_steps_label">الأمر / الخطوات</label>
-                <div class="inline-input-action">
-                  <input type="text" id="routineStepsInput" class="field-input" data-i18n-placeholder="routine_steps_ph" placeholder="افتح المتصفح واضبط الصوت على 30%">
-                  <button class="btn btn-primary btn-sm" id="saveRoutineBtn" data-i18n="btn_save_routine">حفظ الروتين</button>
-                </div>
-              </div>
+              <input id="mcpNameInput" class="input" type="text" data-i18n-placeholder="mcp_name_ph" placeholder="الاسم (مثال: docs)" />
+              <input id="mcpCmdInput" class="input" type="text" data-i18n-placeholder="mcp_cmd_ph" placeholder="الأمر (مثال: npx)" />
+              <input id="mcpArgsInput" class="input" type="text" data-i18n-placeholder="mcp_args_ph" placeholder="المعاملات (مثال: -y @modelcontextprotocol/server-fetch)" />
             </div>
-            <div class="routines-list" id="customRoutinesList"></div>
+            <div class="form-actions">
+              <button id="btnAddMcp" class="btn btn-primary btn-sm" type="button" data-i18n="add_btn">إضافة</button>
+            </div>
           </div>
 
-          <!-- Official MCP Presets & Custom Servers -->
-          <div class="surface-card">
-            <div class="card-row-between mb-16">
-              <div>
-                <h2 class="card-title" data-i18n="mcp_title">خوادم أدوات MCP</h2>
-                <p class="card-desc" data-i18n="mcp_desc">تفعيل بنقرة واحدة للإضافات الرسمية أو ربط خادم MCP مخصص.</p>
-              </div>
-              <button class="btn btn-secondary btn-sm" id="addMcpBtn" data-i18n="btn_add_mcp">+ إضافة خادم</button>
+          <h2 class="section-heading" data-i18n="memory_heading">الذاكرة الدائمة</h2>
+          <div class="card form-card">
+            <div class="form-grid-3">
+              <input id="memKeyInput" class="input" type="text" data-i18n-placeholder="mem_key_ph" placeholder="المفتاح (مثال: preferred_lang)" />
+              <input id="memContentInput" class="input" type="text" data-i18n-placeholder="mem_val_ph" placeholder="المحتوى..." />
+              <button id="btnSaveMemory" class="btn btn-primary btn-sm" type="button" data-i18n="save_btn">حفظ</button>
             </div>
-
-            <!-- 1-Click Presets -->
-            <div class="mcp-presets-grid" id="mcpPresetsGrid"></div>
-
-            <!-- Add MCP Form -->
-            <div class="inline-form-panel" id="mcpFormBox" style="display: none;">
-              <div class="form-grid-3">
-                <div class="field-group">
-                  <label class="field-label" data-i18n="mcp_name_label">الاسم</label>
-                  <input type="text" id="mcpNameInput" class="field-input" placeholder="filesystem">
-                </div>
-                <div class="field-group">
-                  <label class="field-label" data-i18n="mcp_cmd_label">الأمر</label>
-                  <input type="text" id="mcpCommandInput" class="field-input" placeholder="npx">
-                </div>
-                <div class="field-group">
-                  <label class="field-label" data-i18n="mcp_args_label">المعاملات</label>
-                  <input type="text" id="mcpArgsInput" class="field-input" placeholder="-y @modelcontextprotocol/server-filesystem .">
-                </div>
-              </div>
-              <div class="form-actions mt-12">
-                <button class="btn btn-primary btn-sm" id="saveMcpSubmitBtn" data-i18n="btn_save">حفظ</button>
-                <button class="btn btn-ghost btn-sm" id="cancelMcpBtn" data-i18n="btn_cancel">إلغاء</button>
-              </div>
-            </div>
-
-            <!-- Configured Servers List -->
-            <div class="mcp-servers-list mt-16" id="mcpList"></div>
+            <div id="memoryList" class="stack-list mt-12"></div>
           </div>
         </div>
       </section>
 
-      <!-- VIEW 4: MEMORY -->
-      <section class="workspace-view" id="viewMemory">
-        <div class="view-container">
-          <div class="surface-card">
-            <div class="card-row-between mb-16">
-              <div>
-                <h2 class="card-title" data-i18n="memory_title">ذاكرة SilentExec الدائمة</h2>
-                <p class="card-desc" data-i18n="memory_desc">حقائق وتفضيلات محفوظة محلياً في memory.json تُحقن تلقائياً في سياق الوكيل.</p>
+      <!-- 4. Settings View -->
+      <section id="tab-settings" class="tab-view">
+        <div class="page-container">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title" data-i18n="settings_title">الإعدادات</h1>
+              <p class="page-subtitle" data-i18n="settings_subtitle">اللغة، المظهر، مزود الذكاء الاصطناعي، الجسر المحلي، والتحديث التلقائي.</p>
+            </div>
+          </header>
+
+          <div class="settings-grid">
+            <!-- General -->
+            <div class="card">
+              <h3 class="card-title" data-i18n="general_settings">عام</h3>
+              <div class="setting-row">
+                <label class="setting-label" for="selLanguage" data-i18n="language_label">اللغة</label>
+                <select id="selLanguage" class="input select-sm">
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                </select>
               </div>
-              <div class="btn-group">
-                <button class="btn btn-ghost btn-sm" id="refreshMemoriesBtn" data-i18n="btn_refresh">تحديث</button>
-                <button class="btn btn-primary btn-sm" id="addMemoryBtn" data-i18n="btn_add_memory">+ إضافة للذاكرة</button>
+              <div class="setting-row">
+                <label class="setting-label" for="selTheme" data-i18n="theme_label">المظهر</label>
+                <select id="selTheme" class="input select-sm">
+                  <option value="dark" data-i18n="theme_dark">داكن</option>
+                  <option value="light" data-i18n="theme_light">فاتح</option>
+                </select>
+              </div>
+              <div class="setting-row">
+                <label class="setting-label" for="selExecMode" data-i18n="exec_mode_label">وضع التنفيذ</label>
+                <select id="selExecMode" class="input select-sm">
+                  <option value="silent" data-i18n="mode_silent">صامت (Silent)</option>
+                  <option value="interactive" data-i18n="mode_interactive">تفاعلي (Interactive)</option>
+                  <option value="dry_run" data-i18n="mode_dry_run">محاكاة (Dry Run)</option>
+                </select>
+              </div>
+              <div class="setting-row">
+                <label class="setting-label" for="chkFastRouter" data-i18n="fast_router_label">الموجه السريع (&lt;15ms)</label>
+                <input id="chkFastRouter" type="checkbox" class="toggle" />
               </div>
             </div>
 
-            <div class="inline-form-panel mb-16" id="memoryFormBox" style="display: none;">
-              <div class="form-grid-2">
-                <div class="field-group">
-                  <label class="field-label" data-i18n="memory_key_label">المفتاح</label>
-                  <input type="text" id="memoryKeyInput" class="field-input" placeholder="workspace_dir">
+            <!-- AI Provider -->
+            <div class="card">
+              <h3 class="card-title" data-i18n="provider_settings">مزود الذكاء الاصطناعي</h3>
+              <div class="setting-row">
+                <label class="setting-label" for="selBackend" data-i18n="provider_label">المزود</label>
+                <select id="selBackend" class="input select-sm">
+                  <option value="local_llama">Local GGUF (llama-server)</option>
+                  <option value="ollama">Ollama</option>
+                  <option value="openai_compat">OpenAI / Gemini / Groq / OpenRouter</option>
+                  <option value="goose_acp">goose acp</option>
+                </select>
+              </div>
+
+              <div id="ollamaFields" class="provider-fields hidden">
+                <label class="field-label">Ollama URL</label>
+                <input id="inpOllamaUrl" class="input" type="text" placeholder="http://127.0.0.1:11434" />
+                <label class="field-label">Ollama Model</label>
+                <input id="inpOllamaModel" class="input" type="text" placeholder="qwen2.5:7b" />
+              </div>
+
+              <div id="openaiFields" class="provider-fields hidden">
+                <label class="field-label">API Base URL</label>
+                <input id="inpOpenAiBase" class="input" type="text" placeholder="https://generativelanguage.googleapis.com/v1beta/openai" />
+                <label class="field-label">Model</label>
+                <input id="inpOpenAiModel" class="input" type="text" placeholder="gemini-2.5-flash" />
+                <label class="field-label">API Key</label>
+                <input id="inpOpenAiKey" class="input" type="password" placeholder="sk-... / AIza..." />
+              </div>
+
+              <div id="gooseFields" class="provider-fields hidden">
+                <div class="goose-row">
+                  <span id="gooseStatusText" class="muted-text">Goose CLI: checking...</span>
+                  <button id="btnInstallGoose" class="btn btn-ghost btn-sm" type="button" data-i18n="install_goose">تثبيت Goose</button>
                 </div>
-                <div class="field-group">
-                  <label class="field-label" data-i18n="memory_category_label">التصنيف</label>
-                  <select id="memoryCategoryInput" class="field-input">
-                    <option value="preference" data-i18n="category_preference">تفضيل</option>
-                    <option value="fact" data-i18n="category_fact">حقيقة / مسار</option>
-                    <option value="skill" data-i18n="category_skill">مهارة / روتين</option>
-                  </select>
-                </div>
-                <div class="field-group span-2">
-                  <label class="field-label" data-i18n="memory_content_label">المحتوى</label>
-                  <textarea id="memoryContentInput" class="field-input" rows="2" placeholder="D:\Projects"></textarea>
-                </div>
+              </div>
+
+              <div class="form-actions mt-12">
+                <button id="btnSaveProvider" class="btn btn-primary btn-sm" type="button" data-i18n="save_btn">حفظ</button>
+                <button id="btnTestProvider" class="btn btn-ghost btn-sm" type="button" data-i18n="test_connection">اختبار الاتصال</button>
+              </div>
+              <div id="providerTestResult" class="inline-feedback hidden"></div>
+            </div>
+
+            <!-- LAN Bridge -->
+            <div class="card">
+              <h3 class="card-title" data-i18n="bridge_title">الجسر المحلي للأندرويد (LAN Bridge)</h3>
+              <p class="muted-text" data-i18n="bridge_desc">اسمح لتطبيق SilentExec على Android بالتحكم الآمن في هذا الجهاز عبر الشبكة المحلية.</p>
+              <div class="form-actions mt-12">
+                <button id="btnToggleBridge" class="btn btn-primary btn-sm" type="button" data-i18n="bridge_start">تشغيل الجسر</button>
+              </div>
+              <div id="bridgeInfo" class="bridge-info hidden"></div>
+            </div>
+
+            <!-- Auto-Updater -->
+            <div class="card">
+              <h3 class="card-title" data-i18n="updater_title">التحديث التلقائي</h3>
+              <p id="updateStatusText" class="muted-text" data-i18n="updater_ready">الإصدار الحالي: v3.1.0</p>
+              <div id="updateProgressWrap" class="progress-wrap hidden">
+                <div class="progress-bar"><div id="updateProgressFill" class="progress-fill"></div></div>
+                <span id="updateProgressLabel" class="progress-label">0%</span>
               </div>
               <div class="form-actions mt-12">
-                <button class="btn btn-primary btn-sm" id="saveMemorySubmitBtn" data-i18n="btn_save">حفظ</button>
-                <button class="btn btn-ghost btn-sm" id="cancelMemoryBtn" data-i18n="btn_cancel">إلغاء</button>
-              </div>
-            </div>
-
-            <div class="memory-list" id="memoryList"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- VIEW 5: SETTINGS -->
-      <section class="workspace-view" id="viewSettings">
-        <div class="view-container">
-          <!-- General & Appearance -->
-          <div class="surface-card">
-            <h2 class="card-title mb-16" data-i18n="settings_general_title">المظهر واللغة والتوجيه</h2>
-            <div class="settings-rows">
-              <div class="setting-row">
-                <div>
-                  <div class="setting-label" data-i18n="setting_lang_label">لغة الواجهة</div>
-                  <div class="setting-hint" data-i18n="setting_lang_hint">تبديل فوري مع عكس اتجاه الواجهة (RTL / LTR).</div>
-                </div>
-                <div class="segmented-control" id="langSegmented">
-                  <button class="seg-btn active" data-lang="ar">العربية</button>
-                  <button class="seg-btn" data-lang="en">English</button>
-                </div>
-              </div>
-
-              <div class="setting-row">
-                <div>
-                  <div class="setting-label" data-i18n="setting_theme_label">المظهر</div>
-                  <div class="setting-hint" data-i18n="setting_theme_hint">داكن مريح للعين أو نهاري واضح.</div>
-                </div>
-                <div class="segmented-control" id="themeSegmented">
-                  <button class="seg-btn active" data-theme="dark" data-i18n="theme_dark">داكن</button>
-                  <button class="seg-btn" data-theme="light" data-i18n="theme_light">نهاري</button>
-                </div>
-              </div>
-
-              <div class="setting-row">
-                <div>
-                  <div class="setting-label" data-i18n="setting_fast_router_label">الموجه الحتمي السريع</div>
-                  <div class="setting-hint" data-i18n="setting_fast_router_hint">تنفيذ الأوامر البسيطة في أقل من 15ms قبل استدعاء الذكاء الاصطناعي.</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="fastRouterToggle" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- AI Brain Configuration -->
-          <div class="surface-card">
-            <div class="card-row-between mb-16">
-              <div>
-                <h2 class="card-title" data-i18n="settings_ai_title">محرك الذكاء الاصطناعي (AI Brain)</h2>
-                <p class="card-desc" data-i18n="settings_ai_desc">اختر بين التشغيل المحلي GGUF أو Ollama أو واجهة OpenAI-Compatible.</p>
-              </div>
-              <button class="btn btn-secondary btn-sm" id="testBackendBtn" data-i18n="btn_test_connection">اختبار الاتصال</button>
-            </div>
-
-            <div class="brain-cards-grid" id="brainCardsGrid">
-              <button class="brain-card" data-backend="goose_acp" type="button">
-                <div class="brain-card-title">Goose ACP</div>
-                <div class="brain-card-desc" data-i18n="brain_goose_desc">Linux Foundation Rust Agent (85+ مزود + MCP)</div>
-              </button>
-              <button class="brain-card active" data-backend="local_llama" type="button">
-                <div class="brain-card-title" data-i18n="brain_local_title">Local GGUF</div>
-                <div class="brain-card-desc" data-i18n="brain_local_desc">خصوصية تامة عبر llama-server</div>
-              </button>
-              <button class="brain-card" data-backend="ollama" type="button">
-                <div class="brain-card-title">Ollama</div>
-                <div class="brain-card-desc" data-i18n="brain_ollama_desc">خادم Ollama محلي أو شبكي</div>
-              </button>
-              <button class="brain-card" data-backend="openai_compat" type="button">
-                <div class="brain-card-title">OpenAI-Compatible</div>
-                <div class="brain-card-desc" data-i18n="brain_api_desc">Gemini / Groq / OpenRouter / OpenAI</div>
-              </button>
-            </div>
-
-            <div class="inline-form-panel mt-16" id="gooseConfigBox" style="display: none;">
-              <div class="card-row-between">
-                <div>
-                  <div class="setting-label">Goose ACP Runtime (aaif-goose/goose)</div>
-                  <div class="setting-hint" id="gooseStatusText">Checking Goose CLI...</div>
-                </div>
-                <button class="btn btn-primary btn-sm" id="installGooseBtn" type="button">Install / Update Goose</button>
-              </div>
-            </div>
-
-            <div class="inline-form-panel mt-16" id="ollamaConfigBox" style="display: none;">
-              <div class="form-grid-2">
-                <div class="field-group">
-                  <label class="field-label" data-i18n="ollama_url_label">رابط Ollama</label>
-                  <input type="text" id="ollamaUrlInput" class="field-input" value="http://127.0.0.1:11434">
-                </div>
-                <div class="field-group">
-                  <label class="field-label" data-i18n="ollama_model_label">اسم النموذج</label>
-                  <input type="text" id="ollamaModelInput" class="field-input" value="qwen2.5:1.5b">
-                </div>
-              </div>
-            </div>
-
-            <div class="inline-form-panel mt-16" id="openaiConfigBox" style="display: none;">
-              <div class="form-grid-3">
-                <div class="field-group">
-                  <label class="field-label">Base URL</label>
-                  <input type="text" id="openaiBaseInput" class="field-input" value="https://api.openai.com/v1">
-                </div>
-                <div class="field-group">
-                  <label class="field-label">Model</label>
-                  <input type="text" id="openaiModelInput" class="field-input" value="gpt-4o-mini">
-                </div>
-                <div class="field-group">
-                  <label class="field-label">API Key</label>
-                  <input type="password" id="openaiKeyInput" class="field-input" placeholder="sk-...">
-                </div>
-              </div>
-            </div>
-
-            <div class="card-row-between mt-16">
-              <span class="status-feedback" id="backendTestResult"></span>
-              <button class="btn btn-primary btn-sm" id="saveAiConfigBtn" data-i18n="btn_save_settings">حفظ الإعدادات</button>
-            </div>
-          </div>
-
-          <!-- LAN Bridge -->
-          <div class="surface-card">
-            <div class="card-row-between">
-              <div>
-                <h2 class="card-title" data-i18n="bridge_title">جسر الشبكة المحلية (LAN Bridge)</h2>
-                <p class="card-desc" data-i18n="bridge_desc">السماح لتطبيق SilentExec Android بإرسال الأوامر إلى هذا الجهاز عبر Wi-Fi.</p>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="lanBridgeToggle">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="bridge-info-box mt-12" id="bridgeInfoBox" style="display: none;">
-              <div class="mono-row"><span data-i18n="bridge_url_label">العنوان:</span> <code id="bridgeUrlVal">-</code></div>
-              <div class="mono-row"><span data-i18n="bridge_token_label">الرمز:</span> <code id="bridgeTokenVal">-</code></div>
-            </div>
-          </div>
-
-          <!-- Updates -->
-          <div class="surface-card">
-            <div class="card-row-between">
-              <div>
-                <h2 class="card-title" data-i18n="updates_title">التحديثات التلقائية</h2>
-                <p class="card-desc" id="versionLabel" data-i18n="version_label">الإصدار الحالي: v2.0.0</p>
-              </div>
-              <button class="btn btn-secondary btn-sm" id="checkUpdatesBtn" data-i18n="btn_check_updates">التحقق من التحديثات</button>
-            </div>
-            <div id="updateStatusBox" class="mt-12" style="display: none;">
-              <div id="updateStatusText" class="status-feedback"></div>
-              <button class="btn btn-primary btn-sm mt-8" id="installUpdateBtn" style="display: none;" data-i18n="btn_install_update">تحميل وتثبيت التحديث</button>
-              <div class="progress-wrap mt-8" id="updateProgressWrap" style="display: none;">
-                <div class="progress-track"><div class="progress-fill" id="updateProgressBar" style="width: 0%;"></div></div>
-                <div class="progress-meta" id="updateProgressText">0%</div>
+                <button id="btnCheckUpdate" class="btn btn-ghost btn-sm" type="button" data-i18n="check_update">التحقق من التحديثات</button>
+                <button id="btnInstallUpdate" class="btn btn-primary btn-sm hidden" type="button" data-i18n="install_update">تنزيل وتثبيت التحديث</button>
               </div>
             </div>
           </div>
@@ -504,9 +263,6 @@
       </section>
     </main>
   </div>
-
-  <!-- Toast Container -->
-  <div class="toast-host" id="toastHost" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>

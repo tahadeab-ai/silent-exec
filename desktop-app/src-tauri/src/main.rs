@@ -7,7 +7,7 @@ use silent_exec_pc::{
     action_type_to_str, hidden_command, start_bridge_server, AiBackend, AppConfig, BridgeConfig,
     ExecutionResult, FastRuleRouter, FileIndexer, GooseAcpRunner, GooseStatus, McpClient,
     McpServerConfig, McpTool, MemoryItem, ModelDownloadInfo, ModelManager, ModelReleaseInfo,
-    PcExecutor, RuntimeManager, SelfUpdater, SetupResult, ToolCallingAgent,
+    PcAgentLoop, PcExecutor, RuntimeManager, SelfUpdater, SetupResult,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -348,57 +348,10 @@ async fn execute_query(
             }
         }
 
-        // 2. Real Agent Engine: Goose ACP or Standard Tool-Calling Loop + MCP
+        // 2. Real Problem-Solving Agent Loop (PcAgentLoop: Local GGUF / Ollama / OpenAI / Goose + Pro Tools + MCP)
         let dry_run = exec_mode == ExecutionMode::DryRun;
-        if cfg.backend == "goose_acp" {
-            let goose_bin = GooseAcpRunner::find_goose_binary().ok_or_else(|| {
-                "Goose CLI is not installed. Click 'Install Goose ACP' in Settings.".to_string()
-            })?;
-            let out = GooseAcpRunner::run_task(
-                &goose_bin,
-                trimmed,
-                Some(&cfg.goose_provider),
-                Some(&cfg.goose_model),
-            )?;
-            steps_out.push(StepInfo {
-                thought: Some("Executed via Goose ACP".to_string()),
-                step_index: 1,
-                total_steps: 1,
-                stage: "executed".to_string(),
-                description: "Goose ACP Agent".to_string(),
-                action: Some("goose_acp".to_string()),
-                details: Some(out.clone()),
-            });
-            return Ok(ExecutionReport {
-                success: true,
-                query,
-                steps: steps_out,
-                message: out,
-                requires_confirm: false,
-                pending_step_index: None,
-            });
-        }
-
-        let (endpoint_base, api_key, model_name) = match cfg.backend.as_str() {
-            "ollama" => (cfg.ollama_url.clone(), String::new(), cfg.ollama_model.clone()),
-            "openai_compat" => (
-                cfg.openai_api_base.clone(),
-                cfg.openai_api_key.clone(),
-                cfg.openai_api_model.clone(),
-            ),
-            _ => ("http://127.0.0.1:8080".to_string(), String::new(), "local-gguf".to_string()),
-        };
-
-        let (loop_steps, summary, pending_cmd) = ToolCallingAgent::run_tool_loop(
-            trimmed,
-            &endpoint_base,
-            &api_key,
-            &model_name,
-            &cfg.mcp_servers,
-            &executor,
-            dry_run,
-            8,
-        )?;
+        let (loop_steps, summary, pending_cmd) =
+            PcAgentLoop::run(trimmed, &cfg, &executor, dry_run, 8)?;
 
         let total = loop_steps.len().max(1);
         for s in loop_steps {
