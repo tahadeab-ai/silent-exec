@@ -2177,7 +2177,9 @@ mod tests {
         assert_eq!(payload["options"]["repeat_penalty"], 1.12);
 
         let presets = ModelManager::desktop_recommended_presets();
-        assert!(presets.iter().any(|p| p.model == "qwen3.5:4b" && p.is_default));
+        assert!(presets
+            .iter()
+            .any(|p| p.model == "qwen3.5:4b" && p.is_default));
         assert!(presets.iter().any(|p| p.model == "qwen3.5:9b-q4_K_M"));
         assert!(presets
             .iter()

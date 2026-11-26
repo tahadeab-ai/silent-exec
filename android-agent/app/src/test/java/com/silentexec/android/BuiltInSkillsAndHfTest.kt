@@ -97,12 +97,14 @@ class BuiltInSkillsAndHfTest {
             parsed.downloadUrl
         )
 
-        val qwenCurated = GitHubReleaseClient.CURATED_EDGE_MODELS.first { it.filename.contains("Qwen3") }
+        val qwenCurated = GitHubReleaseClient.CURATED_EDGE_MODELS.first { it.filename.contains("Qwen3-1.7B") }
         assertEquals("Qwen3-1.7B-Q4_K_M.gguf", qwenCurated.filename)
         assertEquals(
             "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
             qwenCurated.downloadUrl
         )
+        val qwen35Curated = GitHubReleaseClient.CURATED_EDGE_MODELS.first { it.filename.contains("Qwen3.5-2B") }
+        assertEquals("Qwen3.5-2B-Q4_K_M.gguf", qwen35Curated.filename)
     }
 
     @Test
