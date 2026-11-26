@@ -64,6 +64,7 @@ pub fn action_type_to_str(action: ActionType) -> &'static str {
         ActionType::ReadFile => "read_file",
         ActionType::WriteFile => "write_file",
         ActionType::MemorySave => "memory_save",
+        ActionType::BatchActions => "batch_actions",
     }
 }
 
@@ -807,6 +808,49 @@ impl PcExecutor {
                         message: format!("Failed to save memory: {}", e),
                         action: action_name,
                     },
+                }
+            }
+            ActionType::BatchActions => {
+                let sub_actions = cmd.actions.as_deref().unwrap_or(&[]);
+                if sub_actions.is_empty() || sub_actions.len() > 4 {
+                    return ExecutionResult::Error {
+                        action: action_name,
+                        message: "batch_actions requires 1..=4 sub-actions".to_string(),
+                    };
+                }
+                let mut completed = 0usize;
+                for sub in sub_actions {
+                    match self.execute(sub, true) {
+                        ExecutionResult::Blocked { reason, .. } => {
+                            return ExecutionResult::Blocked {
+                                action: action_name,
+                                reason,
+                            };
+                        }
+                        ExecutionResult::ConfirmationRequired { reason, .. } => {
+                            return ExecutionResult::ConfirmationRequired {
+                                action: action_name,
+                                prompt: format!(
+                                    "Batch sub-action '{}' requires confirmation",
+                                    action_type_to_str(sub.action)
+                                ),
+                                confidence: sub.confidence,
+                                reason,
+                            };
+                        }
+                        ExecutionResult::Error { message, .. } => {
+                            return ExecutionResult::Error {
+                                action: action_name,
+                                message,
+                            };
+                        }
+                        _ => completed += 1,
+                    }
+                }
+                ExecutionResult::Success {
+                    action: action_name,
+                    details: format!("Executed {} batched actions", completed),
+                    target_resolved: None,
                 }
             }
             other => ExecutionResult::Error {

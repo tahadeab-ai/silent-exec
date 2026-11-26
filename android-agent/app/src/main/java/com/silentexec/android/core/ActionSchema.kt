@@ -91,7 +91,10 @@ enum class ActionType {
     MEMORY_SAVE,
 
     @SerialName("web_fetch")
-    WEB_FETCH;
+    WEB_FETCH,
+
+    @SerialName("batch_actions")
+    BATCH_ACTIONS;
 
     val tier: SafetyTier
         get() = when (this) {
@@ -132,6 +135,7 @@ enum class ActionType {
             WRITE_FILE -> "write_file"
             MEMORY_SAVE -> "memory_save"
             WEB_FETCH -> "web_fetch"
+            BATCH_ACTIONS -> "batch_actions"
         }
 }
 
@@ -183,6 +187,7 @@ data class ActionCommand(
     val target: String? = null,
     val folder: String? = null,
     val args: JsonElement? = null,
+    val actions: List<ActionCommand>? = null,
     val platform: Platform = Platform.ANDROID,
     val confidence: Double = 0.85,
     val thought: String? = null

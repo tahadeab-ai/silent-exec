@@ -46,7 +46,8 @@
             "reply",
             "read_file",
             "write_file",
-            "memory_save"
+            "memory_save",
+            "batch_actions"
           ]
         },
         "target": {
@@ -60,6 +61,15 @@
         "args": {
           "type": "object",
           "description": "Optional action arguments or parameters"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionCommand"
+          },
+          "minItems": 1,
+          "maxItems": 4,
+          "description": "Up to 4 sequential atomic UI actions for batch_actions"
         },
         "platform": {
           "type": "string",

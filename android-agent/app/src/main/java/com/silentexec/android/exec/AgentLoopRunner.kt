@@ -16,6 +16,7 @@ import com.silentexec.android.nlp.CloudApiClient
 import com.silentexec.android.nlp.OnDeviceLlamaEngine
 import com.silentexec.android.nlp.PlanOrAction
 import com.silentexec.android.nlp.PromptFormatter
+import com.silentexec.android.nlp.ToolRegistry
 import com.silentexec.android.skills.BuiltInSkills
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -45,6 +46,7 @@ sealed class AgentStepUpdate {
     data class AllCompleted(val totalSteps: Int) : AgentStepUpdate()
     data class Aborted(val reason: String) : AgentStepUpdate()
     data class ModelTip(val message: String) : AgentStepUpdate()
+    data class TakeOverRequired(val request: TakeOverRequest) : AgentStepUpdate()
 }
 
 enum class StepDecision {
@@ -167,16 +169,73 @@ class AgentLoopRunner(
 
         val stepHistory = mutableListOf<String>()
         val maxSteps = 8
+        val reflector = StateHashReflector()
+        val notetaker = Notetaker()
+        val fastMode = settings.fastRouterEnabled
+        val compoundPlan = CompoundIntentGuard.decompose(cleanGoal)
+        val planManager = compoundPlan.planManager
 
         var currentStepIndex = 1
         var isLoopFinished = false
         var lastExecutedCommand: ActionCommand? = null
 
-        while (currentStepIndex <= maxSteps && !isLoopFinished && !isCancelled) {
-            val screenElements = uiObserver?.invoke()
-                ?: (SilentExecAccessibilityService.get()?.extractPrunedUiStrings() ?: emptyList())
+        // 2.5. Deterministic Native Intent Execution (0 LLM calls for leading native steps)
+        while (!isCancelled && currentStepIndex <= maxSteps) {
+            val nextStep = planManager.nextRunnableStep() ?: break
+            val hintCmd = nextStep.actionHint ?: break
+            planManager.markInProgress(nextStep.id)
+            val ok = executeStepInLoop(hintCmd, currentStepIndex, maxSteps, onUpdate, onConfirmStep)
+            if (!ok) {
+                planManager.markFailed(nextStep.id)
+                return
+            }
+            planManager.markDone(nextStep.id)
+            lastExecutedCommand = hintCmd
+            notetaker.recordOnSuccess(
+                ActionOutcome.SUCCESS,
+                nextStep.id,
+                "${hintCmd.action.wireName}:${hintCmd.target ?: ""}"
+            )
+            stepHistory.add("Step $currentStepIndex (${nextStep.id}): ${hintCmd.action.wireName}(${hintCmd.target ?: ""}) -> OK")
+            currentStepIndex++
+            if (stepDelayMs > 0 && planManager.remainingCount() > 0 && !isCancelled) {
+                try { Thread.sleep(maxOf(stepDelayMs, 800L)) } catch (_: InterruptedException) {}
+            }
+        }
 
-            val prompt = PromptFormatter.buildScreenAwarePrompt(cleanGoal, screenElements, stepHistory)
+        if (compoundPlan.steps.isNotEmpty() && planManager.remainingCount() == 0 && stepHistory.isNotEmpty()) {
+            onUpdate(AgentStepUpdate.AllCompleted(currentStepIndex - 1))
+            return
+        }
+
+        while (currentStepIndex <= maxSteps && !isLoopFinished && !isCancelled) {
+            val svc = if (uiObserver == null) SilentExecAccessibilityService.get() else null
+            val phoneState = svc?.getPhoneState()
+            val screenElements = uiObserver?.invoke()
+                ?: (svc?.extractPrunedUiStrings() ?: emptyList())
+
+            // Take_over Gate for FLAG_SECURE / protected screens
+            TakeOverGate.evaluate(currentStepIndex, null, phoneState)?.let { req ->
+                onUpdate(AgentStepUpdate.TakeOverRequired(req))
+                if (!awaitTakeOverDecision(req, currentStepIndex, maxSteps, onConfirmStep)) {
+                    onUpdate(AgentStepUpdate.Aborted(req.reason))
+                    return
+                }
+            }
+
+            val toolSummary = ToolRegistry.formatActiveToolsSummary(cleanGoal, fastMode)
+            val planSummary = if (!fastMode || compoundPlan.isCompound) {
+                "Plan Progress:\n${planManager.formatProgressSummary()}"
+            } else null
+
+            val prompt = PromptFormatter.buildScreenAwarePrompt(
+                userGoal = cleanGoal,
+                prunedUiTree = screenElements,
+                stepHistory = stepHistory,
+                toolSummary = toolSummary,
+                planSummary = planSummary,
+                sessionNotes = notetaker.formatForPrompt().takeIf { it.isNotBlank() }
+            )
 
             val rawDecision = try {
                 obtainDecision(prompt, cleanGoal)
@@ -259,22 +318,64 @@ class AgentLoopRunner(
                         return
                     }
 
+                    // Take_over Gate for sensitive actions (payments, messages, installs, permissions)
+                    TakeOverGate.evaluate(currentStepIndex, cmd, phoneState)?.let { req ->
+                        onUpdate(AgentStepUpdate.TakeOverRequired(req))
+                        if (!awaitTakeOverDecision(req, currentStepIndex, maxSteps, onConfirmStep)) {
+                            onUpdate(AgentStepUpdate.Aborted(req.reason))
+                            return
+                        }
+                    }
+
+                    val preSig = svc?.computeScreenSignature().orEmpty()
+                    val prePkg = svc?.activePackageName().orEmpty()
+                    reflector.recordBefore(preSig, prePkg)
+
                     val stepSuccess = executeStepInLoop(cmd, currentStepIndex, maxSteps, onUpdate, onConfirmStep)
                     if (!stepSuccess) {
                         return
                     }
 
-                    lastExecutedCommand = cmd
-                    stepHistory.add("Step $currentStepIndex: ${cmd.action.wireName}(${cmd.target ?: ""}) -> OK")
-                    currentStepIndex++
-
-                    val settleMs = when (cmd.action) {
-                        ActionType.OPEN_URL, ActionType.OPEN_ANDROID_APP, ActionType.UI_CLICK -> maxOf(stepDelayMs, 1200L)
+                    val mutatesUi = StateHashReflector.isUiMutatingAction(cmd.action)
+                    val settleMs = when {
+                        cmd.action in setOf(ActionType.OPEN_URL, ActionType.OPEN_ANDROID_APP, ActionType.UI_CLICK) -> maxOf(stepDelayMs, 1200L)
+                        mutatesUi -> maxOf(stepDelayMs, 500L)
                         else -> stepDelayMs
                     }
                     if (stepDelayMs > 0 && currentStepIndex <= maxSteps && !isCancelled) {
                         try { Thread.sleep(settleMs) } catch (_: InterruptedException) {}
                     }
+
+                    val postSig = svc?.computeScreenSignature().orEmpty()
+                    val postPkg = svc?.activePackageName().orEmpty()
+                    val reflection = reflector.evaluateAfter(
+                        mutatesUi = mutatesUi && svc != null,
+                        afterSignature = postSig,
+                        afterPackage = postPkg
+                    )
+                    if (reflection.outcome == ActionOutcome.SILENT_FAILURE) {
+                        stepHistory.add("Step $currentStepIndex: ${cmd.action.wireName}(${cmd.target ?: ""}) -> SILENT_FAILURE (${reflection.correctiveHint})")
+                        if (reflection.shouldAbortOrEscalate) {
+                            onUpdate(
+                                AgentStepUpdate.StepFailed(
+                                    currentStepIndex,
+                                    maxSteps,
+                                    "توقف الوكيل بعد تكرار عدم تغير الشاشة: ${reflection.correctiveHint}"
+                                )
+                            )
+                            return
+                        }
+                    } else {
+                        notetaker.recordOnSuccess(
+                            ActionOutcome.SUCCESS,
+                            "step_$currentStepIndex",
+                            "${cmd.action.wireName}:${cmd.target ?: ""}"
+                        )
+                        stepHistory.add("Step $currentStepIndex: ${cmd.action.wireName}(${cmd.target ?: ""}) -> OK")
+                    }
+
+                    lastExecutedCommand = cmd
+                    currentStepIndex++
                 }
             }
         }
@@ -284,6 +385,29 @@ class AgentLoopRunner(
         } else if (!isLoopFinished) {
             onUpdate(AgentStepUpdate.AllCompleted(currentStepIndex - 1))
         }
+    }
+
+    private fun awaitTakeOverDecision(
+        req: TakeOverRequest,
+        stepIndex: Int,
+        maxSteps: Int,
+        onConfirmStep: ((step: ActionCommand, index: Int, total: Int, callback: (StepDecision) -> Unit) -> Unit)?
+    ): Boolean {
+        if (onConfirmStep == null) return false
+        val placeholder = req.sensitiveAction ?: ActionCommand(
+            action = ActionType.UI_CLICK,
+            target = req.reason,
+            confidence = 1.0,
+            thought = req.reason
+        )
+        var decision = StepDecision.STOP
+        val latch = CountDownLatch(1)
+        onConfirmStep(placeholder, stepIndex, maxSteps) { choice ->
+            decision = choice
+            latch.countDown()
+        }
+        latch.await()
+        return decision == StepDecision.RUN
     }
 
     private fun executeMultiStepPlan(

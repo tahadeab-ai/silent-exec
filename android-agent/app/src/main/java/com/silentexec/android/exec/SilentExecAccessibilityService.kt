@@ -10,6 +10,14 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import java.lang.ref.WeakReference
 
+data class PhoneState(
+    val packageName: String,
+    val activityName: String,
+    val focusedElement: String?,
+    val keyboardVisible: Boolean,
+    val isSecureScreen: Boolean
+)
+
 data class UiElementInfo(
     val index: Int,
     val text: String,
@@ -42,13 +50,22 @@ data class UiElementInfo(
 
 class SilentExecAccessibilityService : AccessibilityService() {
 
+    @Volatile
+    private var lastActivityName: String = ""
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = WeakReference(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Passive observation for zero-chatter operation
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val cls = event.className?.toString().orEmpty()
+            val pkg = event.packageName?.toString().orEmpty()
+            if (cls.isNotBlank() && pkg != applicationContext.packageName) {
+                lastActivityName = cls
+            }
+        }
     }
 
     override fun onInterrupt() {
@@ -94,15 +111,74 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Returns structured Mobilerun-style PhoneState for perception & TakeOverGate.
+     */
+    fun getPhoneState(): PhoneState {
+        val selfPkg = applicationContext.packageName
+        val allWindows = windows
+        var keyboardVisible = false
+        var activeAppPkg = ""
+        var activeRoot: AccessibilityNodeInfo? = null
+
+        if (!allWindows.isNullOrEmpty()) {
+            for (win in allWindows) {
+                if (win.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
+                    keyboardVisible = true
+                }
+                if (win.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+                val root = win.root
+                val pkg = root?.packageName?.toString().orEmpty()
+                if (pkg.isNotEmpty() && pkg == selfPkg) continue
+                if (win.type == AccessibilityWindowInfo.TYPE_APPLICATION && win.isActive) {
+                    activeAppPkg = pkg
+                    activeRoot = root
+                }
+            }
+        }
+
+        if (activeRoot == null) {
+            activeRoot = resolveTargetWindowRoot()
+            if (activeAppPkg.isEmpty()) {
+                activeAppPkg = activeRoot?.packageName?.toString().orEmpty()
+            }
+        }
+
+        val focusedNode = activeRoot?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val focusedLabel = focusedNode?.let { n ->
+            n.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: n.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: n.viewIdResourceName?.substringAfterLast('/')
+        }
+
+        val isSecure = activeAppPkg.isNotEmpty() && activeAppPkg != selfPkg &&
+            (activeRoot == null || activeRoot.childCount == 0)
+
+        return PhoneState(
+            packageName = activeAppPkg.ifEmpty { activePackageName() },
+            activityName = lastActivityName,
+            focusedElement = focusedLabel,
+            keyboardVisible = keyboardVisible,
+            isSecureScreen = isSecure
+        )
+    }
+
+    /**
      * Traverses the active non-self window and extracts a pruned, indexed summary of interactive/visible UI elements.
+     * Prunes invisible nodes and non-interactive decorative nodes covering < 1% of screen area,
+     * deduplicates nested containers, and caps at 45 highest-priority elements.
      */
     fun extractPrunedUiTree(): List<UiElementInfo> {
         val root = resolveTargetWindowRoot() ?: return emptyList()
-        val elements = mutableListOf<UiElementInfo>()
-        var counter = 0
+        val dm = resources.displayMetrics
+        val screenArea = (dm.widthPixels.toLong() * dm.heightPixels.toLong()).coerceAtLeast(1L)
+        val minDecorativeArea = screenArea / 100L // 1% of screen area
+
+        val interactiveCandidates = mutableListOf<UiElementInfo>()
+        val textCandidates = mutableListOf<UiElementInfo>()
+        val seenSignatures = HashSet<String>()
 
         fun traverse(node: AccessibilityNodeInfo?) {
-            if (node == null || elements.size >= 35) return
+            if (node == null) return
             if (!node.isVisibleToUser) return
 
             val text = node.text?.toString()?.trim() ?: ""
@@ -110,26 +186,42 @@ class SilentExecAccessibilityService : AccessibilityService() {
             val isClickable = node.isClickable
             val isEditable = node.isEditable
             val isScrollable = node.isScrollable
+            val isCheckable = node.isCheckable
+            val isFocusable = node.isFocusable
 
-            val isInteractive = isClickable || isEditable || isScrollable || text.isNotEmpty() || desc.isNotEmpty()
+            val isInteractiveControl = isClickable || isEditable || isScrollable || isCheckable
+            val hasMeaningfulText = text.isNotEmpty() || desc.isNotEmpty()
 
-            if (isInteractive) {
+            if (isInteractiveControl || hasMeaningfulText || isFocusable) {
                 val bounds = Rect()
                 node.getBoundsInScreen(bounds)
-                if (bounds.width() > 0 && bounds.height() > 0) {
-                    elements.add(
-                        UiElementInfo(
-                            index = counter++,
-                            text = text,
-                            contentDescription = desc,
-                            className = node.className?.toString() ?: "",
-                            isClickable = isClickable,
-                            isEditable = isEditable,
-                            isScrollable = isScrollable,
-                            bounds = bounds,
-                            resourceId = node.viewIdResourceName ?: ""
-                        )
-                    )
+                val w = bounds.width().toLong()
+                val h = bounds.height().toLong()
+                val area = w * h
+                if (w > 0 && h > 0) {
+                    // Prune non-interactive decorative nodes covering < 1% of screen area
+                    val keep = isInteractiveControl || (hasMeaningfulText && (isFocusable || area >= minDecorativeArea))
+                    if (keep) {
+                        val dedupKey = "${text}|${desc}|${isInteractiveControl}|${bounds.centerX() / 8}|${bounds.centerY() / 8}"
+                        if (seenSignatures.add(dedupKey)) {
+                            val info = UiElementInfo(
+                                index = 0,
+                                text = text,
+                                contentDescription = desc,
+                                className = node.className?.toString() ?: "",
+                                isClickable = isClickable,
+                                isEditable = isEditable,
+                                isScrollable = isScrollable,
+                                bounds = bounds,
+                                resourceId = node.viewIdResourceName ?: ""
+                            )
+                            if (isInteractiveControl) {
+                                interactiveCandidates.add(info)
+                            } else if (hasMeaningfulText) {
+                                textCandidates.add(info)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -139,7 +231,9 @@ class SilentExecAccessibilityService : AccessibilityService() {
         }
 
         traverse(root)
-        return elements
+
+        val prioritized = (interactiveCandidates + textCandidates).take(45)
+        return prioritized.mapIndexed { idx, item -> item.copy(index = idx) }
     }
 
     /**

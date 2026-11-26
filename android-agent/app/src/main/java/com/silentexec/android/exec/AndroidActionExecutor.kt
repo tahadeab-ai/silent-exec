@@ -93,7 +93,11 @@ class AndroidActionExecutor(private val context: Context? = null) {
         }
 
         return try {
+            NativeIntentExecutors.executeNative(context, cmd)?.let { return it }
             when (cmd.action) {
+                ActionType.BATCH_ACTIONS -> {
+                    handleBatchActions(cmd.actions.orEmpty(), confirmed)
+                }
                 ActionType.OPEN_ANDROID_APP, ActionType.LAUNCH_APP -> {
                     handleOpenApp(cmd.target ?: "", cmd.args)
                 }
@@ -185,6 +189,34 @@ class AndroidActionExecutor(private val context: Context? = null) {
                 message = e.message ?: "Unknown execution error"
             )
         }
+    }
+
+    private fun handleBatchActions(subActions: List<ActionCommand>, confirmed: Boolean): AndroidExecutionResult {
+        if (subActions.isEmpty() || subActions.size > 4) {
+            return AndroidExecutionResult.Error("batch_actions", "batch_actions requires 1..4 sub-actions")
+        }
+        var executed = 0
+        for ((idx, sub) in subActions.withIndex()) {
+            when (val res = execute(sub, confirmed = confirmed)) {
+                is AndroidExecutionResult.Success -> {
+                    executed++
+                    if (idx < subActions.lastIndex) {
+                        try { Thread.sleep(250L) } catch (_: InterruptedException) {}
+                    }
+                }
+                is AndroidExecutionResult.Blocked -> return res
+                is AndroidExecutionResult.ConfirmationRequired -> return res
+                is AndroidExecutionResult.Error -> return AndroidExecutionResult.Error(
+                    "batch_actions",
+                    "Batch step ${idx + 1} (${sub.action.wireName}) failed: ${res.message}"
+                )
+            }
+        }
+        return AndroidExecutionResult.Success(
+            action = "batch_actions",
+            details = "Executed $executed batched UI actions",
+            targetResolved = "${executed}_steps"
+        )
     }
 
     private fun launchYouTubeSearch(query: String): AndroidExecutionResult {

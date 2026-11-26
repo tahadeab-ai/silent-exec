@@ -238,6 +238,7 @@ mod tests {
             target: Some("cmd.exe && calc".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -264,6 +265,7 @@ mod tests {
             target: Some("test.log".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -291,6 +293,7 @@ mod tests {
             target: Some("test.log".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -321,6 +324,7 @@ mod tests {
             target: Some("Downloads".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -353,6 +357,7 @@ mod tests {
             target: Some("Meeting Agenda".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -1431,12 +1436,14 @@ mod tests {
                 target: Some("submit_button".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
             ActionCommand {
                 thought: None,
                 action: ActionType::UiType,
+                actions: None,
                 target: Some("search_bar".to_string()),
                 folder: None,
                 args: Some(serde_json::json!({"text": "hello"})),
@@ -1446,6 +1453,7 @@ mod tests {
             ActionCommand {
                 thought: None,
                 action: ActionType::UiScroll,
+                actions: None,
                 target: None,
                 folder: None,
                 args: Some(serde_json::json!({"direction": "down"})),
@@ -1458,6 +1466,7 @@ mod tests {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
@@ -1467,6 +1476,7 @@ mod tests {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
@@ -1498,6 +1508,7 @@ mod tests {
             target: None,
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -1624,6 +1635,7 @@ mod tests {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
@@ -1633,6 +1645,7 @@ mod tests {
                 target: Some("../../etc/shadow".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
@@ -1904,6 +1917,7 @@ mod tests {
         let reply_cmd = ActionCommand {
             thought: None,
             action: ActionType::Reply,
+            actions: None,
             target: Some("Answer: 42".to_string()),
             folder: None,
             args: Some(serde_json::json!({"text": "Answer: 42"})),
@@ -1923,6 +1937,7 @@ mod tests {
         let write_cmd = ActionCommand {
             thought: None,
             action: ActionType::WriteFile,
+            actions: None,
             target: Some(test_file.to_string_lossy().to_string()),
             folder: None,
             args: Some(serde_json::json!({"content": "Hello from agent"})),
@@ -1945,6 +1960,7 @@ mod tests {
             target: Some(test_file.to_string_lossy().to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.92,
         };
@@ -1958,6 +1974,7 @@ mod tests {
         let mem_cmd = ActionCommand {
             thought: None,
             action: ActionType::MemorySave,
+            actions: None,
             target: Some("user_theme".to_string()),
             folder: None,
             args: Some(serde_json::json!({
@@ -2010,6 +2027,7 @@ mod tests {
         let step1 = ActionCommand {
             thought: None,
             action: ActionType::SetVolume,
+            actions: None,
             target: None,
             folder: None,
             args: Some(serde_json::json!({ "level": 30 })),
@@ -2022,6 +2040,7 @@ mod tests {
             target: Some("https://github.com".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 1.0,
         };
@@ -2209,5 +2228,52 @@ mod tests {
 
         let unclosed = "<think>infinite reasoning loop without closing";
         assert!(crate::inference::extract_action_json(unclosed).is_err());
+    }
+
+    #[test]
+    fn test_80_v4_p2_batch_actions_safety_and_executor() {
+        use silent_exec_core::{ActionCommand, ActionType, Platform, SafetyDecision, SafetyGate};
+
+        let batch_json = r##"{
+            "action": "batch_actions",
+            "actions": [
+                {"action": "ui_click", "target": "#0", "platform": "pc", "confidence": 0.95},
+                {"action": "ui_type", "target": "nlp", "platform": "pc", "confidence": 0.95}
+            ],
+            "platform": "pc",
+            "confidence": 0.95
+        }"##;
+        let cmd = ActionCommand::from_llm_json(batch_json).expect("batch_actions should parse");
+        assert_eq!(cmd.action, ActionType::BatchActions);
+        assert_eq!(cmd.actions.as_ref().map(|a| a.len()), Some(2));
+        assert_eq!(SafetyGate::evaluate(&cmd), SafetyDecision::AllowSilent);
+
+        // > 4 sub-actions must be blocked by SafetyGate
+        let too_many = ActionCommand {
+            thought: None,
+            action: ActionType::BatchActions,
+            target: None,
+            folder: None,
+            args: None,
+            actions: Some(vec![
+                ActionCommand {
+                    thought: None,
+                    action: ActionType::UiBack,
+                    target: None,
+                    folder: None,
+                    args: None,
+                    actions: None,
+                    platform: Platform::Pc,
+                    confidence: 0.9,
+                };
+                5
+            ]),
+            platform: Platform::Pc,
+            confidence: 0.95,
+        };
+        assert!(matches!(
+            SafetyGate::evaluate(&too_many),
+            SafetyDecision::Block { .. }
+        ));
     }
 }

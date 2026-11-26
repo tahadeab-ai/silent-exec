@@ -59,6 +59,7 @@ pub fn resolve_clause(clause: &str) -> Option<ActionCommand> {
                 target: Some(url),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             });
@@ -132,6 +133,7 @@ pub fn resolve_clause(clause: &str) -> Option<ActionCommand> {
                     target: Some(target_app.to_string()),
                     folder: None,
                     args: None,
+                    actions: None,
                     platform: Platform::Pc,
                     confidence: 0.95,
                 });

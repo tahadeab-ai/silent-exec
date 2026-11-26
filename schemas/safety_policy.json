@@ -22,7 +22,8 @@
     "done",
     "reply",
     "read_file",
-    "memory_save"
+    "memory_save",
+    "batch_actions"
   ],
   "tier_2_confirm": [
     "delete_file",

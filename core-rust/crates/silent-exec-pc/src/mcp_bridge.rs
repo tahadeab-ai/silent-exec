@@ -246,6 +246,7 @@ impl McpClient {
         let synthetic_cmd = ActionCommand {
             thought: None,
             action: ActionType::LaunchApp,
+            actions: None,
             target: Some(format!("{}:{}", self.config.name, tool_name)),
             folder: None,
             args: arguments.clone(),

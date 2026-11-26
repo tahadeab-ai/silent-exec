@@ -79,7 +79,10 @@ object PromptFormatter {
         userGoal: String,
         prunedUiTree: List<String>,
         stepHistory: List<String>,
-        memories: List<MemoryItem> = MemoryStore.getRelevantMemories(userGoal, limit = 4)
+        memories: List<MemoryItem> = MemoryStore.getRelevantMemories(userGoal, limit = 4),
+        toolSummary: String? = null,
+        planSummary: String? = null,
+        sessionNotes: String? = null
     ): String {
         val memorySection = if (memories.isNotEmpty()) {
             "User Preferences & Context:\n" + memories.joinToString("\n") { "- ${it.key}: ${it.content}" }
@@ -101,6 +104,9 @@ object PromptFormatter {
 
         val sections = listOf(
             "Goal: ${userGoal.trim()}",
+            toolSummary.orEmpty(),
+            planSummary.orEmpty(),
+            sessionNotes.orEmpty(),
             memorySection,
             historySection,
             screenSection,

@@ -123,6 +123,7 @@ impl FastRuleRouter {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Any,
                 confidence: 1.0,
             });
@@ -136,6 +137,7 @@ impl FastRuleRouter {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 1.0,
             });
@@ -146,6 +148,7 @@ impl FastRuleRouter {
             return Some(ActionCommand {
                 thought: None,
                 action: ActionType::UiScroll,
+                actions: None,
                 target: None,
                 folder: None,
                 args: Some(serde_json::json!({ "direction": direction })),
@@ -159,6 +162,7 @@ impl FastRuleRouter {
             return Some(ActionCommand {
                 thought: None,
                 action: ActionType::SetVolume,
+                actions: None,
                 target: None,
                 folder: None,
                 args: Some(serde_json::json!({ "level": level })),
@@ -175,6 +179,7 @@ impl FastRuleRouter {
                 target: Some(folder_target),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 1.0,
             });

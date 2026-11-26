@@ -26,7 +26,8 @@ object SafetyGate {
         ActionType.READ_FILE,
         ActionType.WEB_FETCH,
         ActionType.MEMORY_SAVE,
-        ActionType.COPY_TO_CLIPBOARD
+        ActionType.COPY_TO_CLIPBOARD,
+        ActionType.BATCH_ACTIONS
     )
 
     private val SHELL_METACHARACTERS = listOf("&&", "||", ";", "|", "$(", "`")
@@ -70,6 +71,26 @@ object SafetyGate {
         cmd.args?.let { args ->
             detectArgsBlockedPatterns(args)?.let { reason ->
                 return SafetyDecision.Block(reason)
+            }
+        }
+
+        // 4.5. Validate nested actions for batch_actions
+        cmd.actions?.let { subActions ->
+            if (subActions.size > 4) {
+                return SafetyDecision.Block(
+                    "batch_actions exceeds maximum of 4 sub-actions (found ${subActions.size})"
+                )
+            }
+            for ((idx, sub) in subActions.withIndex()) {
+                when (val subDecision = evaluate(sub)) {
+                    is SafetyDecision.Block -> return SafetyDecision.Block(
+                        "Batch sub-action ${idx + 1} blocked: ${subDecision.reason}"
+                    )
+                    is SafetyDecision.RequireConfirm -> return SafetyDecision.RequireConfirm(
+                        "Batch sub-action ${idx + 1} requires confirmation: ${subDecision.reason}"
+                    )
+                    is SafetyDecision.AllowSilent -> {}
+                }
             }
         }
 

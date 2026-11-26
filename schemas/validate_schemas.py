@@ -45,10 +45,11 @@ def main() -> int:
         f"Mismatch between schema actions ({schema_actions}) "
         f"and safety policy actions ({policy_actions})"
     )
-    assert len(schema_actions) == 25, f"Expected 25 actions (including 'done'), found {len(schema_actions)}"
+    assert len(schema_actions) == 26, f"Expected 26 actions (including 'done' and 'batch_actions'), found {len(schema_actions)}"
     assert "done" in tier1_actions, "'done' action must be Tier 1 Silent"
+    assert "batch_actions" in tier1_actions, "'batch_actions' action must be Tier 1 Silent"
     assert tier1_actions.isdisjoint(tier2_actions), "Overlap found between Tier 1 and Tier 2"
-    print("✓ All 25 actions (24 tools + done) verified and aligned across schema and policy.")
+    print("✓ All 26 actions (25 tools + done) verified and aligned across schema and policy.")
 
     # 3. Test valid payloads
     valid_payloads = [
@@ -138,6 +139,15 @@ def main() -> int:
             "args": {"key": "favorite_editor", "content": "VSCode", "category": "preference"},
             "platform": "any",
             "confidence": 0.96
+        },
+        {
+            "action": "batch_actions",
+            "actions": [
+                {"action": "ui_click", "target": "#0", "platform": "android", "confidence": 0.95},
+                {"action": "ui_type", "target": "nlp", "platform": "android", "confidence": 0.95}
+            ],
+            "platform": "android",
+            "confidence": 0.95
         },
         {
             "steps": [

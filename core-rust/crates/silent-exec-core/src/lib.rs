@@ -34,6 +34,7 @@ pub enum ActionType {
     ReadFile,
     WriteFile,
     MemorySave,
+    BatchActions,
 }
 
 impl ActionType {
@@ -59,7 +60,8 @@ impl ActionType {
             | Self::Done
             | Self::Reply
             | Self::ReadFile
-            | Self::MemorySave => SafetyTier::Tier1Silent,
+            | Self::MemorySave
+            | Self::BatchActions => SafetyTier::Tier1Silent,
 
             Self::DeleteFile
             | Self::MoveFile
@@ -121,6 +123,8 @@ pub struct ActionCommand {
     pub folder: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<ActionCommand>>,
     #[serde(default = "default_platform")]
     pub platform: Platform,
     #[serde(default = "default_confidence")]
@@ -149,12 +153,13 @@ impl ActionCommand {
             .as_object()
             .ok_or_else(|| "Expected JSON object for ActionCommand".to_string())?;
 
-        const KNOWN_KEYS: [&str; 7] = [
+        const KNOWN_KEYS: [&str; 8] = [
             "thought",
             "action",
             "target",
             "folder",
             "args",
+            "actions",
             "platform",
             "confidence",
         ];
@@ -365,6 +370,37 @@ impl SafetyGate {
         if let Some(args) = &cmd.args {
             if let Some(reason) = Self::detect_args_blocked_patterns(args) {
                 return SafetyDecision::Block { reason };
+            }
+        }
+
+        // 3.5. Validate nested `actions` for batch_actions
+        if let Some(actions) = &cmd.actions {
+            if actions.len() > 4 {
+                return SafetyDecision::Block {
+                    reason: format!(
+                        "batch_actions exceeds maximum of 4 sub-actions (found {})",
+                        actions.len()
+                    ),
+                };
+            }
+            for (idx, sub) in actions.iter().enumerate() {
+                match Self::evaluate(sub) {
+                    SafetyDecision::Block { reason } => {
+                        return SafetyDecision::Block {
+                            reason: format!("Batch sub-action {} blocked: {}", idx + 1, reason),
+                        };
+                    }
+                    SafetyDecision::RequireConfirm { reason } => {
+                        return SafetyDecision::RequireConfirm {
+                            reason: format!(
+                                "Batch sub-action {} requires confirmation: {}",
+                                idx + 1,
+                                reason
+                            ),
+                        };
+                    }
+                    SafetyDecision::AllowSilent => {}
+                }
             }
         }
 
@@ -607,6 +643,7 @@ mod tests {
             target: Some("../../secret.env".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -626,6 +663,7 @@ mod tests {
             target: Some("safe.txt".to_string()),
             folder: Some("../../../Windows".to_string()),
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -652,6 +690,7 @@ mod tests {
                 target: Some(path.to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.90,
             };
@@ -681,6 +720,7 @@ mod tests {
                 target: Some(path.to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Any,
                 confidence: 0.90,
             };
@@ -701,6 +741,7 @@ mod tests {
             target: Some("calc && notepad".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -720,6 +761,7 @@ mod tests {
             target: Some("echo test | sh".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -739,6 +781,7 @@ mod tests {
             target: Some("$(cat /etc/passwd)".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -759,6 +802,7 @@ mod tests {
                 target: Some(meta_payload.to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             };
@@ -779,6 +823,7 @@ mod tests {
             target: Some("notes.txt".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.99,
         };
@@ -795,6 +840,7 @@ mod tests {
             target: Some("file.txt".to_string()),
             folder: Some("archive".to_string()),
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.99,
         };
@@ -814,6 +860,7 @@ mod tests {
             target: Some("reboot".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.95,
         };
@@ -827,6 +874,7 @@ mod tests {
         let send_cmd = ActionCommand {
             thought: None,
             action: ActionType::SendMessage,
+            actions: None,
             target: Some("+123456789".to_string()),
             folder: None,
             args: Some(serde_json::json!({"text": "Hello"})),
@@ -846,6 +894,7 @@ mod tests {
             target: Some("wifi".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Android,
             confidence: 0.95,
         };
@@ -865,6 +914,7 @@ mod tests {
             target: Some("document.pdf".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.64, // Just below 0.65 threshold
         };
@@ -884,6 +934,7 @@ mod tests {
             target: Some("document.pdf".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 0.65, // Exactly threshold
         };
@@ -898,6 +949,7 @@ mod tests {
             target: Some("document.pdf".to_string()),
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Pc,
             confidence: 1.5,
         };
@@ -1007,6 +1059,7 @@ mod tests {
             let cmd = ActionCommand {
                 thought: None,
                 action: ActionType::UiType,
+                actions: None,
                 target: Some(target.to_string()),
                 folder: None,
                 args: Some(serde_json::json!({"text": "sample"})),
@@ -1051,6 +1104,7 @@ mod tests {
                 target: Some("search_input".to_string()),
                 folder: None,
                 args: Some(args.clone()),
+                actions: None,
                 platform: Platform::Android,
                 confidence: 0.95,
             };
@@ -1082,12 +1136,14 @@ mod tests {
                 target: Some("search_bar".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
             ActionCommand {
                 thought: None,
                 action: ActionType::UiType,
+                actions: None,
                 target: Some("search_bar".to_string()),
                 folder: None,
                 args: Some(serde_json::json!({"text": "hello world"})),
@@ -1097,6 +1153,7 @@ mod tests {
             ActionCommand {
                 thought: None,
                 action: ActionType::UiScroll,
+                actions: None,
                 target: None,
                 folder: None,
                 args: Some(serde_json::json!({"direction": "down"})),
@@ -1124,12 +1181,14 @@ mod tests {
                 target: Some("button_login".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
             ActionCommand {
                 thought: None,
                 action: ActionType::UiType,
+                actions: None,
                 target: Some("password_field".to_string()),
                 folder: None,
                 args: Some(serde_json::json!({"text": "pass && rm -rf /"})),
@@ -1142,6 +1201,7 @@ mod tests {
                 target: Some("button_submit".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
@@ -1172,6 +1232,7 @@ mod tests {
                 target: Some("open_dialog".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.95,
             },
@@ -1181,6 +1242,7 @@ mod tests {
                 target: Some("obsolete_cache.tmp".to_string()),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 0.99,
             },
@@ -1190,6 +1252,7 @@ mod tests {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Android,
                 confidence: 0.90,
             },
@@ -1219,6 +1282,7 @@ mod tests {
             target: None,
             folder: None,
             args: None,
+            actions: None,
             platform: Platform::Any,
             confidence: 1.0,
         };
@@ -1245,6 +1309,7 @@ mod tests {
                 target: None,
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Any,
                 confidence: 0.9,
             })

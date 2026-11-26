@@ -295,6 +295,7 @@ impl BuiltInSkills {
                 target: Some(url),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 1.0,
             }]);
@@ -332,6 +333,7 @@ impl BuiltInSkills {
                 target: Some(url),
                 folder: None,
                 args: None,
+                actions: None,
                 platform: Platform::Pc,
                 confidence: 1.0,
             }]);
