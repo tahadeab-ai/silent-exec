@@ -1,4 +1,4 @@
-/* SilentExec Desktop v3.2.0 — Pure Tauri v2 Vanilla UI */
+/* SilentExec Desktop v4.0.0 — Pure Tauri v2 Vanilla UI */
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -85,7 +85,7 @@ const I18N = {
     bridge_start: "تشغيل الجسر",
     bridge_stop: "إيقاف الجسر",
     updater_title: "التحديث التلقائي",
-    updater_ready: "الإصدار الحالي: v3.2.0",
+    updater_ready: "الإصدار الحالي: v4.0.0",
     check_update: "التحقق من التحديثات",
     install_update: "تنزيل وتثبيت التحديث",
     up_to_date: "أنت تستخدم أحدث إصدار.",
@@ -174,7 +174,7 @@ const I18N = {
     bridge_start: "Start Bridge",
     bridge_stop: "Stop Bridge",
     updater_title: "Auto-Updater",
-    updater_ready: "Current version: v3.2.0",
+    updater_ready: "Current version: v4.0.0",
     check_update: "Check for Updates",
     install_update: "Download & Install Update",
     up_to_date: "You are on the latest version.",

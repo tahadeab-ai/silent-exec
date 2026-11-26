@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.4.0-android)'
+        description: 'Release Tag (e.g. v4.0.0-android)'
         required: true
-        default: 'v0.4.0-android'
+        default: 'v4.0.0-android'
 
 jobs:
   build-and-release-android:
@@ -117,21 +117,15 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "SilentExec Android Agent ${{ env.RELEASE_TAG }}"
           body: |
-            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) v0.4.0.
+            Automated production build for SilentExec Android Agent (`silent-exec-android-arm64.apk`) ${{ env.RELEASE_TAG }}.
 
             - **Platform**: Android (`arm64-v8a`)
-            - **Observe-Think-Act Closed Loop**: Full multi-step screen-aware agent loop (max 6 steps) with GBNF grammar constrained generation
-            - **GUI Agent**: Full multi-step GUI Automation via AccessibilityService (`ui_click`, `ui_type`, `ui_scroll`, `ui_back`, `ui_home`)
-            - **Interactive Mode**: Explicit step confirmation card (`[Run | Skip | Stop]`) for every resolved step
-            - **Dry-Run Mode**: Full NLP & SafetyGate evaluation without executing OS mutations
-            - **Live Floating Status Pill**: Compact interactive overlay showing live execution stage with 1-tap instant stop (`⏹`)
-            - **Fast Rule Router**: Deterministic <15ms Arabic (Yemeni + MSA) & English pattern matcher with compound-command guard
-            - **Material 3 Day/Night Theme**: Seamless Dark and Light theme with custom geometric launcher icon
-            - **KV-Cache Prompt Caching**: Static ChatML prefix KV-cache reuse in `libllama_jni.so` for accelerated repeat on-device execution
-            - **Dynamic Model Hub & Self-Updater**: In-app download, activation, and management of GGUF models and APK updates
-            - **Quick Settings Tile**: 1-tap voice & text execution from any screen
-            - **Bilingual Material 3 UI**: Instant Arabic RTL / English LTR locale switching
-            - **Safety Gate**: Deterministic 3-Tier safety policy with multi-step plan evaluation
+            - **Deterministic State-Machine Agent**: `CompoundIntentGuard` + `PlanManager` + 30+ Native Android Intent Executors (`open_app`, `youtube_search`, `web_search`, `dial_number`, `set_alarm`, `copy_clipboard`, `share_text`)
+            - **Mobilerun-Style Observation & Batch Execution**: Compact `phone_state + a11y_tree [0..N]` representation + `batch_actions` + `StateHashReflector` + `Notetaker`
+            - **Edge-Docked HUD**: WindowInsets-aware draggable HUD (`TYPE_ACCESSIBILITY_OVERLAY`) hidden when SilentExec is foregrounded, auto-fading during gestures/screenshots
+            - **On-Device llama.cpp v1.1.0**: Top-k/Top-p/Min-penalty sampler, `<think>` token budget guard, Q8_0 KV-cache prefix reuse, `Qwen3.5-2B-Q4_K_M` & `LFM3-VL-2B` presets
+            - **LAN Bridge (JSON-RPC 2.0)**: Authenticated WebSocket bridge (`device.get_state`, `device.execute_batch` with `capture_id`, `planner.offload_step`) + Clean-Room PII Privacy Mode
+            - **Safety Gate**: Deterministic 3-Tier safety policy with multi-step plan evaluation & human-in-the-loop takeover UX
             - **Target SDK**: 35 (Android 15), Min SDK 26 (Android 8.0)
 
             ### Installation

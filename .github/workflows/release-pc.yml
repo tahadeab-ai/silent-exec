@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.4.0-pc)'
+        description: 'Release Tag (e.g. v4.0.0-pc)'
         required: true
-        default: 'v0.4.0-pc'
+        default: 'v4.0.0-pc'
 
 env:
   CARGO_TERM_COLOR: always
@@ -68,13 +68,15 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "SilentExec PC Agent ${{ env.RELEASE_TAG }}"
           body: |
-            Automated production build for SilentExec PC Agent and Desktop GUI.
-            
+            Automated production build for SilentExec PC Agent and Desktop GUI (`${{ env.RELEASE_TAG }}`).
+
             - **Platform**: Windows x86_64
-            - **Desktop GUI**: `SilentExec-Desktop-x64.exe` (Tauri v2, Zero Node.js / Zero npm)
+            - **Desktop GUI**: `SilentExec-Desktop-x64.exe` (Tauri v2, RTL Split-Pane Workspace, Live Inspector, Takeover Banner)
             - **CLI / Bar**: `silent-exec-pc.exe`
+            - **Silent Execution**: `cua-driver` (MIT) background window targeting + `capture_id` staleness guard + Agent-S3 code-first DPI scaling
+            - **Vision Fallback**: Microsoft OmniParser (`icon_detect_v3`) element grounding
+            - **LAN Bridge**: Authenticated WebSocket JSON-RPC 2.0 (`8081`) + HTTP health (`8080`) with 6-digit pairing token & PII Privacy Mode
             - **Safety Gate**: Deterministic 3-Tier validation with `--dry-run` and confirmation gates
-            - **NLP / Indexer**: Sub-15ms Arabic & English Unicode fuzzy file indexer
           files: |
             release_assets/silent-exec-pc.exe
             release_assets/SilentExec-Desktop-x64.exe
