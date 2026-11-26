@@ -177,4 +177,15 @@ class StateMachineAgentTest {
         assertEquals("", stripped.cleanContent)
         assertEquals("unclosed trace without end", stripped.reasoningTrace)
     }
+
+    @Test
+    fun test06_piiRedactorMasksSensitiveTokens() {
+        val raw = "Card 4111-1111-1111-1111 email user@example.com phone +967777123456 otp 482910"
+        val masked = com.silentexec.android.nlp.PiiRedactor.redact(raw, enabled = true)
+        assertTrue(masked.contains("[REDACTED_CARD_1]"))
+        assertTrue(masked.contains("[REDACTED_EMAIL_1]"))
+        assertTrue(masked.contains("[REDACTED_PHONE_1]"))
+        assertTrue(masked.contains("[REDACTED_OTP_1]"))
+        assertEquals(raw, com.silentexec.android.nlp.PiiRedactor.redact(raw, enabled = false))
+    }
 }

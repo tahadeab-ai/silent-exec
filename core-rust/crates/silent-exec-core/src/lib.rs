@@ -340,6 +340,10 @@ impl SafetyGate {
         "/usr/sbin",
     ];
 
+    /// Bounded capability manifest: blocked high-risk MCP/OS verbs.
+    const BOUNDED_BLOCKED_VERBS: &'static [&'static str] =
+        &["format_disk", "rm_rf", "registry_wipe", "wipe_device"];
+
     /// Evaluates an `ActionCommand` and renders a deterministic `SafetyDecision`.
     #[must_use]
     pub fn evaluate(cmd: &ActionCommand) -> SafetyDecision {
@@ -479,6 +483,16 @@ impl SafetyGate {
             if value.contains(meta) {
                 return Some(format!(
                     "Shell injection metacharacter '{meta}' detected in {field_name}: '{value}'"
+                ));
+            }
+        }
+
+        // Bounded capability manifest verb check
+        let lower_val = value.to_ascii_lowercase();
+        for &verb in Self::BOUNDED_BLOCKED_VERBS {
+            if lower_val.contains(verb) {
+                return Some(format!(
+                    "Bounded capability policy blocked high-risk verb '{verb}' in {field_name}: '{value}'"
                 ));
             }
         }

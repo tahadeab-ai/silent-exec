@@ -529,6 +529,8 @@ fn main() -> ExitCode {
                 dry_run,
                 server_url,
                 roots,
+                ws_port: 8081,
+                ..Default::default()
             };
 
             println!(

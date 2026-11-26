@@ -3,6 +3,24 @@
   "name": "SilentExecSafetyPolicy",
   "version": "1.0.0",
   "confidence_threshold": 0.65,
+  "bounded_capabilities": {
+    "mode": "bounded",
+    "require_approval_for": [
+      "delete_file",
+      "move_file",
+      "system_power",
+      "toggle_setting",
+      "send_message",
+      "write_file",
+      "mcp_high_risk"
+    ],
+    "blocked_mcp_verbs": [
+      "format",
+      "rm_rf",
+      "shutdown",
+      "registry_wipe"
+    ]
+  },
   "tier_1_silent": [
     "open_folder",
     "open_file",

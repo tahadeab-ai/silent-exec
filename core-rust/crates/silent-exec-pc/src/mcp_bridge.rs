@@ -89,6 +89,56 @@ pub fn build_mcp_command(config: &McpServerConfig) -> std::process::Command {
     cmd
 }
 
+/// Auto-detects `cua-driver` (MIT) binary in `SILENT_EXEC_BIN_DIR`, app resources, or `PATH`.
+/// Returns `Some(McpServerConfig)` to run `cua-driver mcp` over stdio for background silent execution
+/// without stealing cursor focus, or `None` to fall back cleanly to native Win32/Linux execution.
+#[must_use]
+pub fn find_cua_driver_binary() -> Option<std::path::PathBuf> {
+    let candidates = if cfg!(windows) {
+        ["cua-driver.exe", "cua-driver"]
+    } else {
+        ["cua-driver", "cua-driver"]
+    };
+
+    if let Ok(bin_dir) = std::env::var("SILENT_EXEC_BIN_DIR") {
+        let base = std::path::PathBuf::from(bin_dir);
+        for name in candidates {
+            let p = base.join(name);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+
+    let locator = if cfg!(windows) { "where.exe" } else { "which" };
+    if let Ok(out) = hidden_command(locator).arg("cua-driver").output() {
+        if out.status.success() {
+            let first = String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !first.is_empty() {
+                return Some(std::path::PathBuf::from(first));
+            }
+        }
+    }
+    None
+}
+
+/// Returns an `McpServerConfig` for `cua-driver mcp` if the binary is installed.
+#[must_use]
+pub fn cua_driver_mcp_config() -> Option<McpServerConfig> {
+    let bin = find_cua_driver_binary()?;
+    Some(McpServerConfig {
+        name: "cua-driver".to_string(),
+        command: bin.to_string_lossy().to_string(),
+        args: vec!["mcp".to_string()],
+        enabled: true,
+    })
+}
+
 /// Client session for an external MCP server running over stdio.
 pub struct McpClient {
     pub config: McpServerConfig,

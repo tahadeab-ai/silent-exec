@@ -990,6 +990,8 @@ async fn toggle_lan_bridge(
             dry_run: false,
             server_url: None,
             roots: vec![PathBuf::from(".")],
+            ws_port: 8081,
+            ..Default::default()
         };
         let shutdown = Arc::new(AtomicBool::new(false));
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone()))?;

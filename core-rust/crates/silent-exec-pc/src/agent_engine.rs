@@ -684,3 +684,74 @@ fn sanitize_ident(s: &str) -> String {
         })
         .collect()
 }
+
+/// Agent-S3 Code/Shell-First Policy:
+/// Routes file, system, clipboard, web-fetch, and data tasks to direct MCP / CLI / PowerShell / Python tools
+/// BEFORE falling back to GUI clicks.
+#[must_use]
+pub fn classify_code_first_route(goal: &str) -> Option<&'static str> {
+    let lower = goal.to_lowercase();
+    if lower.contains("read_file")
+        || lower.contains("write_file")
+        || lower.contains("csv")
+        || lower.contains("json")
+        || lower.contains("ملف")
+        || lower.contains("مجلد")
+        || lower.contains("file")
+        || lower.contains("folder")
+    {
+        return Some("mcp_filesystem_or_cli");
+    }
+    if lower.contains("http://")
+        || lower.contains("https://")
+        || lower.contains("fetch")
+        || lower.contains("web")
+        || lower.contains("ابحث في الويب")
+    {
+        return Some("builtin_web_fetch");
+    }
+    if lower.contains("clipboard") || lower.contains("الحافظة") || lower.contains("انسخ")
+    {
+        return Some("native_clipboard");
+    }
+    if lower.contains("powershell") || lower.contains("python") || lower.contains("script") {
+        return Some("direct_shell_or_python");
+    }
+    None
+}
+
+/// DPI-aware coordinate normalization (`1000x1000` relative coordinates -> physical display DPI).
+pub struct DpiScaler;
+
+impl DpiScaler {
+    #[must_use]
+    pub fn normalize_1000_to_physical(
+        rel_x: f64,
+        rel_y: f64,
+        screen_w: u32,
+        screen_h: u32,
+        dpi_scale: f64,
+    ) -> (i32, i32) {
+        let rx = rel_x.clamp(0.0, 1000.0) / 1000.0;
+        let ry = rel_y.clamp(0.0, 1000.0) / 1000.0;
+        let scale = if dpi_scale > 0.0 { dpi_scale } else { 1.0 };
+        let px = (rx * f64::from(screen_w.max(1)) * scale).round() as i32;
+        let py = (ry * f64::from(screen_h.max(1)) * scale).round() as i32;
+        (px, py)
+    }
+}
+
+/// Caps screenshot payloads at `max_bytes` (e.g. `1_048_576` = 1 MB) before sending to VLMs.
+pub fn cap_screenshot_bytes(raw_bytes: &[u8], max_bytes: usize) -> Result<Vec<u8>, String> {
+    if raw_bytes.is_empty() {
+        return Err("Screenshot buffer is empty".to_string());
+    }
+    if raw_bytes.len() <= max_bytes {
+        return Ok(raw_bytes.to_vec());
+    }
+    Err(format!(
+        "Screenshot size {} bytes exceeds maximum {} byte VLM cap; recompress JPEG/PNG before upload",
+        raw_bytes.len(),
+        max_bytes
+    ))
+}

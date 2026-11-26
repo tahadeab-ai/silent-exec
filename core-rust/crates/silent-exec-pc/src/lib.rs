@@ -11,6 +11,8 @@ pub mod inference;
 pub mod mcp_bridge;
 pub mod memory;
 pub mod model_manager;
+pub mod omniparser;
+pub mod pii_redactor;
 pub mod planner;
 pub mod process_helper;
 pub mod runtime_manager;
@@ -22,7 +24,10 @@ pub use agent_engine::{
     AgentTurnDecision, GooseAcpRunner, GooseStatus, ToolCallingAgent, ToolLoopStep,
 };
 pub use agent_loop::PcAgentLoop;
-pub use bridge::{start_bridge_server, BridgeConfig, ExecuteRequest};
+pub use bridge::{
+    generate_pairing_code, handle_json_rpc_message, start_bridge_server, BridgeConfig,
+    BridgeSessionState, CaptureGuard, ExecuteRequest,
+};
 pub use config::{AppConfig, McpServerConfig};
 pub use executor::{action_type_to_str, ExecutionResult, PcExecutor};
 pub use fast_router::FastRuleRouter;
@@ -635,6 +640,8 @@ mod tests {
             dry_run: true,
             server_url: None,
             roots: vec![],
+            ws_port: 0,
+            ..Default::default()
         };
 
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
@@ -661,6 +668,8 @@ mod tests {
             dry_run: true,
             server_url: None,
             roots: vec![],
+            ws_port: 0,
+            ..Default::default()
         };
 
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
@@ -686,6 +695,8 @@ mod tests {
             dry_run: true,
             server_url: None,
             roots: vec![],
+            ws_port: 0,
+            ..Default::default()
         };
 
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
@@ -721,6 +732,8 @@ mod tests {
             dry_run: true,
             server_url: None,
             roots: vec![guard.path.clone()],
+            ws_port: 0,
+            ..Default::default()
         };
 
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
@@ -774,6 +787,8 @@ mod tests {
             dry_run: true,
             server_url: None,
             roots: vec![],
+            ws_port: 0,
+            ..Default::default()
         };
 
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
@@ -823,6 +838,8 @@ mod tests {
             dry_run: true,
             server_url: None,
             roots: vec![],
+            ws_port: 0,
+            ..Default::default()
         };
 
         let (addr, handle) = start_bridge_server(config, Some(shutdown.clone())).unwrap();
@@ -2275,5 +2292,107 @@ mod tests {
             SafetyGate::evaluate(&too_many),
             SafetyDecision::Block { .. }
         ));
+    }
+
+    #[test]
+    fn test_81_v4_p4_capture_guard_and_jsonrpc_bridge() {
+        use crate::bridge::{
+            compute_ws_accept, generate_pairing_code, handle_json_rpc_message, BridgeSessionState,
+            CaptureGuard,
+        };
+        use std::sync::{Arc, Mutex};
+
+        let mut guard = CaptureGuard::new();
+        let c1 = guard.issue_capture_id();
+        let c2 = guard.issue_capture_id();
+        assert!(guard.validate_and_consume(c1).is_err()); // stale c1 rejected
+        assert!(guard.validate_and_consume(c2).is_ok()); // latest c2 succeeds
+        assert!(guard.validate_and_consume(c2).is_err()); // one-use consumed
+
+        let code = generate_pairing_code();
+        assert_eq!(code.len(), 6);
+        assert!(code.chars().all(|c| c.is_ascii_digit()));
+
+        // RFC 6455 known test vector
+        assert_eq!(
+            compute_ws_accept("dGhlIHNhbXBsZSBub25jZQ=="),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+        );
+
+        let indexer = FileIndexer::new(vec![]);
+        let exec = PcExecutor::new(indexer, true);
+        let session = Arc::new(Mutex::new(BridgeSessionState::new(true)));
+        session.lock().unwrap().last_a11y_tree =
+            vec!["[0] input: alice@example.com OTP 482910".to_string()];
+
+        let get_state_req = r#"{"jsonrpc":"2.0","id":1,"method":"device.get_state","params":{}}"#;
+        let state_resp: serde_json::Value =
+            serde_json::from_str(&handle_json_rpc_message(get_state_req, &session, &exec)).unwrap();
+        let cap_id = state_resp["result"]["capture_id"].as_u64().unwrap();
+        let tree_item = state_resp["result"]["a11y_tree"][0].as_str().unwrap();
+        assert!(tree_item.contains("[REDACTED_EMAIL_1]"));
+        assert!(tree_item.contains("[REDACTED_OTP_1]"));
+
+        // Stale capture_id must return STALE_CAPTURE_ID
+        let stale_req = format!(
+            r#"{{"jsonrpc":"2.0","id":2,"method":"device.execute_batch","params":{{"capture_id":{},"command":{{"action":"ui_back","platform":"pc","confidence":0.95}}}}}}"#,
+            cap_id + 99
+        );
+        let stale_resp: serde_json::Value =
+            serde_json::from_str(&handle_json_rpc_message(&stale_req, &session, &exec)).unwrap();
+        assert_eq!(stale_resp["error"]["data"]["code"], "STALE_CAPTURE_ID");
+
+        // Valid capture_id executes cleanly
+        let ok_req = format!(
+            r#"{{"jsonrpc":"2.0","id":3,"method":"device.execute_batch","params":{{"capture_id":{},"command":{{"action":"ui_back","platform":"pc","confidence":0.95}}}}}}"#,
+            cap_id
+        );
+        let ok_resp: serde_json::Value =
+            serde_json::from_str(&handle_json_rpc_message(&ok_req, &session, &exec)).unwrap();
+        assert!(ok_resp.get("result").is_some());
+    }
+
+    #[test]
+    fn test_82_v4_p4_pii_redactor_dpi_scaler_and_omniparser() {
+        use crate::agent_engine::{cap_screenshot_bytes, classify_code_first_route, DpiScaler};
+        use crate::omniparser::OmniParserClient;
+        use crate::pii_redactor::PiiRedactor;
+
+        let redactor = PiiRedactor::new(true);
+        let raw = "Card 4111-1111-1111-1111, email bob@test.org, phone +967 777123456, code 482910";
+        let masked = redactor.redact(raw);
+        assert!(masked.contains("[REDACTED_CARD_1]"));
+        assert!(masked.contains("[REDACTED_EMAIL_1]"));
+        assert!(masked.contains("[REDACTED_PHONE_1]"));
+        assert!(masked.contains("[REDACTED_OTP_1]"));
+
+        assert_eq!(
+            classify_code_first_route("read_file notes.md"),
+            Some("mcp_filesystem_or_cli")
+        );
+        assert_eq!(
+            DpiScaler::normalize_1000_to_physical(500.0, 500.0, 1920, 1080, 1.5),
+            (1440, 810)
+        );
+        assert!(cap_screenshot_bytes(&vec![0u8; 2_000_000], 1_048_576).is_err());
+        assert!(cap_screenshot_bytes(&vec![1u8; 1024], 1_048_576).is_ok());
+
+        assert!(OmniParserClient::should_fallback(
+            "http://127.0.0.1:8000",
+            2
+        ));
+        assert!(!OmniParserClient::should_fallback("", 1));
+
+        let omni_json = r#"{
+            "parsed_content_list": [
+                {"bbox": [0.1, 0.2, 0.3, 0.4], "content": "Search Icon", "interactivity": true},
+                {"bbox": [0.5, 0.5, 0.7, 0.7], "content": "Play", "interactivity": true}
+            ]
+        }"#;
+        let parsed = OmniParserClient::parse_response(omni_json, 1000, 2000).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].center_x, 200);
+        assert_eq!(parsed[0].center_y, 600);
+        assert_eq!(parsed[0].label, "Search Icon");
     }
 }
