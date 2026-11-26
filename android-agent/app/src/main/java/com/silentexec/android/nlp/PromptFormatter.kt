@@ -204,14 +204,18 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
      * `"platform"` twice in the same object), preserving the last occurrence.
      */
     fun sanitizeDuplicateJsonKeys(jsonStr: String): String {
-        val len = jsonStr.length
-        var pos = 0
+        return runCatching { JsonKeyDeduplicator(jsonStr).sanitizeValue() }.getOrElse { jsonStr }
+    }
 
-        fun skipWs() {
+    private class JsonKeyDeduplicator(private val jsonStr: String) {
+        private val len = jsonStr.length
+        private var pos = 0
+
+        private fun skipWs() {
             while (pos < len && jsonStr[pos].isWhitespace()) pos++
         }
 
-        fun readString(): String {
+        private fun readString(): String {
             val start = pos
             pos++ // opening quote
             while (pos < len) {
@@ -228,7 +232,7 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
             return jsonStr.substring(start)
         }
 
-        fun unescapeJsonKey(quoted: String): String {
+        private fun unescapeJsonKey(quoted: String): String {
             if (quoted.length < 2) return quoted
             return quoted.substring(1, quoted.length - 1)
         }
@@ -250,7 +254,7 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
             }
         }
 
-        fun sanitizeObject(): String {
+        private fun sanitizeObject(): String {
             pos++ // '{'
             skipWs()
             if (pos < len && jsonStr[pos] == '}') {
@@ -265,7 +269,6 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
                     break
                 }
                 if (jsonStr[pos] != '"') {
-                    // Fallback: return original if not a standard object
                     return jsonStr
                 }
                 val rawKey = readString()
@@ -287,7 +290,7 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
             }
         }
 
-        fun sanitizeArray(): String {
+        private fun sanitizeArray(): String {
             pos++ // '['
             skipWs()
             if (pos < len && jsonStr[pos] == ']') {
@@ -312,8 +315,6 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
             }
             return items.joinToString(prefix = "[", postfix = "]", separator = ",")
         }
-
-        return runCatching { sanitizeValue() }.getOrElse { jsonStr }
     }
 
     /**
