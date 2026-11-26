@@ -226,4 +226,13 @@ class AccessibilityAgentEngineTest {
             tempFilesDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun test06_oneTapProviderPresetsAndAutoEnabledToolbelt() {
+        val ids = ProviderCatalog.PRESETS.map { it.id }
+        assertTrue(ids.containsAll(listOf("GEMINI", "GROQ", "OPENROUTER", "OLLAMA", "LOCAL_GGUF")))
+        assertTrue(ProviderCatalog.AUTO_ENABLED_TOOLBELT.any { it.id == "web_fetch" })
+        assertTrue(ProviderCatalog.AUTO_ENABLED_TOOLBELT.any { it.id == "memory" })
+        assertTrue(ProviderCatalog.AUTO_ENABLED_TOOLBELT.any { it.id == "reply" })
+    }
 }

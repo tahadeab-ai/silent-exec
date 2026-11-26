@@ -193,4 +193,8 @@
     <string name="thinking_show">💭 Thinking</string>
     <string name="thinking_hide">💭 Hide Thinking</string>
     <string name="recommended_badge">⭐ Recommended</string>
+
+    <!-- v3.1.0: Auto-Enabled Agent Toolbelt -->
+    <string name="toolbelt_title">Auto-Enabled Agent Toolbelt</string>
+    <string name="toolbelt_desc">All built-in capabilities are active automatically for multi-step reasoning and problem solving.</string>
 </resources>

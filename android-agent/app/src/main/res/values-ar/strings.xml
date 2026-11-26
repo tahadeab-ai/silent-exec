@@ -193,4 +193,8 @@
     <string name="thinking_show">💭 التفكير</string>
     <string name="thinking_hide">💭 إخفاء التفكير</string>
     <string name="recommended_badge">⭐ موصى به</string>
+
+    <!-- v3.1.0: Auto-Enabled Agent Toolbelt -->
+    <string name="toolbelt_title">أدوات الوكيل المفعّلة تلقائياً</string>
+    <string name="toolbelt_desc">جميع الأدوات المدمجة نشطة تلقائياً لحل المشكلات والتفكير متعدد الخطوات.</string>
 </resources>

@@ -124,7 +124,7 @@ fun ModelsProvidersScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        ProviderCatalog.PRESETS.filter { it.id != "LOCAL_GGUF" }.forEach { preset ->
+                        ProviderCatalog.PRESETS.forEach { preset ->
                             FilterChip(
                                 selected = state.selectedPresetId == preset.id,
                                 onClick = { onSelectPreset(preset) },
@@ -135,7 +135,34 @@ fun ModelsProvidersScreen(
                         }
                     }
 
-                    if (selectedPreset != null && selectedPreset.id != "LOCAL_GGUF") {
+                    if (selectedPreset != null && selectedPreset.id == "LOCAL_GGUF") {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = if (ar) selectedPreset.badgeAr else selectedPreset.badgeEn,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        val downloadedModel = state.models.firstOrNull { it.isDownloaded }
+                        if (downloadedModel != null && !downloadedModel.isActive) {
+                            Button(onClick = { onActivateModel(downloadedModel) }) {
+                                Text(
+                                    if (ar) "تفعيل ${downloadedModel.release.displayName}"
+                                    else "Activate ${downloadedModel.release.displayName}"
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = if (ar) {
+                                    "اختر نموذج LFM3-1.7B أو Qwen3-1.7B بالأسفل للتحميل والتشغيل المحلي."
+                                } else {
+                                    "Download and activate LFM3-1.7B or Qwen3-1.7B below for 100% offline inference."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (selectedPreset != null && selectedPreset.id != "LOCAL_GGUF") {
                         Spacer(Modifier.height(10.dp))
                         Text(
                             text = if (ar) selectedPreset.badgeAr else selectedPreset.badgeEn,

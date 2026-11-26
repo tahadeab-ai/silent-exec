@@ -22,7 +22,24 @@ data class ProviderPreset(
     val badgeAr: String
 )
 
+data class AgentToolDescriptor(
+    val id: String,
+    val titleEn: String,
+    val titleAr: String
+)
+
 object ProviderCatalog {
+    val AUTO_ENABLED_TOOLBELT: List<AgentToolDescriptor> = listOf(
+        AgentToolDescriptor("screen", "Screen & UI Control", "التحكم بالشاشة واللمس"),
+        AgentToolDescriptor("apps", "App & URL Launch", "فتح التطبيقات والروابط"),
+        AgentToolDescriptor("web_fetch", "Web Search & Fetch", "البحث وجلب الويب"),
+        AgentToolDescriptor("clipboard", "Clipboard Read/Write", "الحافظة"),
+        AgentToolDescriptor("files", "Notes & Files", "الملاحظات والملفات"),
+        AgentToolDescriptor("memory", "Persistent Memory", "الذاكرة الدائمة"),
+        AgentToolDescriptor("device", "Volume & Settings", "الصوت والإعدادات"),
+        AgentToolDescriptor("reply", "Markdown & Code Reply", "إجابات وأكواد مفصلة")
+    )
+
     val PRESETS: List<ProviderPreset> = listOf(
         ProviderPreset(
             id = "GEMINI",
