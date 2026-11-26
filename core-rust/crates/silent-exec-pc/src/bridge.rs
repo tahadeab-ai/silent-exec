@@ -660,7 +660,7 @@ fn sha1_digest(data: &[u8]) -> [u8; 20] {
     let mut h3: u32 = 0x1032_5476;
     let mut h4: u32 = 0xC3D2_E1F0;
 
-    for chunk in msg.chunks_exact(64) {
+    for chunk in msg.as_chunks::<64>().0 {
         let mut w = [0u32; 80];
         for i in 0..16 {
             w[i] = u32::from_be_bytes([
@@ -711,7 +711,7 @@ fn sha1_digest(data: &[u8]) -> [u8; 20] {
 
 fn base64_encode(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(((input.len() + 2) / 3) * 4);
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };

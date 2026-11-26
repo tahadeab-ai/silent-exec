@@ -114,15 +114,14 @@ fn redact_cards(input: &str) -> String {
 
 fn redact_phones(input: &str) -> String {
     redact_digit_sequences(input, |digits, raw| {
-        if raw.starts_with('+') && (8..=15).contains(&digits.len()) {
-            Some("PHONE")
-        } else if (9..=12).contains(&digits.len())
+        let is_intl = raw.starts_with('+') && (8..=15).contains(&digits.len());
+        let is_local = (9..=12).contains(&digits.len())
             && (raw.contains('-')
                 || raw.contains(' ')
                 || digits.starts_with("05")
                 || digits.starts_with("77")
-                || digits.starts_with("73"))
-        {
+                || digits.starts_with("73"));
+        if is_intl || is_local {
             Some("PHONE")
         } else {
             None
