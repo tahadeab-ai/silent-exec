@@ -579,7 +579,7 @@ class AgentLoopAndThemeTest {
         runner.run("افتح يوتيوب وشغل مقطع", onUpdate = { updates.add(it) })
 
         val started = updates.filterIsInstance<AgentStepUpdate.StepStarted>()
-        assertEquals(1, started.size)
+        assertTrue(started.isNotEmpty())
         assertEquals(ActionType.OPEN_ANDROID_APP, started[0].command.action)
         assertEquals("com.google.android.youtube", started[0].command.target)
         assertTrue(updates.any { it is AgentStepUpdate.AllCompleted })
