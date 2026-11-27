@@ -89,9 +89,6 @@ dependencies {
 
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
-    implementation(platform("io.github.junelegency:ai-elements-bom:0.3.0"))
-    implementation("io.github.junelegency:ai-elements-ui")
-    implementation("io.github.junelegency:ai-elements-core")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
