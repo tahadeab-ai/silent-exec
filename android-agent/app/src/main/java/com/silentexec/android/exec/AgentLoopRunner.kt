@@ -344,7 +344,7 @@ class AgentLoopRunner(
                             AgentStepUpdate.StepFailed(
                                 currentStepIndex,
                                 maxSteps,
-                                "تم إيقاف التكرار التلقائي للخطوة (${cmd.action.wireName}). يُنصح باستخدام Qwen3.5-2B أو Cloud API للمهام متعددة الخطوات."
+                                "تم إيقاف التكرار التلقائي للخطوة (${cmd.action.wireName}). يُنصح باستخدام Qwen3.5-2B أو Qwen3-1.7B أو Cloud API للمهام متعددة الخطوات."
                             )
                         )
                         return
