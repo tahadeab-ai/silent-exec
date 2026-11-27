@@ -115,6 +115,10 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub disable_thinking: bool,
 
+    /// Safe Mode (ON by default): passes `--exclude-tools PowerShell,Registry` to Windows-MCP
+    #[serde(default = "default_true")]
+    pub safe_mode: bool,
+
     /// Optional OmniParser URL for visual GUI grounding
     #[serde(default)]
     pub omniparser_url: String,
@@ -153,6 +157,7 @@ impl Default for AppConfig {
             ollama_url: default_ollama_url(),
             ollama_model: default_ollama_model(),
             disable_thinking: true,
+            safe_mode: true,
             omniparser_url: String::new(),
             disabled_tools: Vec::new(),
             openai_api_base: default_openai_url(),

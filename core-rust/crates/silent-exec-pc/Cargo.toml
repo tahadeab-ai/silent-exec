@@ -11,6 +11,8 @@ silent-exec-core = { path = "../silent-exec-core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
+rmcp = { version = "0.16", features = ["client", "transport-child-process", "transport-io"] }
+tokio = { version = "1", features = ["full"] }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.61"

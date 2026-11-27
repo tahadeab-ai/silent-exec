@@ -296,8 +296,18 @@ impl AiBackend {
         user_query: &str,
         disable_thinking: bool,
     ) -> serde_json::Value {
+        Self::build_ollama_payload_with_tools(model, user_query, disable_thinking, &[])
+    }
+
+    /// Builds payload for Ollama `/api/chat` with native `tools` JSON schemas from `McpHub::list_tools()`.
+    pub fn build_ollama_payload_with_tools(
+        model: &str,
+        user_query: &str,
+        disable_thinking: bool,
+        tools: &[serde_json::Value],
+    ) -> serde_json::Value {
         let system_prompt = get_effective_system_prompt(user_query);
-        serde_json::json!({
+        let mut payload = serde_json::json!({
             "model": model,
             "messages": [
                 {
@@ -309,7 +319,6 @@ impl AiBackend {
                     "content": user_query
                 }
             ],
-            "format": "json",
             "stream": false,
             "think": !disable_thinking,
             "keep_alive": "30m",
@@ -319,7 +328,13 @@ impl AiBackend {
                 "top_p": 0.9,
                 "repeat_penalty": 1.12
             }
-        })
+        });
+        if tools.is_empty() {
+            payload["format"] = serde_json::json!("json");
+        } else {
+            payload["tools"] = serde_json::Value::Array(tools.to_vec());
+        }
+        payload
     }
 
     /// Calls Ollama `/api/chat` endpoint strictly (never `/api/generate` or `/v1/chat/completions` when toggling thinking).

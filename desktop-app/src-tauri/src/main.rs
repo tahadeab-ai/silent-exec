@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use silent_exec_core::{ActionCommand, ExecutionMode, SafetyDecision, SafetyGate};
 use silent_exec_pc::{
     action_type_to_str, hidden_command, start_bridge_server, AiBackend, AppConfig, BridgeConfig,
-    ExecutionResult, FastRuleRouter, FileIndexer, GooseAcpRunner, GooseStatus, McpClient,
-    McpServerConfig, McpTool, MemoryItem, ModelDownloadInfo, ModelManager, ModelReleaseInfo,
-    PcAgentLoop, PcExecutor, RuntimeManager, SelfUpdater, SetupResult,
+    ExecutionResult, FastRuleRouter, FileIndexer, GooseAcpRunner, GooseStatus, McpClient, McpHub,
+    McpHubServerEntry, McpHubTool, McpServerConfig, McpTool, MemoryItem, ModelDownloadInfo,
+    ModelManager, ModelReleaseInfo, PcAgentLoop, PcExecutor, RuntimeManager, SelfUpdater,
+    SetupResult,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -107,6 +108,8 @@ struct AppState {
     bridge_handle: Mutex<Option<BridgeInstance>>,
     pending_execution: Arc<Mutex<Option<(ActionCommand, ExecutionMode)>>>,
     download_cancellations: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    mcp_hub: Arc<McpHub>,
+    task_cancelled: Arc<AtomicBool>,
 }
 
 fn create_default_executor(dry_run: bool) -> PcExecutor {
@@ -1078,15 +1081,101 @@ async fn list_mcp_tools(server_name: String) -> Result<Vec<String>, String> {
     .map_err(|e| format!("Task execution failed: {}", e))?
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemHealthDto {
+    pub windows_mcp_cmd: String,
+    pub safe_mode: bool,
+    pub ollama_reachable: bool,
+    pub mcp_servers: Vec<McpHubServerEntry>,
+}
+
+#[tauri::command]
+async fn toggle_mcp_server(
+    state: State<'_, AppState>,
+    name: String,
+    enabled: bool,
+) -> Result<Vec<McpHubServerEntry>, String> {
+    let entries = state.mcp_hub.toggle_server(&name, enabled).await?;
+    if enabled {
+        let _ = state.mcp_hub.start_server(&name).await;
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn restart_mcp_server(state: State<'_, AppState>, name: String) -> Result<(), String> {
+    state.mcp_hub.restart_server(&name).await
+}
+
+#[tauri::command]
+async fn list_available_tools(state: State<'_, AppState>) -> Result<Vec<McpHubTool>, String> {
+    state.mcp_hub.ensure_enabled_servers_started().await;
+    Ok(state.mcp_hub.list_tools().await)
+}
+
+#[tauri::command]
+async fn run_agent_task(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<ExecutionReport, String> {
+    state.task_cancelled.store(false, Ordering::SeqCst);
+    let hub = state.mcp_hub.clone();
+    hub.ensure_enabled_servers_started().await;
+    let res = execute_query(app.clone(), state.clone(), query.clone()).await;
+    if let Err(ref err) = res {
+        if err.contains("USER_CONTROL") || err.contains("CONTROL_DENIED") {
+            let _ = app.emit("agent://human-takeover", err.clone());
+        }
+    }
+    res
+}
+
+#[tauri::command]
+async fn cancel_agent_task(state: State<'_, AppState>) -> Result<(), String> {
+    state.task_cancelled.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
+async fn approve_tool_call(
+    state: State<'_, AppState>,
+    approved: bool,
+) -> Result<ExecutionReport, String> {
+    confirm_step(state, approved).await
+}
+
+#[tauri::command]
+async fn check_system_health(state: State<'_, AppState>) -> Result<SystemHealthDto, String> {
+    let cfg = AppConfig::load();
+    let (win_cmd, _) = McpHub::detect_windows_mcp_command();
+    let entries = state.mcp_hub.list_entries().await;
+    let ollama_ok = silent_exec_pc::check_health_http(&format!(
+        "{}/api/tags",
+        cfg.ollama_url.trim_end_matches('/')
+    ))
+    .is_ok();
+    Ok(SystemHealthDto {
+        windows_mcp_cmd: win_cmd,
+        safe_mode: cfg.safe_mode,
+        ollama_reachable: ollama_ok,
+        mcp_servers: entries,
+    })
+}
+
 // ---------------------------------------------------------
 // Main Entrypoint
 // ---------------------------------------------------------
 
 fn main() {
+    let cfg = AppConfig::load();
+    let mcp_hub = Arc::new(McpHub::new_default(cfg.safe_mode));
     let app_state = AppState {
         bridge_handle: Mutex::new(None),
         pending_execution: Arc::new(Mutex::new(None)),
         download_cancellations: Mutex::new(HashMap::new()),
+        mcp_hub: mcp_hub.clone(),
+        task_cancelled: Arc::new(AtomicBool::new(false)),
     };
 
     tauri::Builder::default()
@@ -1192,8 +1281,23 @@ fn main() {
             delete_memory,
             get_goose_status,
             install_goose_cli,
-            list_mcp_tools
+            list_mcp_tools,
+            toggle_mcp_server,
+            restart_mcp_server,
+            list_available_tools,
+            run_agent_task,
+            cancel_agent_task,
+            approve_tool_call,
+            check_system_health
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running SilentExec Desktop application");
+        .build(tauri::generate_context!())
+        .expect("error while building SilentExec Desktop application")
+        .run(move |_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                let hub = mcp_hub.clone();
+                tauri::async_runtime::block_on(async move {
+                    hub.shutdown_all().await;
+                });
+            }
+        });
 }

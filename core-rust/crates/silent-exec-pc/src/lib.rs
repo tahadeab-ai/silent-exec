@@ -9,6 +9,7 @@ pub mod fast_router;
 pub mod indexer;
 pub mod inference;
 pub mod mcp_bridge;
+pub mod mcp_hub;
 pub mod memory;
 pub mod model_manager;
 pub mod omniparser;
@@ -40,6 +41,11 @@ pub use inference::{
 };
 pub use mcp_bridge::{
     JsonRpcError, JsonRpcRequest, JsonRpcResponse, McpClient, McpTool, McpToolCallResult,
+};
+pub use mcp_hub::{
+    classify_takeover_response, McpHub, McpHubServerEntry, McpHubTool, McpToolOutcome,
+    WINDOWS_MCP_EXCLUDE_PROCESSES_ENV, WINDOWS_MCP_STARTUP_TIMEOUT_SECS,
+    WINDOWS_MCP_UIA_TIMEOUT_MS,
 };
 pub use memory::{
     delete_memory, get_relevant_memories_prompt, list_memories, save_memory, MemoryItem,
@@ -2394,5 +2400,103 @@ mod tests {
         assert_eq!(parsed[0].center_x, 200);
         assert_eq!(parsed[0].center_y, 600);
         assert_eq!(parsed[0].label, "Search Icon");
+    }
+
+    #[test]
+    fn test_83_mcp_hub_config_safe_mode_and_takeover() {
+        let guard = TempDirGuard::new("mcp_hub_test");
+        let cfg_path = guard.path.join("mcp_servers.json");
+
+        // Safe mode ON by default: excludes PowerShell,Registry and sets required env vars
+        let entries_safe = McpHub::load_or_init_entries(&cfg_path, true);
+        assert!(cfg_path.is_file());
+        assert_eq!(entries_safe.len(), 3);
+        let win_safe = entries_safe
+            .iter()
+            .find(|e| e.name == "windows-mcp")
+            .unwrap();
+        assert!(win_safe.enabled);
+        assert!(win_safe.args.contains(&"--exclude-tools".to_string()));
+        assert!(win_safe.args.contains(&"PowerShell,Registry".to_string()));
+        assert_eq!(
+            win_safe
+                .env
+                .get("WINDOWS_MCP_EXCLUDE_PROCESSES")
+                .map(String::as_str),
+            Some("SilentExec.exe,silent-exec-desktop.exe")
+        );
+        assert_eq!(
+            win_safe.env.get("ANONYMIZED_TELEMETRY").map(String::as_str),
+            Some("false")
+        );
+        assert_eq!(
+            win_safe
+                .env
+                .get("WINDOWS_MCP_UIA_CONNECTION_TIMEOUT_MS")
+                .map(String::as_str),
+            Some("2000")
+        );
+
+        // Playwright MCP and Mobile MCP are present & toggleable
+        let pw = entries_safe
+            .iter()
+            .find(|e| e.name == "playwright-mcp")
+            .unwrap();
+        assert!(!pw.enabled);
+        assert!(pw.args.contains(&"@playwright/mcp@latest".to_string()));
+
+        let mob = entries_safe
+            .iter()
+            .find(|e| e.name == "mobile-mcp")
+            .unwrap();
+        assert!(!mob.enabled);
+        assert!(mob
+            .args
+            .contains(&"@mobilenext/mobile-mcp@latest".to_string()));
+
+        // Safe mode OFF omits --exclude-tools PowerShell,Registry
+        let win_adv = McpHub::build_windows_mcp_entry(false);
+        assert!(!win_adv.args.contains(&"--exclude-tools".to_string()));
+
+        // USER_CONTROL and CONTROL_DENIED classification
+        match classify_takeover_response("Error: USER_CONTROL active") {
+            Some(McpToolOutcome::HumanTakeoverRequired { code, .. }) => {
+                assert_eq!(code, "USER_CONTROL");
+            }
+            other => panic!("Expected HumanTakeoverRequired, got {:?}", other),
+        }
+        match classify_takeover_response("CONTROL_DENIED by UAC") {
+            Some(McpToolOutcome::HumanTakeoverRequired { code, .. }) => {
+                assert_eq!(code, "CONTROL_DENIED");
+            }
+            other => panic!("Expected HumanTakeoverRequired, got {:?}", other),
+        }
+        assert!(classify_takeover_response("Click succeeded").is_none());
+    }
+
+    #[test]
+    fn test_84_ollama_tools_payload_and_think_stripping() {
+        let tools = McpHub::to_openai_tools_json(&[McpHubTool {
+            server_name: "windows-mcp".to_string(),
+            name: "Click-Tool".to_string(),
+            description: Some("Click at coordinates".to_string()),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "loc": { "type": "array" } }
+            }),
+        }]);
+        let payload = AiBackend::build_ollama_payload_with_tools(
+            "qwen3.5:4b",
+            "click start menu",
+            true,
+            &tools,
+        );
+        assert_eq!(payload["think"], false);
+        assert_eq!(payload["tools"][0]["function"]["name"], "Click-Tool");
+
+        let raw_think = "<think>planning click</think>{\"action\":\"open_folder\",\"target\":\"Downloads\",\"platform\":\"pc\",\"confidence\":0.9}";
+        let clean = extract_action_json(raw_think).unwrap();
+        let cmd = ActionCommand::from_json(&clean).unwrap();
+        assert_eq!(cmd.action, ActionType::OpenFolder);
     }
 }
