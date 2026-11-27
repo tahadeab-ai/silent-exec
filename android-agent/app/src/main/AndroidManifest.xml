@@ -21,6 +21,10 @@
         android:theme="@style/Theme.SilentExec"
         android:usesCleartextTraffic="true">
 
+        <meta-data
+            android:name="CACTUS_TELEMETRY"
+            android:value="0" />
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

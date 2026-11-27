@@ -122,20 +122,20 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeLoadModel(
     }
 
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = 2048;
+    ctx_params.n_ctx = 4096;
     ctx_params.n_threads = safe_threads;
     ctx_params.n_threads_batch = safe_threads;
     ctx_params.type_k = GGML_TYPE_Q8_0;
 
     g_ctx = llama_init_from_model(g_model, ctx_params);
     if (g_ctx == nullptr) {
-        g_last_error = "llama_init_from_model failed (n_ctx=2048, n_threads=" + std::to_string(safe_threads) + ", insufficient RAM)";
+        g_last_error = "llama_init_from_model failed (n_ctx=4096, n_threads=" + std::to_string(safe_threads) + ", insufficient RAM)";
         LOGE("%s", g_last_error.c_str());
         release_llama_state_locked();
         return JNI_FALSE;
     }
 
-    LOGI("Model loaded successfully (n_ctx=2048, n_threads=%d)", safe_threads);
+    LOGI("Model loaded successfully (n_ctx=4096, n_threads=%d)", safe_threads);
     return JNI_TRUE;
 }
 
@@ -174,7 +174,7 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     JNIEnv* env,
     jobject /* this */,
     jstring prompt,
-    jstring /* grammar_text */,
+    jstring grammar_text,
     jint max_tokens
 ) {
     if (env == nullptr) {
@@ -201,7 +201,16 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
         return env->NewStringUTF("{\"error\":\"Empty prompt\"}");
     }
 
-    const int limit = max_tokens > 0 ? max_tokens : 256;
+    std::string grammar_str;
+    if (grammar_text != nullptr) {
+        const char* g_chars = env->GetStringUTFChars(grammar_text, nullptr);
+        if (g_chars != nullptr) {
+            grammar_str.assign(g_chars);
+            env->ReleaseStringUTFChars(grammar_text, g_chars);
+        }
+    }
+
+    const int limit = max_tokens > 0 ? max_tokens : 384;
     const uint32_t n_ctx = llama_n_ctx(g_ctx);
     if (n_ctx == 0 || static_cast<uint32_t>(limit) >= n_ctx) {
         return env->NewStringUTF("{\"error\":\"Invalid context window size\"}");
@@ -316,6 +325,13 @@ Java_com_silentexec_android_nlp_OnDeviceLlamaEngine_nativeGenerateJson(
     llama_sampler* temp_smpl = llama_sampler_init_temp(0.20f);
     if (temp_smpl != nullptr) {
         llama_sampler_chain_add(smpl, temp_smpl);
+    }
+
+    if (!grammar_str.empty() && grammar_str != "NO_THINK") {
+        llama_sampler* grammar_smpl = llama_sampler_init_grammar(g_vocab, grammar_str.c_str(), "root");
+        if (grammar_smpl != nullptr) {
+            llama_sampler_chain_add(smpl, grammar_smpl);
+        }
     }
 
     llama_sampler* dist_smpl = llama_sampler_init_dist(LLAMA_DEFAULT_SEED);

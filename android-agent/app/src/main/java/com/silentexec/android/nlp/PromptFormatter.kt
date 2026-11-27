@@ -46,6 +46,22 @@ object PromptFormatter {
         "Use numbered screen elements (#0, #1, ...) from the live pruned UI tree for ui_click and ui_type. " +
         "Emit action \"done\" ONLY when the entire user goal is genuinely complete."
 
+    /**
+     * GBNF grammar constraining llama.cpp output to a valid ActionCommand JSON object
+     * (never `<think>` traces or conversational prose).
+     */
+    const val ACTION_COMMAND_GBNF: String =
+        "root ::= \"{\" ws " +
+        "\"\\\"thought\\\"\" ws \":\" ws string \",\" ws " +
+        "\"\\\"action\\\"\" ws \":\" ws string " +
+        "(\",\" ws \"\\\"target\\\"\" ws \":\" ws (string | \"null\"))? " +
+        "(\",\" ws \"\\\"platform\\\"\" ws \":\" ws string)? " +
+        "(\",\" ws \"\\\"confidence\\\"\" ws \":\" ws number)? " +
+        "ws \"}\"\n" +
+        "string ::= \"\\\"\" ([^\"\\\\] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F]{4}))* \"\\\"\"\n" +
+        "number ::= [0-9]+ (\".\" [0-9]+)?\n" +
+        "ws ::= [ \\t\\n\\r]*"
+
     private val CHATTER_INDICATORS = listOf(
         "sure", "here is", "here's", "certainly", "i can", "of course",
         "sorry", "as requested", "here you go", "note that", "please find",
@@ -53,19 +69,54 @@ object PromptFormatter {
     )
 
     /**
-     * Constructs a standard ChatML prompt for Qwen2.5 / ChatML-tuned models.
+     * Constructs a standard ChatML prompt for Qwen2.5 / Qwen3 / Qwen3.5 / ChatML-tuned models.
+     * When `enableThinking = false`, appends `/no_think` so reasoning models emit direct JSON.
      */
-    fun buildChatMLPrompt(systemPrompt: String = DEFAULT_SYSTEM_PROMPT, userQuery: String): String {
+    fun buildChatMLPrompt(
+        systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
+        userQuery: String,
+        enableThinking: Boolean = true
+    ): String {
+        val cleanUser = userQuery.trim()
+        val effectiveUser = if (!enableThinking && !cleanUser.contains("/no_think")) {
+            "$cleanUser /no_think"
+        } else {
+            cleanUser
+        }
         return "<|im_start|>system\n${systemPrompt.trim()}<|im_end|>\n" +
-               "<|im_start|>user\n${userQuery.trim()}<|im_end|>\n" +
+               "<|im_start|>user\n$effectiveUser<|im_end|>\n" +
                "<|im_start|>assistant\n"
+    }
+
+    /**
+     * Builds a strict non-thinking ChatML prompt for automatic retry when `<think>`
+     * exhausts the token budget or leaves an empty response.
+     */
+    fun buildNonThinkingPrompt(
+        userQuery: String,
+        systemPrompt: String = DEFAULT_SYSTEM_PROMPT
+    ): String {
+        val stripped = userQuery
+            .replace("<|im_start|>system\n", "")
+            .replace("<|im_start|>assistant\n", "")
+            .trim()
+        val baseQuery = if (stripped.contains("<|im_start|>user\n")) {
+            stripped.substringAfter("<|im_start|>user\n").substringBefore("<|im_end|>").trim()
+        } else {
+            stripped
+        }
+        return buildChatMLPrompt(
+            systemPrompt = systemPrompt,
+            userQuery = "$baseQuery\nRespond ONLY with valid ActionCommand JSON.",
+            enableThinking = false
+        )
     }
 
     /**
      * Formats user query using default system prompt.
      */
     fun formatPrompt(userQuery: String): String {
-        return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery)
+        return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery, enableThinking = true)
     }
 
     /**
@@ -114,7 +165,7 @@ object PromptFormatter {
         ).filter { it.isNotBlank() }
 
         val userQuery = sections.joinToString("\n\n")
-        return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery)
+        return buildChatMLPrompt(DEFAULT_SYSTEM_PROMPT, userQuery, enableThinking = false)
     }
 
     /**
@@ -183,6 +234,17 @@ Fix it and emit ONLY valid ActionCommand JSON adhering to schema, e.g.:
         }
         val trace = traces.joinToString("\n").trim().ifEmpty { null }
         return ParsedRawOutput(cleanContent = content.trim(), reasoningTrace = trace)
+    }
+
+    /**
+     * Returns true when raw LLM output is blank, contains an unclosed `<think>` trace,
+     * or becomes blank after stripping `<think>...</think>` blocks — signaling an automatic
+     * single retry with `enable_thinking=false` and GBNF grammar enforcement.
+     */
+    fun needsNonThinkingRetry(rawOutput: String): Boolean {
+        if (rawOutput.isBlank()) return true
+        val stripped = stripThinkBlocks(rawOutput)
+        return stripped.cleanContent.isBlank()
     }
 
     /**

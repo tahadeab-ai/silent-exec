@@ -2,13 +2,20 @@ package com.silentexec.android.exec
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.util.Base64
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 data class PhoneState(
     val packageName: String,
@@ -27,7 +34,8 @@ data class UiElementInfo(
     val isEditable: Boolean,
     val isScrollable: Boolean,
     val bounds: Rect,
-    val resourceId: String = ""
+    val resourceId: String = "",
+    val isPassword: Boolean = false
 ) {
     fun formatForPrompt(): String {
         val label = when {
@@ -47,6 +55,27 @@ data class UiElementInfo(
         return "[$index] $role: $label$idSuffix [${bounds.centerX()},${bounds.centerY()}]"
     }
 }
+
+data class MobilerunA11yNode(
+    val index: Int,
+    val className: String,
+    val text: String,
+    val contentDescription: String,
+    val resourceId: String,
+    val bounds: String,
+    val isClickable: Boolean,
+    val isEditable: Boolean,
+    val isScrollable: Boolean,
+    val isPassword: Boolean
+)
+
+data class MobilerunA11yTree(
+    val packageName: String,
+    val activityName: String,
+    val interactiveCount: Int,
+    val nodes: List<MobilerunA11yNode>,
+    val requiresVisionFallback: Boolean = interactiveCount <= VISION_FALLBACK_NODE_THRESHOLD
+)
 
 class SilentExecAccessibilityService : AccessibilityService() {
 
@@ -77,11 +106,15 @@ class SilentExecAccessibilityService : AccessibilityService() {
         instance.clear()
     }
 
+    private fun isSelfPackage(pkg: String): Boolean {
+        val selfPkg = applicationContext.packageName
+        return pkg == selfPkg || pkg == "com.silentexec.android" || pkg == "com.silentexec.android.debug"
+    }
+
     /**
      * Resolves the foreground non-self, non-overlay window root so SilentExec never inspects its own UI or overlay.
      */
     private fun resolveTargetWindowRoot(): AccessibilityNodeInfo? {
-        val selfPkg = applicationContext.packageName
         val allWindows = windows
         if (!allWindows.isNullOrEmpty()) {
             // Prefer active application window that is NOT self and NOT an accessibility overlay
@@ -89,17 +122,17 @@ class SilentExecAccessibilityService : AccessibilityService() {
                 if (win.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
                 val root = win.root ?: continue
                 val pkg = root.packageName?.toString().orEmpty()
-                if (pkg.isNotEmpty() && pkg == selfPkg) continue
+                if (pkg.isNotEmpty() && isSelfPackage(pkg)) continue
                 if (win.type == AccessibilityWindowInfo.TYPE_APPLICATION && win.isActive) {
                     return root
                 }
             }
-            // Fallback to any non-self, non-overlay application/system window
+            // Fallback to any non-self, non-overlay application window
             for (win in allWindows) {
                 if (win.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
                 val root = win.root ?: continue
                 val pkg = root.packageName?.toString().orEmpty()
-                if (pkg.isNotEmpty() && pkg == selfPkg) continue
+                if (pkg.isNotEmpty() && isSelfPackage(pkg)) continue
                 if (win.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
                     return root
                 }
@@ -107,7 +140,7 @@ class SilentExecAccessibilityService : AccessibilityService() {
         }
         val fallbackRoot = rootInActiveWindow ?: return null
         val fallbackPkg = fallbackRoot.packageName?.toString().orEmpty()
-        return if (fallbackPkg == selfPkg) null else fallbackRoot
+        return if (isSelfPackage(fallbackPkg)) null else fallbackRoot
     }
 
     /**
@@ -213,7 +246,8 @@ class SilentExecAccessibilityService : AccessibilityService() {
                                 isEditable = isEditable,
                                 isScrollable = isScrollable,
                                 bounds = bounds,
-                                resourceId = node.viewIdResourceName ?: ""
+                                resourceId = node.viewIdResourceName ?: "",
+                                isPassword = node.isPassword
                             )
                             if (isInteractiveControl) {
                                 interactiveCandidates.add(info)
@@ -237,6 +271,80 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Returns Mobilerun Portal-compatible structured a11y_tree with package, activity,
+     * interactive node count, and vision-fallback flag (triggered when interactive nodes <= 3).
+     */
+    fun extractMobilerunA11yTree(): MobilerunA11yTree {
+        val state = getPhoneState()
+        val elements = extractPrunedUiTree()
+        val interactiveCount = elements.count { it.isClickable || it.isEditable || it.isScrollable }
+        val nodes = elements.map { el ->
+            MobilerunA11yNode(
+                index = el.index,
+                className = el.className,
+                text = el.text,
+                contentDescription = el.contentDescription,
+                resourceId = el.resourceId,
+                bounds = "${el.bounds.left},${el.bounds.top},${el.bounds.right},${el.bounds.bottom}",
+                isClickable = el.isClickable,
+                isEditable = el.isEditable,
+                isScrollable = el.isScrollable,
+                isPassword = el.isPassword
+            )
+        }
+        return MobilerunA11yTree(
+            packageName = state.packageName,
+            activityName = state.activityName,
+            interactiveCount = interactiveCount,
+            nodes = nodes,
+            requiresVisionFallback = shouldTriggerVisionFallback(interactiveCount)
+        )
+    }
+
+    /**
+     * Captures a compressed JPEG screenshot (API 30+) as Base64 for Vision/Fallback recovery
+     * when the accessibility tree has <= 3 interactive nodes (e.g., WebView, Flutter, game).
+     */
+    fun captureCompressedScreenshotBase64(timeoutMs: Long = 2000L): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val latch = CountDownLatch(1)
+        var encoded: String? = null
+        return try {
+            takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                mainExecutor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        runCatching {
+                            val hwBuffer = screenshot.hardwareBuffer
+                            val colorSpace = screenshot.colorSpace
+                            val bmp = Bitmap.wrapHardwareBuffer(hwBuffer, colorSpace)
+                            if (bmp != null) {
+                                val soft = bmp.copy(Bitmap.Config.ARGB_8888, false)
+                                val baos = ByteArrayOutputStream()
+                                soft.compress(Bitmap.CompressFormat.JPEG, 60, baos)
+                                encoded = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                                soft.recycle()
+                                bmp.recycle()
+                            }
+                            hwBuffer.close()
+                        }
+                        latch.countDown()
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        latch.countDown()
+                    }
+                }
+            )
+            latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+            encoded
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
      * Returns the pruned screen elements formatted for prompt inclusion.
      */
     fun extractPrunedUiStrings(): List<String> {
@@ -244,7 +352,10 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     fun activePackageName(): String {
-        return rootInActiveWindow?.packageName?.toString().orEmpty()
+        val resolvedPkg = resolveTargetWindowRoot()?.packageName?.toString().orEmpty()
+        if (resolvedPkg.isNotEmpty()) return resolvedPkg
+        val rawPkg = rootInActiveWindow?.packageName?.toString().orEmpty()
+        return if (isSelfPackage(rawPkg)) "" else rawPkg
     }
 
     fun computeScreenSignature(): String {
@@ -271,7 +382,8 @@ class SilentExecAccessibilityService : AccessibilityService() {
             if (matched != null) {
                 val cx = matched.bounds.centerX().toFloat()
                 val cy = matched.bounds.centerY().toFloat()
-                return dispatchTapGesture(cx, cy)
+                if (dispatchTapGesture(cx, cy)) return true
+                return ShizukuInputFallback.tap(applicationContext, cx, cy)
             }
         }
 
@@ -334,11 +446,14 @@ class SilentExecAccessibilityService : AccessibilityService() {
             parent = parent.parent
         }
 
-        // Fallback to physical gesture tap at center of bounds
+        // Fallback to physical gesture tap at center of bounds, then Shizuku input tap
         val bounds = Rect()
         candidate.getBoundsInScreen(bounds)
         if (bounds.width() > 0 && bounds.height() > 0) {
-            return dispatchTapGesture(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+            val cx = bounds.centerX().toFloat()
+            val cy = bounds.centerY().toFloat()
+            if (dispatchTapGesture(cx, cy)) return true
+            return ShizukuInputFallback.tap(applicationContext, cx, cy)
         }
 
         return false
@@ -410,11 +525,14 @@ class SilentExecAccessibilityService : AccessibilityService() {
             findFirstEditable(root)
         }
 
-        val node = targetNode ?: return false
+        val node = targetNode ?: return ShizukuInputFallback.inputText(applicationContext, text)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        val typed = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        var typed = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        if (!typed) {
+            typed = ShizukuInputFallback.inputText(applicationContext, text)
+        }
 
         if (typed && pressEnter) {
             // Attempt to trigger search/send button if visible
@@ -562,9 +680,18 @@ class SilentExecAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        const val VISION_FALLBACK_NODE_THRESHOLD = 3
         private var instance: WeakReference<SilentExecAccessibilityService> = WeakReference(null)
 
         fun get(): SilentExecAccessibilityService? = instance.get()
+
+        /**
+         * Returns true when the observed accessibility tree has <= 3 interactive nodes
+         * (e.g. WebView, Flutter, or custom surface), requiring screenshot/vision fallback.
+         */
+        fun shouldTriggerVisionFallback(interactiveNodeCount: Int): Boolean {
+            return interactiveNodeCount <= VISION_FALLBACK_NODE_THRESHOLD
+        }
 
         /**
          * Normalizes text for robust element matching:

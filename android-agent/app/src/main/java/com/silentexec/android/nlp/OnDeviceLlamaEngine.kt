@@ -11,7 +11,9 @@ import kotlin.concurrent.thread
  * Real On-Device llama.cpp Inference Engine for SilentExec Android.
  * Communicates with `libllama_jni.so` compiled via NDK for fast arm64-v8a offline execution.
  */
-class OnDeviceLlamaEngine {
+class OnDeviceLlamaEngine : InferenceEngine {
+
+    override val engineName: String = "llama.cpp"
 
     companion object {
         val isNativeLoaded: Boolean = try {
@@ -46,7 +48,7 @@ class OnDeviceLlamaEngine {
     /**
      * Configures the active GGUF model file for lazy background loading.
      */
-    fun setModelFile(modelFile: File?, threads: Int = 4) {
+    override fun setModelFile(modelFile: File?, threads: Int) {
         configuredModelFile = modelFile
         configuredThreads = threads
     }
@@ -92,7 +94,7 @@ class OnDeviceLlamaEngine {
     /**
      * Lazily loads the active GGUF file on a background thread if not yet loaded.
      */
-    fun loadModelAsync(modelFile: File, threads: Int = 4, onComplete: (Result<Unit>) -> Unit) {
+    override fun loadModelAsync(modelFile: File, threads: Int, onComplete: (Result<Unit>) -> Unit) {
         val validationError = validateModelFile(modelFile)
         if (validationError != null) {
             onComplete(Result.failure(IllegalStateException(validationError)))
@@ -119,7 +121,7 @@ class OnDeviceLlamaEngine {
     /**
      * Checks if the model is currently loaded in memory.
      */
-    fun isLoaded(): Boolean {
+    override fun isLoaded(): Boolean {
         if (!isNativeLoaded) return false
         return try {
             nativeIsLoaded()
@@ -132,7 +134,7 @@ class OnDeviceLlamaEngine {
      * Releases model and context memory safely.
      */
     @Synchronized
-    fun unload() {
+    override fun unload() {
         if (isNativeLoaded) {
             try {
                 nativeUnload()
@@ -145,10 +147,10 @@ class OnDeviceLlamaEngine {
      * extracts clean JSON, and parses into typed ActionCommand.
      * Lazily loads the configured GGUF model on a background thread if not yet loaded.
      */
-    fun inferActionCommand(
+    override fun inferActionCommand(
         userQuery: String,
-        grammarText: String = "",
-        maxTokens: Int = 256
+        grammarText: String,
+        maxTokens: Int
     ): Result<ActionCommand> {
         return runCatching {
             if (!isLoaded()) {
@@ -173,11 +175,28 @@ class OnDeviceLlamaEngine {
                     throw IllegalStateException("يرجى تحميل نموذج من تبويب النماذج أو اختيار Cloud API من الإعدادات")
                 }
             }
-            val prompt = PromptFormatter.formatPrompt(userQuery)
-            val rawOutput = try {
-                nativeGenerateJson(prompt, grammarText, maxTokens)
+            val effectiveMaxTokens = maxTokens.coerceAtLeast(384)
+            val prompt = if (userQuery.contains("<|im_start|>")) {
+                userQuery
+            } else {
+                PromptFormatter.buildChatMLPrompt(
+                    userQuery = userQuery,
+                    enableThinking = false
+                )
+            }
+            var rawOutput = try {
+                nativeGenerateJson(prompt, grammarText, effectiveMaxTokens)
             } catch (t: Throwable) {
                 throw IllegalStateException("فشل تشغيل النموذج المحلي: ${t.message ?: "Unknown error"}", t)
+            }
+            if (PromptFormatter.needsNonThinkingRetry(rawOutput)) {
+                val retryPrompt = PromptFormatter.buildNonThinkingPrompt(userQuery)
+                val retryGrammar = grammarText.ifBlank { PromptFormatter.ACTION_COMMAND_GBNF }
+                rawOutput = try {
+                    nativeGenerateJson(retryPrompt, retryGrammar, effectiveMaxTokens)
+                } catch (t: Throwable) {
+                    throw IllegalStateException("فشل إعادة المحاولة للنموذج المحلي: ${t.message ?: "Unknown error"}", t)
+                }
             }
             when (val parsed = PromptFormatter.parsePlanOrSingleAction(rawOutput)) {
                 is PlanOrAction.Action -> parsed.actionCommand

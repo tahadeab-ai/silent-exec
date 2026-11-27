@@ -40,7 +40,7 @@ class ModelDownloader(val modelsDir: File) {
     companion object {
         const val DEFAULT_REPO = "tahadeab-ai/silent-exec"
         const val DEFAULT_TAG = "v0.1.0-model"
-        const val DEFAULT_MODEL_FILENAME = "Qwen2.5-0.5B-Instruct.Q4_K_M.gguf"
+        const val DEFAULT_MODEL_FILENAME = "Qwen3.5-2B-Q4_K_M.gguf"
         const val BASE_RELEASE_URL = "https://github.com/tahadeab-ai/silent-exec/releases/download"
     }
 

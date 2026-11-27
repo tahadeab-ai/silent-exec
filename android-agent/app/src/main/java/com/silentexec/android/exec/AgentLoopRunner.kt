@@ -146,29 +146,33 @@ class AgentLoopRunner(
             )
         }
 
-        // Prevent Android Self-Inspection Loop: if SilentExec itself is in the foreground before Step 1,
-        // move it to back (or press Home) and poll every 150ms (up to 1200ms) for a non-self package.
+        // Prevent Android Self-Inspection Loop: call moveTaskToBack(true) with 450ms settle delay
+        // BEFORE Step 1 observation whenever the task targets an external app or SilentExec is foreground.
         if (uiObserver == null) {
             val svc = SilentExecAccessibilityService.get()
             val selfPkg = executor.getAppPackageName() ?: "com.silentexec.android"
-            if (svc != null && svc.activePackageName() == selfPkg) {
-                if (!executor.moveTaskToBackIfActivity()) {
-                    svc.performUiHome()
-                }
+            val movedToBack = executor.moveTaskToBackIfActivity()
+            if (movedToBack) {
+                try { Thread.sleep(450L) } catch (_: InterruptedException) {}
+            } else if (svc != null && (svc.activePackageName().isEmpty() || svc.activePackageName() == selfPkg)) {
+                svc.performUiHome()
+                try { Thread.sleep(450L) } catch (_: InterruptedException) {}
+            }
+            if (svc != null) {
                 var waitedMs = 0L
-                while (waitedMs < 1200L && !isCancelled) {
-                    try { Thread.sleep(150L) } catch (_: InterruptedException) { break }
-                    waitedMs += 150L
+                while (waitedMs < 900L && !isCancelled) {
                     val currentPkg = svc.activePackageName()
                     if (currentPkg.isNotBlank() && currentPkg != selfPkg) {
                         break
                     }
+                    try { Thread.sleep(150L) } catch (_: InterruptedException) {}
+                    waitedMs += 150L
                 }
             }
         }
 
         val stepHistory = mutableListOf<String>()
-        val maxSteps = 8
+        val maxSteps = 15
         val reflector = StateHashReflector()
         val notetaker = Notetaker()
         val fastMode = settings.fastRouterEnabled
@@ -178,6 +182,7 @@ class AgentLoopRunner(
         var currentStepIndex = 1
         var isLoopFinished = false
         var lastExecutedCommand: ActionCommand? = null
+        var lastExecutedPackage: String = ""
 
         // 2.5. Deterministic Native Intent Execution (0 LLM calls for leading native steps)
         while (!isCancelled && currentStepIndex <= maxSteps) {
@@ -211,11 +216,31 @@ class AgentLoopRunner(
         while (currentStepIndex <= maxSteps && !isLoopFinished && !isCancelled) {
             val svc = if (uiObserver == null) SilentExecAccessibilityService.get() else null
             val phoneState = svc?.getPhoneState()
+            val uiTreeElements = svc?.extractPrunedUiTree().orEmpty()
             val screenElements = uiObserver?.invoke()
-                ?: (svc?.extractPrunedUiStrings() ?: emptyList())
+                ?: uiTreeElements.map { it.formatForPrompt() }
 
-            // Take_over Gate for FLAG_SECURE / protected screens
-            TakeOverGate.evaluate(currentStepIndex, null, phoneState)?.let { req ->
+            // Vision / Screenshot Fallback when a11y_tree returns <= 3 interactive nodes
+            val interactiveCount = uiTreeElements.count { it.isClickable || it.isEditable || it.isScrollable }
+            val visionFallbackHint = if (svc != null && SilentExecAccessibilityService.shouldTriggerVisionFallback(interactiveCount)) {
+                val screenshotB64 = svc.captureCompressedScreenshotBase64()
+                if (!screenshotB64.isNullOrEmpty()) {
+                    "VisionFallback: A11y tree sparse ($interactiveCount interactive nodes); compressed screenshot captured (${screenshotB64.length} b64 chars)."
+                } else {
+                    "VisionFallback: A11y tree sparse ($interactiveCount interactive nodes); use coordinate tap/scroll or Shizuku fallback."
+                }
+            } else {
+                null
+            }
+
+            // SensitiveScreenGuard for FLAG_SECURE / password fields / payment screens
+            SensitiveScreenGuard.evaluate(
+                stepIndex = currentStepIndex,
+                cmd = null,
+                phoneState = phoneState,
+                uiElements = uiTreeElements,
+                uiStrings = screenElements
+            )?.let { req ->
                 onUpdate(AgentStepUpdate.TakeOverRequired(req))
                 if (!awaitTakeOverDecision(req, currentStepIndex, maxSteps, onConfirmStep)) {
                     onUpdate(AgentStepUpdate.Aborted(req.reason))
@@ -228,13 +253,18 @@ class AgentLoopRunner(
                 "Plan Progress:\n${planManager.formatProgressSummary()}"
             } else null
 
+            val combinedNotes = listOfNotNull(
+                notetaker.formatForPrompt().takeIf { it.isNotBlank() },
+                visionFallbackHint
+            ).joinToString("\n").takeIf { it.isNotBlank() }
+
             val prompt = PromptFormatter.buildScreenAwarePrompt(
                 userGoal = cleanGoal,
                 prunedUiTree = screenElements,
                 stepHistory = stepHistory,
                 toolSummary = toolSummary,
                 planSummary = planSummary,
-                sessionNotes = notetaker.formatForPrompt().takeIf { it.isNotBlank() }
+                sessionNotes = combinedNotes
             )
 
             val rawDecision = try {
@@ -302,8 +332,10 @@ class AgentLoopRunner(
                         return
                     }
 
+                    val currentPkg = phoneState?.packageName.orEmpty()
                     val prev = lastExecutedCommand
                     if (prev != null &&
+                        lastExecutedPackage == currentPkg &&
                         prev.action == cmd.action &&
                         (prev.target ?: "").trim().equals((cmd.target ?: "").trim(), ignoreCase = true) &&
                         prev.args == cmd.args
@@ -312,14 +344,20 @@ class AgentLoopRunner(
                             AgentStepUpdate.StepFailed(
                                 currentStepIndex,
                                 maxSteps,
-                                "تم إيقاف التكرار التلقائي للخطوة (${cmd.action.wireName}). يُنصح باستخدام Qwen3-1.7B أو LFM3-1.7B أو Cloud API للمهام متعددة الخطوات."
+                                "تم إيقاف التكرار التلقائي للخطوة (${cmd.action.wireName}). يُنصح باستخدام Qwen3.5-2B أو Cloud API للمهام متعددة الخطوات."
                             )
                         )
                         return
                     }
 
-                    // Take_over Gate for sensitive actions (payments, messages, installs, permissions)
-                    TakeOverGate.evaluate(currentStepIndex, cmd, phoneState)?.let { req ->
+                    // SensitiveScreenGuard for sensitive actions (payments, messages, installs, passwords, permissions)
+                    SensitiveScreenGuard.evaluate(
+                        stepIndex = currentStepIndex,
+                        cmd = cmd,
+                        phoneState = phoneState,
+                        uiElements = uiTreeElements,
+                        uiStrings = screenElements
+                    )?.let { req ->
                         onUpdate(AgentStepUpdate.TakeOverRequired(req))
                         if (!awaitTakeOverDecision(req, currentStepIndex, maxSteps, onConfirmStep)) {
                             onUpdate(AgentStepUpdate.Aborted(req.reason))
@@ -371,10 +409,14 @@ class AgentLoopRunner(
                             "step_$currentStepIndex",
                             "${cmd.action.wireName}:${cmd.target ?: ""}"
                         )
+                        planManager.nextRunnableStep()?.let { pendingStep ->
+                            planManager.markDone(pendingStep.id)
+                        }
                         stepHistory.add("Step $currentStepIndex: ${cmd.action.wireName}(${cmd.target ?: ""}) -> OK")
                     }
 
                     lastExecutedCommand = cmd
+                    lastExecutedPackage = prePkg
                     currentStepIndex++
                 }
             }
@@ -625,7 +667,8 @@ class AgentLoopRunner(
             }
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
-                maxTokens = 256
+                grammarText = PromptFormatter.ACTION_COMMAND_GBNF,
+                maxTokens = 384
             )
             val cmd = res.getOrThrow()
             return ActionJson.toJson(cmd)
@@ -634,7 +677,8 @@ class AgentLoopRunner(
         if (llamaEngine != null && llamaEngine.isLoaded()) {
             val res = llamaEngine.inferActionCommand(
                 userQuery = prompt,
-                maxTokens = 256
+                grammarText = PromptFormatter.ACTION_COMMAND_GBNF,
+                maxTokens = 384
             )
             val cmd = res.getOrThrow()
             return ActionJson.toJson(cmd)
