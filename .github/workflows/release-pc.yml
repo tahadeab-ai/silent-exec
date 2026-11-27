@@ -34,7 +34,8 @@ jobs:
           node-version: "20"
 
       - name: Build Frontend UI
-        run: npm --prefix desktop-app/ui install && npm --prefix desktop-app/ui run build
+        working-directory: desktop-app/ui
+        run: npm ci && npm run build
 
       - name: Build Release Binary (silent-exec-pc)
         run: cargo build --release --bin silent-exec-pc --manifest-path core-rust/Cargo.toml
