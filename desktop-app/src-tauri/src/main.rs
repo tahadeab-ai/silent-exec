@@ -1122,7 +1122,7 @@ async fn run_agent_task(
     state.task_cancelled.store(false, Ordering::SeqCst);
     let hub = state.mcp_hub.clone();
     hub.ensure_enabled_servers_started().await;
-    let res = execute_query(app.clone(), state.clone(), query.clone()).await;
+    let res = execute_query(query.clone(), None, state.clone()).await;
     if let Err(ref err) = res {
         if err.contains("USER_CONTROL") || err.contains("CONTROL_DENIED") {
             let _ = app.emit("agent://human-takeover", err.clone());
@@ -1142,7 +1142,7 @@ async fn approve_tool_call(
     state: State<'_, AppState>,
     approved: bool,
 ) -> Result<ExecutionReport, String> {
-    confirm_step(state, approved).await
+    confirm_step(0, approved, state).await
 }
 
 #[tauri::command]
@@ -1150,11 +1150,10 @@ async fn check_system_health(state: State<'_, AppState>) -> Result<SystemHealthD
     let cfg = AppConfig::load();
     let (win_cmd, _) = McpHub::detect_windows_mcp_command();
     let entries = state.mcp_hub.list_entries().await;
-    let ollama_ok = silent_exec_pc::check_health_http(&format!(
-        "{}/api/tags",
-        cfg.ollama_url.trim_end_matches('/')
-    ))
-    .is_ok();
+    let ollama_ok = silent_exec_pc::check_health_http(
+        &format!("{}/api/tags", cfg.ollama_url.trim_end_matches('/')),
+        std::time::Duration::from_secs(2),
+    );
     Ok(SystemHealthDto {
         windows_mcp_cmd: win_cmd,
         safe_mode: cfg.safe_mode,
