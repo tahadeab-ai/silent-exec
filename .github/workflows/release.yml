@@ -1,0 +1,174 @@
+name: Release v5.x (Android APK + Windows Desktop)
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v5.0.0)'
+        required: true
+        default: 'v5.0.0'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  build-android:
+    name: Build Signed Android APK (arm64-v8a)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android-agent/gradlew
+
+      - name: Decode Release Keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
+            echo "ANDROID_KEYSTORE_PATH=/tmp/release.keystore" >> $GITHUB_ENV
+            echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+          fi
+
+      - name: Run Unit Tests & Build Release APK
+        working-directory: android-agent
+        run: ./gradlew testDebugUnitTest assembleRelease --no-daemon --stacktrace
+
+      - name: Package Android APK
+        shell: bash
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name || github.ref_name }}"
+          mkdir -p release_android
+          APK_SOURCE=$(find android-agent/app/build/outputs/apk/release/ -type f -name "*.apk" | head -n 1)
+          if [ -z "$APK_SOURCE" ]; then
+            echo "Error: No release APK found!"
+            exit 1
+          fi
+          APK_NAME="SilentExec-${TAG}-android.apk"
+          cp "$APK_SOURCE" "release_android/${APK_NAME}"
+          unzip -l "release_android/${APK_NAME}" | grep -q "lib/arm64-v8a/libllama_jni.so"
+          (cd release_android && sha256sum "${APK_NAME}" > SHA256SUMS-android.txt)
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f /tmp/release.keystore
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: release_android/
+
+  build-windows:
+    name: Build Windows Desktop & PC CLI
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Desktop React UI
+        run: npm --prefix desktop-app/ui install && npm --prefix desktop-app/ui run build
+
+      - name: Build Release Binary (silent-exec-pc)
+        run: cargo build --release --bin silent-exec-pc --manifest-path core-rust/Cargo.toml
+
+      - name: Build Release Desktop GUI (SilentExec-Desktop)
+        run: cargo build --release --manifest-path desktop-app/src-tauri/Cargo.toml
+
+      - name: Package Windows Assets
+        shell: bash
+        run: |
+          mkdir -p release_windows
+          cp core-rust/target/release/silent-exec-pc.exe release_windows/
+          if [ -f "desktop-app/src-tauri/target/release/silent-exec-desktop.exe" ]; then
+            cp desktop-app/src-tauri/target/release/silent-exec-desktop.exe release_windows/SilentExec-Desktop-x64.exe
+          else
+            cp $(find desktop-app -name "silent-exec-desktop.exe" | head -n 1) release_windows/SilentExec-Desktop-x64.exe
+          fi
+          (cd release_windows && sha256sum silent-exec-pc.exe SilentExec-Desktop-x64.exe > SHA256SUMS-windows.txt)
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release_windows/
+
+  publish-release:
+    name: Publish Unified GitHub Release
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-android
+          path: release_assets
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: release_assets
+
+      - name: Combine Checksums
+        shell: bash
+        run: |
+          cd release_assets
+          cat SHA256SUMS-android.txt SHA256SUMS-windows.txt > SHA256SUMS.txt
+          rm -f SHA256SUMS-android.txt SHA256SUMS-windows.txt
+          ls -lh
+          cat SHA256SUMS.txt
+
+      - name: Determine Release Tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "SilentExec ${{ env.RELEASE_TAG }}"
+          body: |
+            Automated production release for **SilentExec ${{ env.RELEASE_TAG }}** (Android APK + Windows Desktop).
+
+            - **Android (`arm64-v8a`)**: `SilentExec-${{ env.RELEASE_TAG }}-android.apk` — Material 3 + AI Elements Compose UI, `InferenceEngine` (`Cactus` / `llama.cpp` `n_ctx=4096`), `Qwen3.5-2B-Q4_K_M` non-thinking default, `Mobilerun` filtered `a11y_tree`, `Shizuku-API` fallback, `SensitiveScreenGuard`.
+            - **Windows Desktop (`x86_64`)**: `SilentExec-Desktop-x64.exe` + `silent-exec-pc.exe` — Tauri v2 + React + `assistant-ui` + `prompt-kit`, official `rmcp` MCP host, `CursorTouch/Windows-MCP` sidecar, `Playwright MCP`, `Mobile MCP`, Ollama `qwen3.5:4b` (`think: false`), Clean-Room MIT PII Redactor.
+          files: |
+            release_assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

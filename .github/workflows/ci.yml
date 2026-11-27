@@ -29,6 +29,9 @@ jobs:
       - name: Run Schema, Safety Policy and GBNF Validation
         run: python schemas/validate_schemas.py
 
+      - name: Run Automated License & Dependency Audit
+        run: python scripts/check_licenses.py
+
       - name: Verify Dataset Generator & Schema Adherence
         run: python nlp-training/generate_dataset.py --count 300 --out-dir /tmp/ci_data
 

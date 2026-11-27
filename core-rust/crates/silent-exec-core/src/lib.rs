@@ -1,3 +1,5 @@
+pub mod pii;
+
 use serde::{Deserialize, Serialize};
 
 /// The 20 cross-platform tool actions supported by SilentExec.

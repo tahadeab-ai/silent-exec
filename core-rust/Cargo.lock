@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "silent-exec-cli"
-version = "4.0.0"
+version = "5.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "silent-exec-core"
-version = "4.0.0"
+version = "5.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "silent-exec-pc"
-version = "4.0.0"
+version = "5.0.0"
 dependencies = [
  "rmcp",
  "serde",

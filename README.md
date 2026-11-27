@@ -4,73 +4,62 @@
 [![Android CI](https://github.com/tahadeab-ai/silent-exec/actions/workflows/android-ci.yml/badge.svg)](https://github.com/tahadeab-ai/silent-exec/actions/workflows/android-ci.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tahadeab-ai/silent-exec/blob/main/nlp-training/train_silent_exec_qlora.ipynb)
 [![Model Release](https://img.shields.io/badge/Model_Release-v0.2.0--model-brightgreen.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v0.2.0-model)
-[![PC Release](https://img.shields.io/badge/PC_Release-v4.0.0--pc-blue.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v4.0.0-pc)
-[![Android Release](https://img.shields.io/badge/Android_Release-v4.0.0--android-green.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v4.0.0-android)
+[![PC Release](https://img.shields.io/badge/PC_Release-v5.0.0-blue.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v5.0.0)
+[![Android Release](https://img.shields.io/badge/Android_Release-v5.0.0-green.svg)](https://github.com/tahadeab-ai/silent-exec/releases/tag/v5.0.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**SilentExec** is a high-performance, bilingual (Arabic & English) OS, GUI, and problem-solving AI agent engineered for PC (Windows & Linux) and Android (`arm64-v8a`). SilentExec combines deterministic intent routing, rich Markdown & code reasoning (`reply`), built-in Pro Tools (`web_fetch`, `read_file`, `write_file`, `memory_save`, `copy_to_clipboard`), MCP connectors, and schema-validated system & GUI automation.
+**SilentExec v5.0.0** is a high-performance, bilingual (Arabic & English) OS, GUI, and problem-solving AI agent engineered for PC (Windows & Linux) and Android (`arm64-v8a`).
 
 ---
 
-## 🚀 What's New in v4.0.0
+## 🚀 What's New in v5.0.0
 
-- **Deterministic State-Machine Agent Core (Android & PC)**:
-  - **Compound Intent Guard & `PlanManager`**: Splits compound Arabic (MSA + Yemeni dialects) and English commands (`"و"`, `"ثم"`, `"بعدين"`, `"بعدها"`, `"and"`, `"then"`, `","`) into dependency-ordered `PlanStep` queues.
-  - **30+ Native Android Intent Executors**: Deterministic `Intent` / deep-link execution (`open_app`, `youtube_search`, `web_search`, `dial_number`, `open_settings_section`, `set_alarm`, `copy_clipboard`, `share_text`) runs *before* any GUI/Accessibility step.
-  - **Mobilerun-Style Filtered A11y + `phone_state`**: Compact `phone_state + a11y_tree [0..N]` screen representation paired with `batch_actions` (Mobile-MCP pattern) and `capture_id` staleness rejection.
-  - **Mobile-Agent `StateHashReflector` & `Notetaker`**: Detects stuck UI loops via screen state hashing and maintains structured cross-step scratchpad notes.
-- **Silent Desktop Execution & Vision Grounding**:
-  - **`cua-driver` (MIT) Silent Background Execution**: Targets background windows without stealing focus, guarded by `capture_id` staleness checks.
-  - **Agent-S3 Code-First + DPI Scaling**: Accurate coordinate normalization across high-DPI displays with code-first action synthesis.
-  - **Microsoft OmniParser (`icon_detect_v3`) Fallback**: Visual icon/element grounding fallback when accessibility trees are sparse.
-- **Authenticated LAN Bridge & Clean-Room PII Privacy Mode**:
-  - **WebSocket JSON-RPC 2.0 (`8081`) + HTTP Health (`8080`)**: Per-session Bearer token (6-digit pairing code) supporting `device.get_state`, `device.execute_batch`, and `planner.offload_step` (offloading Android multi-step planning to Desktop Ollama).
-  - **Clean-Room On-Device PII Privacy Mode**: Redacts sensitive tokens, phone numbers, and credentials before remote/LAN planner calls.
-- **Overhauled Arabic RTL / English LTR UI & Human-in-the-Loop UX**:
-  - **Android Edge-Docked HUD**: WindowInsets-aware `TYPE_ACCESSIBILITY_OVERLAY` HUD hidden whenever SilentExec is foregrounded, auto-fading (`alpha = 0f`) during gestures/screenshots, with 1-tap Stop & collapsible timeline.
-  - **Desktop Tauri v2 RTL Split-Pane Workspace**: Live Inspector pane, streaming step timeline, and explicit human-in-the-loop Takeover Banner.
-- **Upgraded On-Device `llama.cpp v1.1.0` & 2026 Model Stack**:
-  - Replaced greedy decoding with `penalties(1.12)` -> `top_k(40)` -> `top_p(0.90)` -> `temp(0.20)` -> `dist`, added a 96-token `<think>` budget guard, and enabled `Q8_0` KV-cache prefix reuse across agent steps.
-  - Added [`nlp-training/generate_v4_agent_dataset.py`](nlp-training/generate_v4_agent_dataset.py) and [`nlp-training/train_functiongemma_270m_colab.py`](nlp-training/train_functiongemma_270m_colab.py) to fine-tune `google/functiongemma-270m-it` (<250 MB GGUF) on Colab/Kaggle.
-
----
-
-## 🤖 Recommended 2026 Models
-
-| Target Platform | Recommended Model | Format / Runtime | Notes |
-| :--- | :--- | :--- | :--- |
-| **Android (`arm64-v8a`)** | `Qwen3.5-2B-Q4_K_M` / `LFM3-VL-2B` | GGUF via `llama.cpp v1.1.0` | On-device inference with `Q8_0` KV-cache & `<think>` guard |
-| **Desktop (16 GB PC)** | `qwen3.5:4b` / `GUI-Owl-1.5` | Ollama `/api/chat` (`think: false`) | Fast local planning + Android LAN offload (`planner.offload_step`) |
-| **Ultra-Fast Edge Router** | `google/functiongemma-270m-it` | GGUF `Q4_K_M` (<250 MB) | Fine-tuned via `nlp-training/train_functiongemma_270m_colab.py` |
+- **Android Agent (`arm64-v8a`)**:
+  - **Material 3 + AI Elements Compose UI**: Complete dark surface hierarchy (`#0B0F17` canvas, `#131A26` cards, `#38BDF8` accent), strict BiDi/LTR code & log isolation (`LtrCodeBlock`), live `PlanCard`, collapsible `ToolCallCard` & `ReasoningAccordion`, and `SensitiveScreenGuard` takeover sheet.
+  - **Constrained On-Device Inference (`InferenceEngine`)**: `n_ctx = 4096`, `max_tokens = 384`, `Qwen3.5-2B-Q4_K_M` non-thinking default (`/no_think`), GBNF grammar enforcement, and automatic single non-thinking retry on blank/`<think>` outputs.
+  - **Accessibility & Fallback**: `moveTaskToBack(true)` before Step 1, `Mobilerun Portal` filtered `a11y_tree`, API 30+ compressed screenshot fallback when `<= 3` interactive nodes are detected, and `Shizuku-API` non-root `input` fallback.
+- **Desktop App (Tauri v2 + React + `rmcp`)**:
+  - **Modern React + Tailwind + `assistant-ui` + `prompt-kit` UI**: Strict Arabic RTL (`IBM Plex Sans Arabic` / `Cairo`) with `dir="ltr"` isolation for technical readouts, `ModelsHub` (16 GB RAM-fit badges for `qwen3.5:4b` & `lfm3:1.7b`), `MCP & Bridges` view, and 2-column `Settings` grid.
+  - **Official Rust MCP Host (`rmcp`)**: `McpHub` managing `CursorTouch/Windows-MCP` (`uvx windows-mcp serve` / bundled `--onedir` sidecar, `WINDOWS_MCP_EXCLUDE_PROCESSES`, `ANONYMIZED_TELEMETRY=false`, Safe Mode `--exclude-tools PowerShell,Registry`), plus toggleable `Playwright MCP` and `Mobile MCP`.
+  - **Clean-Room MIT PII Redactor**: Luhn-checked credit cards, OTPs, API keys/Bearer tokens, emails, phones, and password fields redacted in both Rust (`silent_exec_core::pii`) and Kotlin (`com.silentexec.android.security.PiiRedactor`).
 
 ---
 
 ## ⚡ Quick Start
 
-### 🖥️ PC Agent (Windows x86_64)
+### 🖥️ Windows Desktop (`x86_64`)
+1. Install [`uv`](https://docs.astral.sh/uv/) and pre-install `windows-mcp` (optional, auto-detected by `McpHub`):
+   ```powershell
+   uv tool install windows-mcp
+   ```
+   *(Or let SilentExec launch `uvx windows-mcp serve` automatically on first run; if bundling, use PyInstaller `--onedir`, never `--onefile`.)*
+2. Download `SilentExec-Desktop-x64.exe` from [`v5.0.0`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v5.0.0).
+3. Pull the recommended 16 GB CPU model in Ollama:
+   ```powershell
+   ollama pull qwen3.5:4b
+   ```
 
-#### Option A: Modern Desktop GUI App (Tauri v2)
-1. Download [`SilentExec-Desktop-x64.exe`](https://github.com/tahadeab-ai/silent-exec/releases/download/v4.0.0-pc/SilentExec-Desktop-x64.exe) from the official [`v4.0.0-pc`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v4.0.0-pc) release.
-2. Double-click to launch the RTL/LTR Split-Pane Workspace with Live Inspector, collapsible `💭 Thinking & Steps`, inline Tier-2 `[✓ Allow | ✗ Deny]`, Takeover Banner, Ollama `qwen3.5:4b` / `GUI-Owl-1.5` (`think: false`), LAN Bridge (6-digit pairing), and 1-click Auto-Updater.
+### 📱 Android (`arm64-v8a`)
+1. Download `SilentExec-v5.0.0-android.apk` from [`v5.0.0`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v5.0.0) (`adb install -r SilentExec-v5.0.0-android.apk`).
+2. In the **النماذج (Models)** tab, download **`Qwen3.5-2B-Q4_K_M.gguf`** (Recommended Default, 1.28 GB) or configure Gemini / Groq / Ollama.
+3. Enable Accessibility Service (and optionally authorize **Shizuku** in Settings for custom views).
 
-#### Option B: Minimal CLI & Floating Command Bar
-```bash
-# 1. Download and run automated setup (fetches quantized model & managed llama-server)
-silent-exec-pc setup
+---
 
-# 2. Launch sleek native floating command bar (Alt+Space to toggle, <25 MB idle RAM)
-silent-exec-pc bar
+## 📜 Open-Source Attribution (MIT / Apache-2.0 Only)
 
-# 3. Configure preferences, switch models, or update
-silent-exec-pc config --lang ar --mode silent
-silent-exec-pc models
-silent-exec-pc update --check
-```
-
-### 📱 Android Agent (`arm64-v8a`)
-1. **Install APK**: Download [`silent-exec-android-arm64.apk`](https://github.com/tahadeab-ai/silent-exec/releases/download/v4.0.0-android/silent-exec-android-arm64.apk) from the official [`v4.0.0-android`](https://github.com/tahadeab-ai/silent-exec/releases/tag/v4.0.0-android) release (`adb install -r silent-exec-android-arm64.apk`).
-2. **Choose Provider or Download Model**: Open the **Models (`النماذج`)** tab and select **Gemini**, **Groq**, **OpenRouter**, **Ollama** (or LAN Bridge offload), or download `Qwen3.5-2B-Q4_K_M.gguf` / `LFM3-VL-2B` with byte-range pause/resume.
-3. **Execute**: Tap **🎤** or type natural commands in Yemeni Arabic, MSA, English, or Arabizi — native intents run instantaneously, and multi-step UI flows execute with the Edge-Docked HUD and `StateHashReflector`!
+| Component | License | Role in SilentExec v5.0 |
+| :--- | :--- | :--- |
+| [`modelcontextprotocol/rust-sdk` (`rmcp`)](https://github.com/modelcontextprotocol/rust-sdk) | Apache-2.0 | Official Rust MCP stdio host |
+| [`CursorTouch/Windows-MCP`](https://github.com/cursortouch/windows-mcp) | MIT | Windows UIA & input automation sidecar |
+| [`microsoft/playwright-mcp`](https://github.com/microsoft/playwright-mcp) | Apache-2.0 | Optional DOM-based browser MCP server |
+| [`mobile-next/mobile-mcp`](https://github.com/mobile-next/mobile-mcp) | Apache-2.0 | Optional USB/Wi-Fi phone control MCP server |
+| [`assistant-ui/assistant-ui`](https://github.com/assistant-ui/assistant-ui) | MIT | Desktop Agent thread runtime |
+| [`ibelick/prompt-kit`](https://github.com/ibelick/prompt-kit) | MIT | Composable AI UI component patterns |
+| [`droidrun/mobilerun-portal`](https://github.com/droidrun/mobilerun-portal) | MIT | Structured `a11y_tree` + `phone_state` schema |
+| [`RikkaApps/Shizuku-API`](https://github.com/RikkaApps/Shizuku-API) | MIT | Optional non-root `input` fallback on Android |
+| [`ggml-org/llama.cpp`](https://github.com/ggml-org/llama.cpp) | MIT | On-device GGUF inference fallback (`n_ctx=4096`) |
+| `Qwen3.5-2B` / `Qwen3.5-4B` | Apache-2.0 | Default non-thinking bilingual agent models |
 
 ---
 
