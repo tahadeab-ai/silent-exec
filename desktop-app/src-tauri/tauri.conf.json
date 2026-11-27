@@ -4,7 +4,8 @@
   "version": "4.0.0",
   "identifier": "com.silentexec.desktop",
   "build": {
-    "frontendDist": "../ui"
+    "beforeBuildCommand": "npm --prefix ../ui run build",
+    "frontendDist": "../ui/dist"
   },
   "app": {
     "withGlobalTauri": true,

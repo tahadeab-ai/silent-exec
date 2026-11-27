@@ -26,6 +26,7 @@ env/
 *.egg-info/
 dist/
 build/
+node_modules/
 
 # Environment and secrets
 .env
