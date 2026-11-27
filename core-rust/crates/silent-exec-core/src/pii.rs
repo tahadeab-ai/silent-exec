@@ -23,7 +23,10 @@ pub fn is_luhn_valid(digits: &str) -> bool {
         sum += v;
         double = !double;
     }
-    sum % 10 == 0
+    #[allow(clippy::manual_is_multiple_of)]
+    {
+        sum % 10 == 0
+    }
 }
 
 /// Redacts sensitive PII and secrets from `input` while preserving valid JSON delimiters.
@@ -87,16 +90,13 @@ fn redact_password_fields(input: &str) -> String {
     let lower = out.to_ascii_lowercase();
     let mut idx = 0usize;
     for key in ["\"password\":\"", "\"password\": \"", "\"passcode\":\""] {
-        while let Some(pos) = lower[idx..].find(key) {
+        if let Some(pos) = lower[idx..].find(key) {
             let val_start = idx + pos + key.len();
             if let Some(rel_end) = out[val_start..].find('"') {
                 let val_end = val_start + rel_end;
                 let replacement = "[REDACTED_PASSWORD]";
                 out.replace_range(val_start..val_end, replacement);
                 idx = val_start + replacement.len();
-                break;
-            } else {
-                break;
             }
         }
     }
