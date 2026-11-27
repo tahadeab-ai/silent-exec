@@ -33,6 +33,9 @@ import com.silentexec.android.exec.AgentActionResult
 import com.silentexec.android.exec.AgentTraceEvent
 import com.silentexec.android.exec.AndroidActionExecutor
 import com.silentexec.android.exec.AndroidExecutionResult
+import com.silentexec.android.exec.CompoundIntentGuard
+import com.silentexec.android.exec.PlanStepStatus
+import com.silentexec.android.exec.ShizukuInputFallback
 import com.silentexec.android.exec.SilentExecAccessibilityService
 import com.silentexec.android.net.AppUpdater
 import com.silentexec.android.net.DownloadStatus
@@ -141,6 +144,29 @@ class MainActivity : AppCompatActivity() {
                         settings.developerDebugOverlay = enabled
                         uiState.developerDebugOverlay = enabled
                     },
+                    onNewSession = {
+                        stopAgent()
+                        uiState.traceItems.clear()
+                        uiState.planSteps.clear()
+                    },
+                    onSetExecutionEngine = { engineName ->
+                        settings.executionEngine = engineName
+                        uiState.executionEngine = engineName
+                    },
+                    onSetThinkingMode = { enabled ->
+                        settings.thinkingModeEnabled = enabled
+                        uiState.thinkingModeEnabled = enabled
+                    },
+                    onSetSafeMode = { enabled ->
+                        settings.safeModeEnabled = enabled
+                        uiState.safeModeEnabled = enabled
+                    },
+                    onRequestShizuku = { requestShizukuPermission() },
+                    onSaveBridgeConfig = {
+                        settings.bridgeHost = uiState.bridgeHost.trim()
+                        settings.bridgePort = uiState.bridgePort.toIntOrNull() ?: 8765
+                        settings.bridgeToken = uiState.bridgeToken.trim()
+                    },
                     onCheckForUpdate = { checkForAppUpdate() },
                     onInstallUpdate = { downloadAndInstallAppUpdate() }
                 )
@@ -153,6 +179,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         uiState.accessibilityEnabled = SilentExecAccessibilityService.get() != null
+        uiState.shizukuAuthorized = ShizukuInputFallback.isAvailable()
         uiState.overlayEnabled = Settings.canDrawOverlays(this)
         uiState.developerDebugOverlay = settings.developerDebugOverlay
         overlayController.setAppForeground(true)
@@ -191,8 +218,26 @@ class MainActivity : AppCompatActivity() {
         uiState.apiKey = settings.openAiApiKey
         uiState.activeProviderLabel = ProviderCatalog.activeDisplayLabel(settings)
         uiState.accessibilityEnabled = SilentExecAccessibilityService.get() != null
+        uiState.shizukuAuthorized = ShizukuInputFallback.isAvailable()
         uiState.overlayEnabled = Settings.canDrawOverlays(this)
         uiState.developerDebugOverlay = settings.developerDebugOverlay
+        uiState.executionEngine = settings.executionEngine
+        uiState.thinkingModeEnabled = settings.thinkingModeEnabled
+        uiState.safeModeEnabled = settings.safeModeEnabled
+        uiState.bridgeHost = settings.bridgeHost
+        uiState.bridgePort = settings.bridgePort.toString()
+        uiState.bridgeToken = settings.bridgeToken
+    }
+
+    private fun requestShizukuPermission() {
+        runCatching {
+            if (rikka.shizuku.Shizuku.pingBinder() &&
+                rikka.shizuku.Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED
+            ) {
+                rikka.shizuku.Shizuku.requestPermission(1002)
+            }
+        }
+        uiState.shizukuAuthorized = ShizukuInputFallback.isAvailable()
     }
 
     private fun runAgentGoal(goal: String) {
@@ -201,6 +246,9 @@ class MainActivity : AppCompatActivity() {
 
         uiState.composerText = ""
         uiState.isRunning = true
+        uiState.planSteps.clear()
+        val decomposed = CompoundIntentGuard.decompose(clean)
+        uiState.planSteps.addAll(decomposed.steps)
         uiState.traceItems.add(TraceItem.UserGoal(text = clean))
 
         overlayController.show(
@@ -441,7 +489,7 @@ class MainActivity : AppCompatActivity() {
                 onStateUpdate = { state ->
                     val pct = if (state.totalBytes > 0) ((state.downloadedBytes * 100) / state.totalBytes).toInt() else 0
                     mainHandler.post {
-                        updateModelStatus(filename, state.status, pct, state.speedMBps)
+                        updateModelStatus(filename, state.status, pct, state.speedMBps, state.etaSeconds)
                     }
                 }
             )
@@ -465,13 +513,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateModelStatus(filename: String, status: DownloadStatus, progress: Int = 0, speed: Double = 0.0) {
+    private fun updateModelStatus(filename: String, status: DownloadStatus, progress: Int = 0, speed: Double = 0.0, etaSeconds: Long = 0L) {
         val idx = uiState.models.indexOfFirst { it.release.filename == filename }
         if (idx >= 0) {
             uiState.models[idx] = uiState.models[idx].copy(
                 status = status,
                 progressPercent = progress,
                 speedMBps = speed,
+                etaSeconds = etaSeconds,
                 errorMessage = null
             )
         }
@@ -605,6 +654,12 @@ private fun SilentExecApp(
     onSetTheme: (ThemeMode) -> Unit,
     onSetExecutionMode: (com.silentexec.android.core.ExecutionMode) -> Unit,
     onToggleDeveloperDebugOverlay: (Boolean) -> Unit,
+    onNewSession: () -> Unit,
+    onSetExecutionEngine: (String) -> Unit,
+    onSetThinkingMode: (Boolean) -> Unit,
+    onSetSafeMode: (Boolean) -> Unit,
+    onRequestShizuku: () -> Unit,
+    onSaveBridgeConfig: () -> Unit,
     onCheckForUpdate: () -> Unit,
     onInstallUpdate: () -> Unit
 ) {
@@ -638,6 +693,7 @@ private fun SilentExecApp(
                 state = state,
                 onOpenModels = { state.activeTab = AgentTab.MODELS },
                 onOpenAccessibility = onOpenAccessibility,
+                onNewSession = onNewSession,
                 onSendGoal = onSendGoal,
                 onStop = onStop,
                 onVoiceClick = onVoiceClick,
@@ -662,6 +718,11 @@ private fun SilentExecApp(
                 onSetLanguage = onSetLanguage,
                 onSetTheme = onSetTheme,
                 onSetExecutionMode = onSetExecutionMode,
+                onSetExecutionEngine = onSetExecutionEngine,
+                onSetThinkingMode = onSetThinkingMode,
+                onSetSafeMode = onSetSafeMode,
+                onRequestShizuku = onRequestShizuku,
+                onSaveBridgeConfig = onSaveBridgeConfig,
                 onOpenAccessibilitySettings = onOpenAccessibility,
                 onOpenOverlaySettings = onOpenOverlay,
                 onToggleDeveloperDebugOverlay = onToggleDeveloperDebugOverlay,

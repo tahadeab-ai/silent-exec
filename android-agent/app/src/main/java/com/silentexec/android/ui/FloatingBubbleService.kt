@@ -286,12 +286,12 @@ class FloatingBubbleService : Service() {
     }
 
     @Volatile
-    private var isAppInForeground: Boolean = false
+    private var isAppInForeground: Boolean = true
 
     private fun isSelfForeground(): Boolean {
         if (isAppInForeground) return true
         val pkg = com.silentexec.android.exec.SilentExecAccessibilityService.get()?.activePackageName().orEmpty()
-        return pkg == packageName
+        return pkg == packageName || pkg == "com.silentexec.android" || pkg == "com.silentexec.android.debug"
     }
 
     private fun applyForegroundState(inForeground: Boolean) {

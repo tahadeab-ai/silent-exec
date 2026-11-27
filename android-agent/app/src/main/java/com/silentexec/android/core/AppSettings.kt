@@ -206,6 +206,18 @@ class AppSettings(
         get() = prefs.getString(KEY_PROVIDER_PRESET, "") ?: ""
         set(value) = prefs.edit().putString(KEY_PROVIDER_PRESET, value).apply()
 
+    var executionEngine: String
+        get() = prefs.getString(KEY_EXECUTION_ENGINE, "Cactus") ?: "Cactus"
+        set(value) = prefs.edit().putString(KEY_EXECUTION_ENGINE, value).apply()
+
+    var thinkingModeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_THINKING_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_THINKING_MODE, value).apply()
+
+    var safeModeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SAFE_MODE, true)
+        set(value) = prefs.edit().putBoolean(KEY_SAFE_MODE, value).apply()
+
     fun applyLocale() {
         runCatching {
             val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(language)
@@ -247,6 +259,9 @@ class AppSettings(
         const val KEY_OPENAI_API_MODEL = "setting_openai_api_model"
         const val KEY_OPENAI_API_KEY = "setting_openai_api_key"
         const val KEY_PROVIDER_PRESET = "setting_provider_preset"
+        const val KEY_EXECUTION_ENGINE = "setting_execution_engine"
+        const val KEY_THINKING_MODE = "setting_thinking_mode"
+        const val KEY_SAFE_MODE = "setting_safe_mode"
 
         const val DEFAULT_LANGUAGE = "ar"
         const val DEFAULT_OPENAI_API_BASE = "https://api.openai.com/v1"

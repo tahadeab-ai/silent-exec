@@ -1,6 +1,7 @@
 package com.silentexec.android.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -43,12 +45,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.silentexec.android.net.DownloadStatus
 import com.silentexec.android.nlp.ProviderCatalog
 import com.silentexec.android.nlp.ProviderPreset
 import com.silentexec.android.ui.AgentUiState
 import com.silentexec.android.ui.ModelCardState
+import com.silentexec.android.ui.components.LtrCodeBlock
+import com.silentexec.android.ui.components.LtrTechnicalBanner
+import com.silentexec.android.ui.theme.SilentExecColors
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -71,36 +77,55 @@ fun ModelsProvidersScreen(
     val selectedPreset = ProviderCatalog.findById(state.selectedPresetId)
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Honest Guidance Banner
+        // Section Header: On-Device Edge Models
         item {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = if (ar) {
-                        "توصية: مزودو السحابة (Gemini المجاني / Groq / OpenRouter) أو Ollama يمنحون موثوقية +95% فوراً للمهام متعددة الخطوات؛ بينما نماذج GGUF المحلية تعمل 100% بدون إنترنت بخصوصية تامة."
-                    } else {
-                        "Guidance: Cloud APIs (Gemini Free Tier, Groq, OpenRouter) and Ollama deliver instant 95%+ multi-step reliability; Local GGUF runs 100% offline & private."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(14.dp)
+                Icon(
+                    imageVector = Icons.Default.Memory,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
                 )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (ar) "النماذج المحلية (بدون إنترنت)" else "On-Device Edge Models",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onRefreshModels) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                }
             }
+        }
+
+        items(state.models, key = { it.release.filename }) { model ->
+            EdgeModelCard(
+                model = model,
+                activeEngine = state.executionEngine,
+                isArabic = ar,
+                onDownload = { onDownloadModel(model) },
+                onPause = { onPauseModel(model) },
+                onResume = { onResumeModel(model) },
+                onCancel = { onCancelModel(model) },
+                onActivate = { onActivateModel(model) },
+                onDelete = { onDeleteModel(model) }
+            )
         }
 
         // Cloud & Ollama Providers Card
         item {
             Card(
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -113,173 +138,86 @@ fun ModelsProvidersScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = if (ar) "المزودون السحابيون و Ollama" else "Cloud & Ollama Providers",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium
                         )
                     }
-
                     Spacer(Modifier.height(10.dp))
 
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        ProviderCatalog.PRESETS.forEach { preset ->
+                        ProviderCatalog.PRESETS.filter { it.id != "LOCAL_GGUF" }.forEach { preset ->
                             FilterChip(
                                 selected = state.selectedPresetId == preset.id,
                                 onClick = { onSelectPreset(preset) },
                                 label = {
-                                    Text(if (ar) preset.displayNameAr else preset.displayName)
+                                    Text(if (ar) preset.displayNameAr else preset.displayNameEn)
                                 }
                             )
                         }
                     }
 
-                    if (selectedPreset != null && selectedPreset.id == "LOCAL_GGUF") {
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = if (ar) selectedPreset.badgeAr else selectedPreset.badgeEn,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        val downloadedModel = state.models.firstOrNull { it.isDownloaded }
-                        if (downloadedModel != null && !downloadedModel.isActive) {
-                            val label = downloadedModel.release.filename.removeSuffix(".gguf")
-                            Button(onClick = { onActivateModel(downloadedModel) }) {
-                                Text(
-                                    if (ar) "تفعيل $label"
-                                    else "Activate $label"
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = if (ar) {
-                                    "اختر نموذج Qwen3.5-2B (الموصى به) أو LFM3-VL-2B أو FunctionGemma-270M بالأسفل للتحميل والتشغيل المحلي."
-                                } else {
-                                    "Download and activate Qwen3.5-2B (Recommended), LFM3-VL-2B, or FunctionGemma-270M below for 100% offline inference."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else if (selectedPreset != null && selectedPreset.id != "LOCAL_GGUF") {
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = if (ar) selectedPreset.badgeAr else selectedPreset.badgeEn,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(10.dp))
-
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = state.apiBaseUrl,
+                        onValueChange = { state.apiBaseUrl = it },
+                        label = { Text(if (ar) "رابط API الأساسي" else "API Base URL") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = state.apiModel,
+                        onValueChange = { state.apiModel = it },
+                        label = { Text(if (ar) "اسم النموذج" else "Model ID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (selectedPreset?.requiresApiKey != false) {
+                        Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
-                            value = state.apiBaseUrl,
-                            onValueChange = { state.apiBaseUrl = it },
-                            label = { Text(if (ar) "رابط API الأساسي" else "Base URL") },
+                            value = state.apiKey,
+                            onValueChange = { state.apiKey = it },
+                            label = { Text(if (ar) "مفتاح API" else "API Key") },
                             singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(8.dp))
+                    }
 
-                        OutlinedTextField(
-                            value = state.apiModel,
-                            onValueChange = { state.apiModel = it },
-                            label = { Text(if (ar) "اسم النموذج" else "Model ID") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        if (selectedPreset.requiresApiKey) {
-                            OutlinedTextField(
-                                value = state.apiKey,
-                                onValueChange = { state.apiKey = it },
-                                label = { Text(if (ar) "مفتاح API" else "API Key") },
-                                visualTransformation = PasswordVisualTransformation(),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onSaveCloudConfig,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "حفظ وتفعيل" else "Save & Activate")
                         }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = onSaveCloudConfig) {
-                                Text(if (ar) "حفظ وتفعيل" else "Save & Activate")
-                            }
-                            OutlinedButton(
-                                onClick = onTestConnection,
-                                enabled = !state.isTestingConnection
-                            ) {
-                                Text(
-                                    if (state.isTestingConnection) {
-                                        if (ar) "جارٍ الاختبار..." else "Testing..."
-                                    } else {
-                                        if (ar) "اختبار الاتصال" else "Test Connection"
-                                    }
-                                )
-                            }
+                        OutlinedButton(
+                            onClick = onTestConnection,
+                            enabled = !state.isTestingConnection,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (ar) "اختبار الاتصال" else "Test Connection")
                         }
+                    }
 
-                        state.connectionTestMessage?.let { msg ->
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = msg,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    state.connectionTestMessage?.let { msg ->
+                        Spacer(Modifier.height(10.dp))
+                        LtrCodeBlock(text = msg)
                     }
                 }
             }
         }
-
-        // Local GGUF Section Header
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Memory,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (ar) "نماذج GGUF المحلية (بدون إنترنت)" else "Local GGUF Models (Offline)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                IconButton(onClick = onRefreshModels) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = if (ar) "تحديث" else "Refresh"
-                    )
-                }
-            }
-        }
-
-        items(state.models, key = { it.release.filename }) { model ->
-            ModelItemCard(
-                model = model,
-                isArabic = ar,
-                onDownload = { onDownloadModel(model) },
-                onPause = { onPauseModel(model) },
-                onResume = { onResumeModel(model) },
-                onCancel = { onCancelModel(model) },
-                onActivate = { onActivateModel(model) },
-                onDelete = { onDeleteModel(model) }
-            )
-        }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ModelItemCard(
+private fun EdgeModelCard(
     model: ModelCardState,
+    activeEngine: String,
     isArabic: Boolean,
     onDownload: () -> Unit,
     onPause: () -> Unit,
@@ -288,45 +226,87 @@ private fun ModelItemCard(
     onActivate: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val filename = model.release.filename
+    val isDefaultRecommended = filename.contains("Qwen3.5-2B", ignoreCase = true)
+    val ramReq = when {
+        filename.contains("2B", ignoreCase = true) -> "RAM ≥ 3 GB"
+        filename.contains("1.7B", ignoreCase = true) -> "RAM ≥ 2.5 GB"
+        else -> "RAM ≥ 1.5 GB"
+    }
+    val sizeGb = String.format(Locale.US, "%.2f GB", model.release.sizeBytes / (1024.0 * 1024.0 * 1024.0))
+
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             width = if (model.isActive) 1.5.dp else 1.dp,
-            color = if (model.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            color = if (model.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = model.release.filename.removeSuffix(".gguf"),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    val sizeText = String.format(Locale.US, "%.0f MB", model.release.sizeMb)
-                    val desc = model.release.description?.takeIf { it.isNotBlank() } ?: sizeText
-                    Text(
-                        text = "$sizeText · $desc",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (model.isActive) {
+                LtrTechnicalBanner(
+                    text = filename,
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isDefaultRecommended) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
+                        shape = RoundedCornerShape(8.dp),
+                        color = SilentExecColors.Success.copy(alpha = 0.16f)
                     ) {
                         Text(
-                            text = if (isArabic) "نشط" else "Active",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            text = if (isArabic) "موصى به (افتراضي)" else "Recommended",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SilentExecColors.Success,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+            model.release.description?.let { desc ->
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Content),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                LtrTechnicalBanner(text = sizeGb)
+                LtrTechnicalBanner(text = ramReq)
+                LtrTechnicalBanner(
+                    text = activeEngine,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                if (model.isDownloaded) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = SilentExecColors.Success,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (isArabic) "تم التحقق SHA-256" else "SHA-256 Verified",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SilentExecColors.Success
                         )
                     }
                 }
@@ -335,33 +315,21 @@ private fun ModelItemCard(
             if (model.status == DownloadStatus.DOWNLOADING || model.status == DownloadStatus.PAUSED || model.status == DownloadStatus.VERIFYING) {
                 Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(
-                    progress = { (model.progressPercent.coerceIn(0, 100)) / 100f },
+                    progress = { (model.progressPercent / 100f).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(4.dp))
-                val statusLabel = when (model.status) {
-                    DownloadStatus.DOWNLOADING -> String.format(Locale.US, "%d%% · %.1f MB/s", model.progressPercent, model.speedMBps)
-                    DownloadStatus.PAUSED -> if (isArabic) "متوقف مؤقتاً (${model.progressPercent}%)" else "Paused (${model.progressPercent}%)"
-                    DownloadStatus.VERIFYING -> if (isArabic) "التحقق من SHA-256..." else "Verifying SHA-256..."
-                    else -> ""
-                }
-                Text(
-                    text = statusLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                LtrTechnicalBanner(
+                    text = "${model.progressPercent}% · ${String.format(Locale.US, "%.2f MB/s", model.speedMBps)} · ETA ${model.etaSeconds}s"
                 )
             }
 
             model.errorMessage?.let { err ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = err,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Spacer(Modifier.height(8.dp))
+                LtrCodeBlock(text = err, borderColor = SilentExecColors.Error)
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -374,7 +342,7 @@ private fun ModelItemCard(
                             Text(if (isArabic) "إيقاف مؤقت" else "Pause")
                         }
                         TextButton(onClick = onCancel) {
-                            Text(if (isArabic) "إلغاء" else "Cancel")
+                            Text(if (isArabic) "إلغاء" else "Cancel", color = SilentExecColors.Error)
                         }
                     }
                     model.status == DownloadStatus.PAUSED -> {
@@ -384,20 +352,27 @@ private fun ModelItemCard(
                             Text(if (isArabic) "استئناف" else "Resume")
                         }
                         TextButton(onClick = onCancel) {
-                            Text(if (isArabic) "إلغاء" else "Cancel")
+                            Text(if (isArabic) "إلغاء" else "Cancel", color = SilentExecColors.Error)
                         }
                     }
                     model.isDownloaded -> {
-                        if (!model.isActive) {
-                            Button(onClick = onActivate) {
-                                Text(if (isArabic) "تفعيل محلي" else "Use Offline")
-                            }
+                        Button(
+                            onClick = onActivate,
+                            enabled = !model.isActive
+                        ) {
+                            Text(
+                                if (model.isActive) {
+                                    if (isArabic) "نشط ✓" else "Active ✓"
+                                } else {
+                                    if (isArabic) "تفعيل" else "Activate"
+                                }
+                            )
                         }
                         IconButton(onClick = onDelete) {
                             Icon(
                                 Icons.Default.Delete,
                                 contentDescription = if (isArabic) "حذف" else "Delete",
-                                tint = MaterialTheme.colorScheme.error
+                                tint = SilentExecColors.Error
                             )
                         }
                     }
@@ -405,7 +380,7 @@ private fun ModelItemCard(
                         Button(onClick = onDownload) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(if (isArabic) "تنزيل (HTTP 206)" else "Download")
+                            Text(if (isArabic) "تنزيل" else "Download")
                         }
                     }
                 }

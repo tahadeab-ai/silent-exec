@@ -68,7 +68,9 @@ class LiveOverlayController(private val context: Context) {
     private fun isSelfForeground(): Boolean {
         if (isAppInForeground) return true
         val svcPkg = SilentExecAccessibilityService.get()?.activePackageName().orEmpty()
-        return svcPkg == context.packageName
+        return svcPkg == context.packageName ||
+            svcPkg == "com.silentexec.android" ||
+            svcPkg == "com.silentexec.android.debug"
     }
 
     private fun computeSafeTopOffsetPx(): Int {

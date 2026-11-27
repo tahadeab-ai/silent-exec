@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import com.silentexec.android.core.ActionCommand
 import com.silentexec.android.core.ExecutionMode
 import com.silentexec.android.core.ThemeMode
+import com.silentexec.android.exec.PlanStep
 import com.silentexec.android.net.AppReleaseItem
 import com.silentexec.android.net.DownloadStatus
 import com.silentexec.android.net.ModelReleaseItem
@@ -95,6 +96,7 @@ data class ModelCardState(
     val status: DownloadStatus? = null,
     val progressPercent: Int = 0,
     val speedMBps: Double = 0.0,
+    val etaSeconds: Long = 0L,
     val errorMessage: String? = null
 )
 
@@ -113,14 +115,23 @@ class AgentUiState {
     var isTestingConnection by mutableStateOf(false)
 
     var accessibilityEnabled by mutableStateOf(false)
+    var shizukuAuthorized by mutableStateOf(false)
     var overlayEnabled by mutableStateOf(false)
     var developerDebugOverlay by mutableStateOf(false)
+
+    var executionEngine by mutableStateOf("Cactus")
+    var thinkingModeEnabled by mutableStateOf(false)
+    var safeModeEnabled by mutableStateOf(true)
+    var bridgeHost by mutableStateOf("")
+    var bridgePort by mutableStateOf("8765")
+    var bridgeToken by mutableStateOf("")
 
     var composerText by mutableStateOf("")
     var isRunning by mutableStateOf(false)
     var isListening by mutableStateOf(false)
     var activeTakeOverPrompt by mutableStateOf<TakeOverPromptState?>(null)
 
+    val planSteps = mutableStateListOf<PlanStep>()
     val traceItems = mutableStateListOf<TraceItem>()
     val models = mutableStateListOf<ModelCardState>()
 
