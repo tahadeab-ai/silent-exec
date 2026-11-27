@@ -74,7 +74,7 @@ data class MobilerunA11yTree(
     val activityName: String,
     val interactiveCount: Int,
     val nodes: List<MobilerunA11yNode>,
-    val requiresVisionFallback: Boolean = interactiveCount <= VISION_FALLBACK_NODE_THRESHOLD
+    val requiresVisionFallback: Boolean = interactiveCount <= SilentExecAccessibilityService.VISION_FALLBACK_NODE_THRESHOLD
 )
 
 class SilentExecAccessibilityService : AccessibilityService() {

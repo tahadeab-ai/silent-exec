@@ -55,7 +55,7 @@ object ShizukuInputFallback {
             val args = Shizuku.UserServiceArgs(
                 ComponentName(context.packageName, ShizukuShellService::class.java.name)
             )
-                .daemonProcess(false)
+                .daemon(false)
                 .processNameSuffix("shizuku_input")
                 .version(1)
             Shizuku.bindUserService(args, connection)
